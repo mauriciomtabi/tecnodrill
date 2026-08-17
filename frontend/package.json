@@ -9,6 +9,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "@types/bcryptjs": "^2.4.6",
+    "bcryptjs": "^3.0.3",
     "canvas-confetti": "^1.9.3",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
