@@ -1,0 +1,21 @@
+{
+  "short_name": "TecnoDrill",
+  "name": "TecnoDrill INFRA - Gestão de Perfuração MND",
+  "icons": [
+    {
+      "src": "/logo-icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/logo-icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0F1215",
+  "theme_color": "#F05A22",
+  "display": "standalone",
+  "orientation": "portrait"
+}

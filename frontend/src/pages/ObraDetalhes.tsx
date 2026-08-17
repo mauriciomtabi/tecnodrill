@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { RodEntryModal } from '../components/RodEntryModal';
 import { MetaCelebration } from '../components/MetaCelebration';
 import { MapView } from '../components/MapView';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { 
   ArrowLeft, 
   Trash2, 
@@ -47,6 +48,10 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  // Confirm Dialogs (Custom UI, never native browser alerts)
+  const [confirmDeleteServicoOpen, setConfirmDeleteServicoOpen] = useState(false);
+  const [confirmDeleteBarraId, setConfirmDeleteBarraId] = useState<string | null>(null);
 
   // Meta Celebration
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -120,16 +125,23 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     }
   };
 
-  const handleDeleteBarra = async (barraId: string) => {
-    if (!confirm('Deseja realmente excluir este registro?')) return;
+  const handleConfirmDeleteBarra = async () => {
+    if (!confirmDeleteBarraId) return;
     try {
-      await ApiService.deleteBarra(barraId);
-      setBarras(prev => prev.filter(b => b.id !== barraId));
-      showToast('Registro excluído com sucesso.', 'info');
+      await ApiService.deleteBarra(confirmDeleteBarraId);
+      setBarras(prev => prev.filter(b => b.id !== confirmDeleteBarraId));
+      showToast('Registro de campo excluído com sucesso.', 'info');
+      setConfirmDeleteBarraId(null);
       fetchDados();
     } catch (err) {
       showToast('Erro ao excluir registro.', 'error');
     }
+  };
+
+  const handleConfirmDeleteServico = () => {
+    showToast(`Serviço ${servico?.nome} excluído.`, 'info');
+    setConfirmDeleteServicoOpen(false);
+    onBack();
   };
 
   const handleConcluirServico = async () => {
@@ -218,12 +230,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {isGestor && (
             <button
-              onClick={() => {
-                if (confirm('Deseja realmente excluir este serviço?')) {
-                  showToast('Serviço excluído.', 'info');
-                  onBack();
-                }
-              }}
+              onClick={() => setConfirmDeleteServicoOpen(true)}
               style={{
                 backgroundColor: 'rgba(231, 76, 60, 0.15)',
                 color: 'var(--danger)',
@@ -665,7 +672,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                       {/* Actions (Excluir) */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '6px', marginTop: '4px' }}>
                         <button
-                          onClick={() => handleDeleteBarra(b.id)}
+                          onClick={() => setConfirmDeleteBarraId(b.id)}
                           style={{
                             color: 'var(--danger)',
                             fontSize: '10.5px',
@@ -674,7 +681,9 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                             alignItems: 'center',
                             gap: '3px',
                             padding: '2px 4px',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            background: 'none',
+                            border: 'none'
                           }}
                           title="Excluir Registro"
                         >
@@ -718,6 +727,30 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         metrosAtingidos={celebrationData.metrosAtingidos}
         tipoMeta={celebrationData.tipoMeta}
         nomeServico={servico.nome}
+      />
+
+      {/* CONFIRM DIALOG - EXCLUIR SERVIÇO */}
+      <ConfirmDialog
+        open={confirmDeleteServicoOpen}
+        title="Excluir Serviço"
+        message={`Deseja realmente excluir o serviço "${servico.nome}"? Esta ação removerá todos os registros associados.`}
+        confirmLabel="Sim, Excluir"
+        cancelLabel="Cancelar"
+        danger={true}
+        onConfirm={handleConfirmDeleteServico}
+        onCancel={() => setConfirmDeleteServicoOpen(false)}
+      />
+
+      {/* CONFIRM DIALOG - EXCLUIR REGISTRO DE CAMPO */}
+      <ConfirmDialog
+        open={Boolean(confirmDeleteBarraId)}
+        title="Excluir Registro de Campo"
+        message="Deseja realmente remover este apontamento fotográfico e a metragem associada?"
+        confirmLabel="Excluir Registro"
+        cancelLabel="Cancelar"
+        danger={true}
+        onConfirm={handleConfirmDeleteBarra}
+        onCancel={() => setConfirmDeleteBarraId(null)}
       />
 
       {/* LIGHTBOX AMPLIADO (PORTAL CENTRALIZADO) */}

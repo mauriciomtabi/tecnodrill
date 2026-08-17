@@ -8,6 +8,7 @@ import { ObraDetalhes } from './pages/ObraDetalhes';
 import { CampoNavigator } from './pages/CampoNavigator';
 import { UsuariosPage } from './pages/UsuariosPage';
 import { NovoServicoModal } from './components/NovoServicoModal';
+import { PwaInstall } from './components/PwaInstall';
 import { ApiService } from './services/api';
 import { Servico } from './types';
 
@@ -187,6 +188,9 @@ export const App: React.FC = () => {
         onSave={handleCreateServico}
         loading={creatingServico}
       />
+
+      {/* 5. DETECÇÃO & INSTALAÇÃO DO PWA (PADRÃO JLE) */}
+      <PwaInstall />
     </div>
   );
 };

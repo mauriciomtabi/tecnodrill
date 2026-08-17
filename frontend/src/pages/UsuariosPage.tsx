@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Usuario, PerfilUsuario } from '../types';
 import { ApiService } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { 
   Users, 
   UserPlus, 
@@ -130,11 +131,15 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
     }
   };
 
-  const handleDeleteUser = async (id: string, nome: string) => {
-    if (!confirm(`Deseja realmente remover o usuário "${nome}"?`)) return;
+  // Confirm delete state
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; nome: string } | null>(null);
+
+  const handleConfirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
     try {
-      await ApiService.deleteUsuario(id);
-      showToast(`Usuário ${nome} removido.`, 'info');
+      await ApiService.deleteUsuario(deleteUserTarget.id);
+      showToast(`Usuário ${deleteUserTarget.nome} removido.`, 'info');
+      setDeleteUserTarget(null);
       fetchUsuarios();
     } catch (err) {
       showToast('Erro ao remover usuário.', 'error');
@@ -341,12 +346,15 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                         </button>
 
                         <button
-                          onClick={() => handleDeleteUser(u.id, u.nome)}
+                          onClick={() => setDeleteUserTarget({ id: u.id, nome: u.nome })}
                           style={{
                             padding: '6px 8px',
                             borderRadius: '4px',
                             color: 'var(--danger)',
-                            fontSize: '11.5px'
+                            fontSize: '11.5px',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer'
                           }}
                           className="hover:bg-rose-500/10"
                           title="Excluir Usuário"
@@ -521,6 +529,18 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
         </div>,
         document.body
       )}
+
+      {/* CONFIRM DIALOG - EXCLUIR USUÁRIO */}
+      <ConfirmDialog
+        open={Boolean(deleteUserTarget)}
+        title="Excluir Usuário"
+        message={`Deseja realmente remover o usuário "${deleteUserTarget?.nome}" do sistema? Esta ação revogará o acesso desta conta.`}
+        confirmLabel="Sim, Excluir"
+        cancelLabel="Cancelar"
+        danger={true}
+        onConfirm={handleConfirmDeleteUser}
+        onCancel={() => setDeleteUserTarget(null)}
+      />
     </div>
   );
 };
