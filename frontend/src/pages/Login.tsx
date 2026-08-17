@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Eye, EyeOff, ArrowRight, HardHat, Radio, AlertCircle } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
@@ -23,20 +23,6 @@ export const Login: React.FC = () => {
       await login(identificador.trim(), senha);
     } catch (err: any) {
       setErrorMsg(err.message || 'Falha ao autenticar credenciais.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleQuickLogin = async (userIdent: string, pass: string) => {
-    setIdentificador(userIdent);
-    setSenha(pass);
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      await login(userIdent, pass);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Falha ao autenticar.');
     } finally {
       setLoading(false);
     }
@@ -88,7 +74,7 @@ export const Login: React.FC = () => {
         className="fade-in"
         style={{
           width: '100%',
-          maxWidth: '420px',
+          maxWidth: '400px',
           backgroundColor: 'var(--bg-card)',
           border: '1px solid var(--border-color)',
           borderRadius: 'var(--radius-lg)',
@@ -98,20 +84,17 @@ export const Login: React.FC = () => {
           zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px',
+          gap: '24px',
           boxSizing: 'border-box'
         }}
       >
-        {/* Brand Header */}
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+        {/* Brand Header: Logo Only */}
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <img 
             src="/logo.png" 
             alt="TecnoDrill INFRA" 
-            style={{ height: '48px', maxWidth: '200px', width: 'auto', objectFit: 'contain' }} 
+            style={{ height: '52px', maxWidth: '210px', width: 'auto', objectFit: 'contain' }} 
           />
-          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 }}>
-            Sistema de Canalização, MND & Metas
-          </p>
         </div>
 
         {errorMsg && (
@@ -134,7 +117,7 @@ export const Login: React.FC = () => {
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
               Usuário ou E-mail
@@ -148,11 +131,11 @@ export const Login: React.FC = () => {
                 required
                 style={{
                   paddingLeft: '38px',
-                  fontSize: '13px',
+                  fontSize: '13.5px',
                   backgroundColor: 'var(--bg-app)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  height: '42px',
+                  height: '44px',
                   boxSizing: 'border-box'
                 }}
               />
@@ -174,11 +157,11 @@ export const Login: React.FC = () => {
                 style={{
                   paddingLeft: '38px',
                   paddingRight: '38px',
-                  fontSize: '13px',
+                  fontSize: '13.5px',
                   backgroundColor: 'var(--bg-app)',
                   border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  height: '42px',
+                  height: '44px',
                   boxSizing: 'border-box'
                 }}
               />
@@ -216,7 +199,7 @@ export const Login: React.FC = () => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              marginTop: '6px',
+              marginTop: '4px',
               boxShadow: '0 4px 15px rgba(240, 90, 34, 0.35)'
             }}
           >
@@ -224,92 +207,12 @@ export const Login: React.FC = () => {
               <span>Entrando...</span>
             ) : (
               <>
-                <span>Acessar Painel TecnoDrill</span>
+                <span>Acessar TecnoDrill</span>
                 <ArrowRight size={16} />
               </>
             )}
           </button>
         </form>
-
-        {/* Quick Access Profiles */}
-        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-          <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', textAlign: 'center', marginBottom: '10px' }}>
-            Acesso Rápido por Perfil:
-          </span>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            <button
-              onClick={() => handleQuickLogin('eduardo', 'Gestor@123')}
-              className="btn-secondary"
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '8px 6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <HardHat size={13} style={{ color: 'var(--primary)' }} />
-              <span>Eduardo (Gestor)</span>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('carlos', 'Gestor@123')}
-              className="btn-secondary"
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '8px 6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <HardHat size={13} style={{ color: 'var(--primary)' }} />
-              <span>Carlos (Gestor)</span>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('marcelo', 'Tecno@123')}
-              className="btn-secondary"
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '8px 6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <Radio size={13} style={{ color: 'var(--primary-light)' }} />
-              <span>Marcelo (Navegador)</span>
-            </button>
-
-            <button
-              onClick={() => handleQuickLogin('antonio', 'Tecno@123')}
-              className="btn-secondary"
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '8px 6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
-              }}
-            >
-              <User size={13} style={{ color: 'var(--success)' }} />
-              <span>Antônio (Operador)</span>
-            </button>
-          </div>
-        </div>
 
       </div>
     </div>

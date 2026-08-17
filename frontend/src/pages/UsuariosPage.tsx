@@ -11,14 +11,24 @@ import {
   Trash2, 
   CheckCircle2, 
   XCircle, 
-  ShieldCheck, 
-  Radio, 
   HardHat, 
+  Radio, 
   User, 
   Key, 
   X,
-  Search
+  Search,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
+
+const toTitleCase = (str: string): string =>
+  str
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 
 interface UsuariosPageProps {
   setHeaderInfo: (title: string, subtitle: string) => void;
@@ -31,7 +41,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
   const [searchTerm, setSearchTerm] = useState('');
   const [perfilFilter, setPerfilFilter] = useState<string>('TODOS');
 
-  // Modal State
+  // Modal Novo/Editar Usuário
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
   const [formNome, setFormNome] = useState('');
@@ -39,9 +49,19 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
   const [formUsername, setFormUsername] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formSenha, setFormSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formAtivo, setFormAtivo] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Modal Redefinir Senha
+  const [passwordModalUser, setPasswordModalUser] = useState<Usuario | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  // Confirm delete state
+  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; nome: string } | null>(null);
 
   const fetchUsuarios = async () => {
     setLoading(true);
@@ -68,6 +88,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
     setFormUsername('');
     setFormEmail('');
     setFormSenha('Tecno@123');
+    setShowPassword(false);
     setFormAtivo(true);
     setFormError(null);
     setModalOpen(true);
@@ -79,10 +100,20 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
     setFormPerfil(u.perfil);
     setFormUsername(u.username);
     setFormEmail(u.email || '');
-    setFormSenha(''); // Senha vazia significa não alterar
+    setFormSenha(''); // Vazio significa não alterar
+    setShowPassword(false);
     setFormAtivo(u.ativo);
     setFormError(null);
     setModalOpen(true);
+  };
+
+  // Auto-gerar sugestão de username ao digitar nome
+  const handleNomeChange = (val: string) => {
+    setFormNome(val);
+    if (!editingUser) {
+      const suggested = val.toLowerCase().trim().replace(/\s+/g, '.');
+      setFormUsername(suggested);
+    }
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -96,31 +127,34 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
 
     setSaving(true);
     try {
+      const nomeFormatado = toTitleCase(formNome.trim());
+      const usernameFormatado = formUsername.trim().toLowerCase() || nomeFormatado.toLowerCase().replace(/\s+/g, '.');
+
       if (editingUser) {
         // Atualizar
         const payload: any = {
-          nome: formNome.trim(),
+          nome: nomeFormatado,
           perfil: formPerfil,
-          username: formUsername.trim() || formNome.toLowerCase().replace(/\s+/g, '.'),
-          email: formEmail.trim(),
+          username: usernameFormatado,
+          email: formEmail.trim().toLowerCase() || undefined,
           ativo: formAtivo
         };
         if (formSenha && formSenha.trim()) {
           payload.senha = formSenha.trim();
         }
         await ApiService.updateUsuario(editingUser.id, payload);
-        showToast('Usuário atualizado com sucesso!', 'success');
+        showToast(`Usuário ${nomeFormatado} atualizado com sucesso!`, 'success');
       } else {
         // Criar
         await ApiService.createUsuario({
-          nome: formNome.trim(),
+          nome: nomeFormatado,
           perfil: formPerfil,
-          username: formUsername.trim() || formNome.toLowerCase().replace(/\s+/g, '.'),
-          email: formEmail.trim(),
+          username: usernameFormatado,
+          email: formEmail.trim().toLowerCase() || undefined,
           senha: formSenha || 'Tecno@123',
           ativo: formAtivo
         });
-        showToast('Novo usuário cadastrado com sucesso!', 'success');
+        showToast(`Novo usuário ${nomeFormatado} cadastrado com sucesso!`, 'success');
       }
       setModalOpen(false);
       fetchUsuarios();
@@ -131,8 +165,33 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
     }
   };
 
-  // Confirm delete state
-  const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; nome: string } | null>(null);
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordModalUser || !newPassword.trim()) return;
+
+    setSavingPassword(true);
+    try {
+      await ApiService.updateUsuario(passwordModalUser.id, { senha: newPassword.trim() });
+      showToast(`Senha de ${passwordModalUser.nome} alterada com sucesso!`, 'success');
+      setPasswordModalUser(null);
+      setNewPassword('');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao redefinir senha.', 'error');
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
+  const handleToggleStatus = async (u: Usuario) => {
+    try {
+      const novoStatus = !u.ativo;
+      await ApiService.updateUsuario(u.id, { ativo: novoStatus });
+      showToast(`Usuário ${u.nome} agora está ${novoStatus ? 'Ativo' : 'Inativo'}.`, 'info');
+      fetchUsuarios();
+    } catch (err) {
+      showToast('Erro ao alterar status do usuário.', 'error');
+    }
+  };
 
   const handleConfirmDeleteUser = async () => {
     if (!deleteUserTarget) return;
@@ -159,7 +218,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
   const getPerfilBadge = (perfil: PerfilUsuario) => {
     if (perfil === 'GESTOR' || perfil === 'ADMIN') {
       return (
-        <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(240, 90, 34, 0.15)', color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(240, 90, 34, 0.15)', color: 'var(--primary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <HardHat size={12} />
           GESTOR
         </span>
@@ -167,24 +226,28 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
     }
     if (perfil === 'NAVEGADOR') {
       return (
-        <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(41, 128, 168, 0.15)', color: 'var(--primary-light)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(41, 128, 168, 0.15)', color: 'var(--primary-light)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
           <Radio size={12} />
           NAVEGADOR
         </span>
       );
     }
     return (
-      <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(39, 174, 96, 0.15)', color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+      <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(39, 174, 96, 0.15)', color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
         <User size={12} />
         OPERADOR
       </span>
     );
   };
 
+  const countGestores = usuarios.filter(u => u.perfil === 'GESTOR' || u.perfil === 'ADMIN').length;
+  const countNavegadores = usuarios.filter(u => u.perfil === 'NAVEGADOR').length;
+  const countOperadores = usuarios.filter(u => u.perfil === 'OPERADOR').length;
+
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       
-      {/* Upper Header Bar */}
+      {/* Upper Header Bar (Padrão JLE) */}
       <div className="upper-header">
         <div>
           <h1 className="header-title">Gestão de Usuários</h1>
@@ -211,8 +274,8 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
         }}
       >
         {/* Search */}
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '240px' }}>
-          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        <div style={{ position: 'relative', flex: 1, maxWidth: '380px', minWidth: '220px' }}>
+          <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
             placeholder="Buscar por nome, usuário ou e-mail..."
@@ -222,29 +285,35 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
           />
         </div>
 
-        {/* Perfil Filter */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {['TODOS', 'GESTOR', 'NAVEGADOR', 'OPERADOR'].map((p) => (
+        {/* Perfil Filter Pills with Counters */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {[
+            { id: 'TODOS', label: `Todos (${usuarios.length})` },
+            { id: 'GESTOR', label: `Gestores (${countGestores})` },
+            { id: 'NAVEGADOR', label: `Navegadores (${countNavegadores})` },
+            { id: 'OPERADOR', label: `Operadores (${countOperadores})` }
+          ].map((p) => (
             <button
-              key={p}
-              onClick={() => setPerfilFilter(p)}
+              key={p.id}
+              onClick={() => setPerfilFilter(p.id)}
               style={{
                 fontSize: '11.5px',
-                fontWeight: 600,
-                padding: '6px 12px',
-                borderRadius: '6px',
-                backgroundColor: perfilFilter === p ? 'var(--primary)' : 'var(--bg-card)',
-                color: perfilFilter === p ? '#FFFFFF' : 'var(--text-muted)',
-                border: `1px solid ${perfilFilter === p ? 'var(--primary)' : 'var(--border-color)'}`
+                fontWeight: 700,
+                padding: '6px 14px',
+                borderRadius: '20px',
+                backgroundColor: perfilFilter === p.id ? 'var(--primary)' : 'var(--bg-card)',
+                color: perfilFilter === p.id ? '#FFFFFF' : 'var(--text-muted)',
+                border: `1px solid ${perfilFilter === p.id ? 'var(--primary)' : 'var(--border-color)'}`,
+                cursor: 'pointer'
               }}
             >
-              {p === 'TODOS' ? 'Todos' : p.charAt(0) + p.slice(1).toLowerCase() + 's'}
+              {p.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Users Table / Grid */}
+      {/* Users Table */}
       <div 
         style={{
           backgroundColor: 'var(--bg-card)',
@@ -259,7 +328,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
             <div className="skeleton" style={{ width: '100%', height: '160px', borderRadius: '8px' }} />
           </div>
         ) : filteredUsuarios.length === 0 ? (
-          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+          <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
             Nenhum usuário encontrado com os filtros selecionados.
           </div>
         ) : (
@@ -269,7 +338,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                 <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>
                   <th style={{ padding: '10px 12px' }}>Usuário</th>
                   <th style={{ padding: '10px 12px' }}>Perfil</th>
-                  <th style={{ padding: '10px 12px' }}>Login / Username</th>
+                  <th style={{ padding: '10px 12px' }}>Login (Username)</th>
                   <th style={{ padding: '10px 12px' }}>E-mail</th>
                   <th style={{ padding: '10px 12px' }}>Status</th>
                   <th style={{ padding: '10px 12px', textAlign: 'right' }}>Ações</th>
@@ -285,20 +354,30 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                             width: '34px',
                             height: '34px',
                             borderRadius: '8px',
-                            backgroundColor: 'rgba(240, 90, 34, 0.15)',
-                            color: 'var(--primary)',
+                            backgroundColor: u.perfil === 'GESTOR' || u.perfil === 'ADMIN' 
+                              ? 'rgba(240, 90, 34, 0.15)' 
+                              : u.perfil === 'NAVEGADOR' 
+                              ? 'rgba(41, 128, 168, 0.15)' 
+                              : 'rgba(39, 174, 96, 0.15)',
+                            color: u.perfil === 'GESTOR' || u.perfil === 'ADMIN' 
+                              ? 'var(--primary)' 
+                              : u.perfil === 'NAVEGADOR' 
+                              ? 'var(--primary-light)' 
+                              : 'var(--success)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontWeight: 700,
+                            fontWeight: 800,
                             fontSize: '13px'
                           }}
                         >
-                          {u.nome.charAt(0)}
+                          {u.nome.charAt(0).toUpperCase()}
                         </div>
-                        <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>
-                          {u.nome}
-                        </strong>
+                        <div>
+                          <strong style={{ color: 'var(--text-main)', fontSize: '13px', display: 'block' }}>
+                            {u.nome}
+                          </strong>
+                        </div>
                       </div>
                     </td>
                     <td style={{ padding: '12px' }}>
@@ -311,44 +390,83 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                       {u.email || '-'}
                     </td>
                     <td style={{ padding: '12px' }}>
-                      {u.ativo ? (
-                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <CheckCircle2 size={12} />
-                          Ativo
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--danger)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <XCircle size={12} />
-                          Inativo
-                        </span>
-                      )}
+                      <button
+                        onClick={() => handleToggleStatus(u)}
+                        style={{
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          backgroundColor: u.ativo ? 'rgba(39, 174, 96, 0.12)' : 'rgba(231, 76, 60, 0.12)',
+                          color: u.ativo ? 'var(--success)' : 'var(--danger)',
+                          border: `1px solid ${u.ativo ? 'rgba(39, 174, 96, 0.3)' : 'rgba(231, 76, 60, 0.3)'}`,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Clique para alternar o status do usuário"
+                      >
+                        {u.ativo ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                        <span>{u.ativo ? 'Ativo' : 'Inativo'}</span>
+                      </button>
                     </td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        
+                        {/* Redefinir Senha */}
+                        <button
+                          onClick={() => {
+                            setPasswordModalUser(u);
+                            setNewPassword('');
+                            setShowNewPassword(false);
+                          }}
+                          style={{
+                            padding: '5px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: 'var(--bg-app)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-muted)',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer'
+                          }}
+                          title="Alterar Senha de Acesso"
+                        >
+                          <Key size={12} />
+                          <span>Senha</span>
+                        </button>
+
+                        {/* Editar */}
                         <button
                           onClick={() => handleOpenEditModal(u)}
                           style={{
-                            padding: '6px 10px',
+                            padding: '5px 8px',
                             borderRadius: '4px',
                             backgroundColor: 'var(--bg-app)',
                             border: '1px solid var(--border-color)',
                             color: 'var(--text-main)',
-                            fontSize: '11.5px',
+                            fontSize: '11px',
                             fontWeight: 600,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '4px',
+                            cursor: 'pointer'
                           }}
                           title="Editar Usuário"
                         >
-                          <Edit size={13} />
+                          <Edit size={12} />
                           <span>Editar</span>
                         </button>
 
+                        {/* Excluir */}
                         <button
                           onClick={() => setDeleteUserTarget({ id: u.id, nome: u.nome })}
                           style={{
-                            padding: '6px 8px',
+                            padding: '5px 7px',
                             borderRadius: '4px',
                             color: 'var(--danger)',
                             fontSize: '11.5px',
@@ -359,7 +477,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                           className="hover:bg-rose-500/10"
                           title="Excluir Usuário"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </td>
@@ -371,7 +489,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
         )}
       </div>
 
-      {/* Modal de Criação / Edição de Usuário */}
+      {/* MODAL DE CRIAÇÃO / EDIÇÃO DE USUÁRIO (PADRÃO JLE) */}
       {modalOpen && createPortal(
         <div 
           style={{ 
@@ -395,7 +513,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
             className="fade-in" 
             style={{ 
               width: '100%', 
-              maxWidth: '540px', 
+              maxWidth: '520px', 
               backgroundColor: 'var(--bg-card)', 
               borderRadius: 'var(--radius-md)', 
               border: '1px solid var(--border-color)', 
@@ -408,13 +526,19 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
           >
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
-                {editingUser ? 'Editar Usuário' : 'Cadastrar Novo Usuário'}
-              </h3>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  {editingUser ? 'Editar Usuário' : 'Cadastrar Novo Usuário'}
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {editingUser ? `Atualize as informações de ${editingUser.nome}` : 'Defina os dados de acesso e perfil do colaborador'}
+                </span>
+              </div>
+
               <button 
                 type="button" 
                 onClick={() => setModalOpen(false)}
-                style={{ color: 'var(--text-muted)', padding: '4px' }}
+                style={{ color: 'var(--text-muted)', padding: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 <X size={18} />
               </button>
@@ -426,23 +550,23 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
               </div>
             )}
 
-            <form onSubmit={handleSaveUser} style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
+            <form onSubmit={handleSaveUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '11px', color: 'var(--text-main)' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '11.5px', color: 'var(--text-main)' }}>
                   NOME COMPLETO *
                 </label>
                 <input 
                   type="text" 
                   value={formNome} 
-                  onChange={e => setFormNome(e.target.value)} 
+                  onChange={e => handleNomeChange(e.target.value)} 
                   placeholder="ex: Eduardo Silva" 
                   required
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '11px', color: 'var(--text-main)' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '11.5px', color: 'var(--text-main)' }}>
                     PERFIL DE ACESSO *
                   </label>
                   <select 
@@ -457,21 +581,22 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '11px', color: 'var(--text-main)' }}>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '11.5px', color: 'var(--text-main)' }}>
                     USUÁRIO (LOGIN) *
                   </label>
                   <input 
                     type="text" 
                     value={formUsername} 
                     onChange={e => setFormUsername(e.target.value.toLowerCase().trim())} 
-                    placeholder="ex: eduardo" 
+                    placeholder="ex: eduardo.silva" 
+                    required
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '11px', color: 'var(--text-main)' }}>
-                  E-MAIL (OPCIONAL)
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 600, fontSize: '11px', color: 'var(--text-muted)' }}>
+                  E-MAIL CORPORATIVO (OPCIONAL)
                 </label>
                 <input 
                   type="email" 
@@ -482,20 +607,39 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontWeight: 600, fontSize: '11px', color: 'var(--text-main)' }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 700, fontSize: '11.5px', color: 'var(--text-main)' }}>
                   {editingUser ? 'NOVA SENHA (DEIXE EM BRANCO PARA MANTER)' : 'SENHA INICIAL *'}
                 </label>
-                <input 
-                  type="password" 
-                  value={formSenha} 
-                  onChange={e => setFormSenha(e.target.value)} 
-                  placeholder={editingUser ? '••••••••' : 'Senha de acesso'} 
-                  required={!editingUser}
-                />
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showPassword ? 'text' : 'password'} 
+                    value={formSenha} 
+                    onChange={e => setFormSenha(e.target.value)} 
+                    placeholder={editingUser ? '••••••••' : 'Senha de acesso (padrão: Tecno@123)'} 
+                    required={!editingUser}
+                    style={{ paddingRight: '38px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--text-muted)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
               </div>
 
-              <div style={{ padding: '10px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '12px', color: 'var(--text-main)', margin: 0 }}>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '12.5px', color: 'var(--text-main)', margin: 0 }}>
                   <input 
                     type="checkbox" 
                     checked={formAtivo} 
@@ -506,11 +650,11 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                 </label>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '14px' }}>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '12px' }}>
                 <button 
                   type="button" 
                   onClick={() => setModalOpen(false)}
-                  style={{ color: 'var(--text-muted)', fontSize: '12.5px', padding: '8px 14px' }}
+                  style={{ color: 'var(--text-muted)', fontSize: '12.5px', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   Cancelar
                 </button>
@@ -519,9 +663,118 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                   type="submit" 
                   disabled={saving}
                   className="btn-primary"
-                  style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 700 }}
+                  style={{ padding: '9px 22px', fontSize: '13px', fontWeight: 700 }}
                 >
                   {saving ? 'Salvando...' : editingUser ? 'Salvar Alterações' : 'Cadastrar Usuário'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL RÁPIDO DE REDEFINIÇÃO DE SENHA */}
+      {passwordModalUser && createPortal(
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0,
+            top: 0, 
+            left: 0, 
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0,0,0,0.8)', 
+            backdropFilter: 'blur(4px)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 999999, 
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            className="fade-in" 
+            style={{ 
+              width: '100%', 
+              maxWidth: '420px', 
+              backgroundColor: 'var(--bg-card)', 
+              borderRadius: 'var(--radius-md)', 
+              border: '1px solid var(--border-color)', 
+              padding: '24px', 
+              boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
+              margin: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  Redefinir Senha
+                </h3>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  Usuário: <strong>{passwordModalUser.nome}</strong> ({passwordModalUser.username})
+                </span>
+              </div>
+
+              <button 
+                type="button" 
+                onClick={() => setPasswordModalUser(null)}
+                style={{ color: 'var(--text-muted)', padding: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewPassword} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: 700, fontSize: '11.5px', color: 'var(--text-main)' }}>
+                  NOVA SENHA *
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="Digite a nova senha..."
+                    required
+                    style={{ paddingRight: '38px', fontSize: '13px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      color: 'var(--text-muted)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '6px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => setPasswordModalUser(null)}
+                  style={{ color: 'var(--text-muted)', fontSize: '12px', padding: '8px 12px', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  Cancelar
+                </button>
+
+                <button 
+                  type="submit" 
+                  disabled={savingPassword}
+                  className="btn-primary"
+                  style={{ padding: '8px 18px', fontSize: '12.5px', fontWeight: 700 }}
+                >
+                  {savingPassword ? 'Salvando...' : 'Salvar Nova Senha'}
                 </button>
               </div>
             </form>
