@@ -1,6 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import L from 'leaflet';
-import { Maximize2, Minimize2, Search, Box, MapPin as MapPinIcon, Camera, Eye } from 'lucide-react';
+import { 
+  Maximize2, 
+  Minimize2, 
+  Search, 
+  MapPin as MapPinIcon, 
+  ArrowLeft, 
+  X,
+  Navigation
+} from 'lucide-react';
 import { Barra } from '../types';
 
 interface MapViewProps {
@@ -14,7 +23,7 @@ export const MapView: React.FC<MapViewProps> = ({
   height = '520px',
   onSelectPhoto
 }) => {
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const [mapContainer, setMapContainer] = useState<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersGroupRef = useRef<L.FeatureGroup | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
@@ -25,21 +34,33 @@ export const MapView: React.FC<MapViewProps> = ({
   // Filtrar apenas registros que possuem GPS válido
   const validPins = barras.filter(b => b.latitude && b.longitude);
 
+  // Invalidate map size on fullscreen toggle
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [isFullscreen]);
 
-    // Inicializar mapa se ainda não existir
+  // Inicializar e atualizar o mapa Leaflet
+  useEffect(() => {
+    if (!mapContainer) return;
+
     if (!mapRef.current) {
       const defaultCenter: [number, number] = validPins.length > 0 
         ? [validPins[0].latitude!, validPins[0].longitude!]
-        : [-23.9608, -46.3336]; // Santos / SP padrão
+        : [-23.9608, -46.3336]; // Santos / SP
 
-      mapRef.current = L.map(mapContainerRef.current, {
+      mapRef.current = L.map(mapContainer, {
         maxZoom: 22,
-        zoomControl: true
+        zoomControl: false // Vamos adicionar o zoom control em posição customizada
       }).setView(defaultCenter, 16);
 
-      // Camada OpenStreetMap
+      L.control.zoom({ position: 'bottomright' }).addTo(mapRef.current);
+
+      // OpenStreetMap Layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 22,
@@ -71,7 +92,6 @@ export const MapView: React.FC<MapViewProps> = ({
       const color = isBox ? '#27AE60' : '#F05A22';
       const label = isBox ? 'CX' : `#${b.numero_barra}`;
 
-      // Custom HTML Marker Icon
       const customIcon = L.divIcon({
         className: 'custom-pin',
         html: `
@@ -86,11 +106,10 @@ export const MapView: React.FC<MapViewProps> = ({
             color: #FFFFFF;
             font-weight: 800;
             font-size: 11px;
-            font-family: var(--font-sans);
+            font-family: var(--font-sans, sans-serif);
             border: 2px solid #FFFFFF;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
             cursor: pointer;
-            transition: transform 0.2s ease;
           ">
             ${label}
           </div>
@@ -102,7 +121,6 @@ export const MapView: React.FC<MapViewProps> = ({
 
       const marker = L.marker([lat, lng], { icon: customIcon }).addTo(group);
 
-      // Popup Content
       const popupHtml = `
         <div style="font-family: sans-serif; font-size: 12px; color: #1E293B; min-width: 180px; padding: 4px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -113,23 +131,15 @@ export const MapView: React.FC<MapViewProps> = ({
           </div>
 
           ${b.foto_url ? `
-            <div style="margin-bottom: 6px; border-radius: 6px; overflow: hidden; height: 100px; background: #000; cursor: pointer;">
+            <div style="margin-bottom: 6px; border-radius: 6px; overflow: hidden; height: 110px; background: #000; cursor: pointer;" onclick="window.__openPhotoModal && window.__openPhotoModal('${b.foto_url}')">
               <img src="${b.foto_url}" style="width: 100%; height: 100%; object-fit: cover;" alt="Foto" />
             </div>
           ` : ''}
 
-          <div style="font-size: 11.5px; margin-bottom: 2px;">
-            <strong>Metragem:</strong> +${b.metros || 3}m (Total: ${b.metros_acumulados || 0}m)
-          </div>
-
-          ${b.observacao ? `
-            <div style="font-size: 11px; color: #64748B; margin-top: 4px;">
-              <em>"${b.observacao}"</em>
-            </div>
-          ` : ''}
-
-          <div style="font-size: 9.5px; color: #94A3B8; margin-top: 6px;">
-            ${b.horario_registro ? new Date(b.horario_registro).toLocaleString('pt-BR') : ''}
+          <div style="display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #64748B;">
+            <div><strong>Metros:</strong> ${b.metros}m (Acum: ${b.metros_acumulados}m)</div>
+            <div><strong>Data:</strong> ${new Date(b.created_at).toLocaleString('pt-BR')}</div>
+            ${b.observacao ? `<div><strong>Obs:</strong> ${b.observacao}</div>` : ''}
           </div>
         </div>
       `;
@@ -137,29 +147,21 @@ export const MapView: React.FC<MapViewProps> = ({
       marker.bindPopup(popupHtml);
     });
 
-    // Traçado da Linha de Canalização / Perfuração
+    // Traçado da Linha de Perfuração
     if (latLngs.length > 1) {
       polylineRef.current = L.polyline(latLngs, {
         color: '#F05A22',
-        weight: 5,
+        weight: 4,
         opacity: 0.85,
         dashArray: '8, 8',
         lineCap: 'round'
       }).addTo(map);
+
+      map.fitBounds(group.getBounds(), { padding: [40, 40], maxZoom: 18 });
+    } else if (latLngs.length === 1) {
+      map.setView(latLngs[0], 17);
     }
-
-    // Ajustar zoom para enquadrar todos os pontos
-    if (validPins.length > 0) {
-      const bounds = group.getBounds();
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
-    }
-
-    // Disparar resize do leaflet
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-
-  }, [barras, isFullscreen]);
+  }, [validPins.length, mapContainer]);
 
   const handleSearchFocus = (num: number) => {
     const target = validPins.find(b => b.numero_barra === num);
@@ -168,16 +170,24 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   };
 
-  return (
+  const handleFitAll = () => {
+    if (mapRef.current && markersGroupRef.current && validPins.length > 0) {
+      mapRef.current.fitBounds(markersGroupRef.current.getBounds(), { padding: [40, 40] });
+    }
+  };
+
+  // Conteúdo do Mapa
+  const mapContent = (
     <div 
       style={{
         position: isFullscreen ? 'fixed' : 'relative',
+        inset: isFullscreen ? 0 : undefined,
         top: isFullscreen ? 0 : undefined,
         left: isFullscreen ? 0 : undefined,
         width: isFullscreen ? '100vw' : '100%',
         height: isFullscreen ? '100vh' : height,
-        zIndex: isFullscreen ? 99999 : 1,
-        backgroundColor: 'var(--bg-card)',
+        zIndex: isFullscreen ? 9999999 : 1,
+        backgroundColor: '#0D1C24',
         borderRadius: isFullscreen ? 0 : 'var(--radius-md)',
         border: isFullscreen ? 'none' : '1px solid var(--border-color)',
         overflow: 'hidden',
@@ -185,53 +195,128 @@ export const MapView: React.FC<MapViewProps> = ({
         flexDirection: 'column'
       }}
     >
-      {/* Map Control Bar */}
+      {/* 1. TOP CONTROL BAR */}
       <div 
         style={{
           position: 'absolute',
-          top: '12px',
-          left: '12px',
-          right: '12px',
-          zIndex: 1000,
+          top: '14px',
+          left: '14px',
+          right: '14px',
+          zIndex: 10000,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          gap: '10px',
+          flexWrap: 'wrap',
           pointerEvents: 'none'
         }}
       >
-        {/* Search Pin Input */}
-        <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)', border: '1px solid var(--border-color)' }}>
-          <Search size={14} style={{ color: 'var(--text-muted)' }} />
-          <input 
-            type="number" 
-            placeholder="Ir para registro nº..." 
-            value={searchQuery}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSearchQuery(val);
-              if (val) handleSearchFocus(Number(val));
+        {/* Left Area: Voltar / Fechar se Fullscreen + Busca */}
+        <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isFullscreen && (
+            <button
+              onClick={() => setIsFullscreen(false)}
+              style={{
+                backgroundColor: 'var(--primary)',
+                color: '#FFFFFF',
+                border: 'none',
+                padding: '9px 16px',
+                borderRadius: '8px',
+                fontSize: '13px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.5)'
+              }}
+            >
+              <ArrowLeft size={16} />
+              <span>Voltar</span>
+            </button>
+          )}
+
+          {/* Search Pin Input */}
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              backgroundColor: '#0D1C24', 
+              padding: '8px 14px', 
+              borderRadius: '8px', 
+              boxShadow: '0 4px 15px rgba(0,0,0,0.4)', 
+              border: '1px solid var(--border-color)' 
             }}
+          >
+            <Search size={14} style={{ color: 'var(--text-muted)' }} />
+            <input 
+              type="number" 
+              placeholder="Buscar registro nº..." 
+              value={searchQuery}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchQuery(val);
+                if (val) handleSearchFocus(Number(val));
+              }}
+              style={{
+                backgroundColor: 'transparent',
+                border: 'none',
+                fontSize: '12.5px',
+                width: '140px',
+                padding: 0,
+                color: '#FFFFFF',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <button
+            onClick={handleFitAll}
+            title="Enquadrar todos os pontos"
             style={{
-              backgroundColor: 'transparent',
-              border: 'none',
+              backgroundColor: '#0D1C24',
+              border: '1px solid var(--border-color)',
+              color: '#FFFFFF',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
               fontSize: '12px',
-              width: '140px',
-              padding: 0,
-              color: 'var(--text-main)'
+              fontWeight: 600,
+              cursor: 'pointer',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.4)'
             }}
-          />
+          >
+            <Navigation size={14} style={{ color: 'var(--primary)' }} />
+            <span>Enquadrar</span>
+          </button>
         </div>
 
-        {/* Legend & Fullscreen Button */}
+        {/* Right Area: Legenda e Botão de Alternar Tela Cheia */}
         <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Legenda rápida */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '11px', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+          <div 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '12px', 
+              backgroundColor: '#0D1C24', 
+              padding: '8px 14px', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border-color)', 
+              fontSize: '11.5px', 
+              fontWeight: 600,
+              boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+              color: '#FFFFFF'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#F05A22' }} />
               <span>Canalização ({barras.filter(b => !b.tem_caixa).length})</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--success)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#27AE60' }} />
               <span>Caixa ({barras.filter(b => b.tem_caixa).length})</span>
             </div>
           </div>
@@ -239,54 +324,70 @@ export const MapView: React.FC<MapViewProps> = ({
           <button
             onClick={() => setIsFullscreen(prev => !prev)}
             style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-main)',
-              padding: '8px',
+              backgroundColor: isFullscreen ? 'rgba(231, 76, 60, 0.2)' : '#0D1C24',
+              border: `1px solid ${isFullscreen ? 'var(--danger)' : 'var(--border-color)'}`,
+              color: isFullscreen ? 'var(--danger)' : '#FFFFFF',
+              padding: '9px 12px',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              gap: '6px',
               cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+              fontWeight: 700,
+              fontSize: '12px',
+              boxShadow: '0 4px 15px rgba(0,0,0,0.4)'
             }}
             title={isFullscreen ? 'Sair da Tela Cheia' : 'Ver em Tela Cheia'}
           >
-            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {isFullscreen ? (
+              <>
+                <X size={15} />
+                <span>Fechar</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 size={15} />
+                <span>Ampliar</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Leaflet Container */}
+      {/* 2. LEAFLET CONTAINER */}
       <div 
-        ref={mapContainerRef} 
-        style={{ width: '100%', height: '100%', minHeight: '350px' }} 
+        ref={(el) => setMapContainer(el)} 
+        style={{ width: '100%', height: '100%', minHeight: isFullscreen ? '100vh' : '350px' }} 
       />
 
-      {/* No GPS Warning Footer */}
+      {/* 3. NO GPS FOOTER */}
       {validPins.length === 0 && (
         <div 
           style={{
             position: 'absolute',
-            bottom: '12px',
+            bottom: '16px',
             left: '50%',
             transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backgroundColor: 'rgba(13, 28, 36, 0.95)',
+            border: '1px solid var(--border-color)',
             color: '#FFFFFF',
-            padding: '8px 16px',
+            padding: '10px 18px',
             borderRadius: '20px',
-            fontSize: '11.5px',
-            zIndex: 1000,
+            fontSize: '12px',
+            zIndex: 10000,
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            boxShadow: '0 4px 18px rgba(0,0,0,0.5)'
           }}
         >
-          <MapPinIcon size={14} style={{ color: 'var(--primary)' }} />
-          <span>Nenhum registro com GPS capturado ainda. Ao apontar no celular, o GPS será marcado automaticamente.</span>
+          <MapPinIcon size={15} style={{ color: 'var(--primary)' }} />
+          <span>Nenhum registro com GPS capturado ainda. Ao apontar pelo celular, os pontos aparecerão aqui.</span>
         </div>
       )}
     </div>
   );
+
+  return isFullscreen ? createPortal(mapContent, document.body) : mapContent;
 };
