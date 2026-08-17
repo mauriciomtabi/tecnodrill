@@ -2,7 +2,6 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   HardHat, 
-  Radio, 
   Users, 
   Sun, 
   Moon, 
@@ -17,6 +16,10 @@ interface SidebarProps {
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
+
+const toTitleCase = (str: string) => {
+  return str.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
+};
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, collapsed, onToggleCollapse }) => {
   const { user, logout, theme, toggleTheme } = useAuth();
@@ -96,168 +99,211 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
               title="Recolher Menu"
               style={{
                 padding: '6px',
+                borderRadius: '6px',
                 color: 'var(--text-muted)',
-                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                flexShrink: 0
+                marginLeft: '6px',
+                backgroundColor: 'rgba(255,255,255,0.04)'
               }}
-              className="hover:text-white hover:bg-white/10"
+              onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
           </>
         ) : (
-          <div 
+          <button
             onClick={onToggleCollapse}
             title="Expandir Menu"
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              width: '100%',
-              height: '100%',
-              cursor: 'pointer'
+            style={{
+              padding: '8px',
+              borderRadius: '6px',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(255,255,255,0.04)'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
+            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
           >
-            <img 
-              src="/logo-icon.png" 
-              alt="TecnoDrill" 
-              style={{ 
-                width: '38px', 
-                height: '38px', 
-                objectFit: 'contain',
-                display: 'block'
-              }} 
-            />
-          </div>
+            <ChevronRight size={16} />
+          </button>
         )}
       </div>
 
       {/* 2. NAVIGATION LINKS */}
-      <div style={{ flex: 1, padding: '16px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        {menuItems.map(item => {
+      <nav style={{ flex: 1, padding: '16px 0', display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
+        {menuItems.map((item) => {
+          const isActive = currentPath.startsWith(item.path);
           const Icon = item.icon;
-          const isActive = currentPath === item.path || currentPath.startsWith(`${item.path}/`);
 
           return (
             <button
               key={item.path}
               onClick={() => onNavigate(item.path)}
+              title={collapsed ? item.label : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
-                padding: collapsed ? '10px 0' : '10px 14px',
+                padding: collapsed ? '12px 0' : '10px 16px',
                 justifyContent: collapsed ? 'center' : 'flex-start',
-                borderRadius: 'var(--radius-sm)',
-                color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+                width: '100%',
+                textAlign: 'left',
+                borderLeft: isActive ? '4px solid var(--primary)' : '4px solid transparent',
                 backgroundColor: isActive ? 'var(--primary)' : 'transparent',
-                fontWeight: isActive ? 600 : 500,
-                fontSize: '13.5px',
-                boxShadow: isActive ? '0 2px 8px rgba(240, 90, 34, 0.3)' : 'none',
-                transition: 'all 0.2s ease'
+                color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+                fontWeight: isActive ? 700 : 500,
+                fontSize: '13px',
+                cursor: 'pointer',
+                transition: 'var(--transition)'
               }}
-              className={!isActive ? 'hover:text-white hover:bg-white/5' : ''}
-              title={collapsed ? item.label : undefined}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                  e.currentTarget.style.color = '#FFFFFF';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                }
+              }}
             >
-              <Icon size={18} className="shrink-0" />
+              <Icon size={18} style={{ flexShrink: 0 }} />
               {!collapsed && <span>{item.label}</span>}
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      {/* 3. USER FOOTER INFO & THEME TOGGLE */}
-      <div
+      {/* 3. SIDEBAR FOOTER (PADRÃO JLE COM BOTÃO SAIR ABAIXO DO CLARO/ESCURO) */}
+      <div 
         style={{
+          padding: '12px',
           borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          padding: '12px 10px',
           display: 'flex',
           flexDirection: 'column',
           gap: '8px'
         }}
       >
         {/* User Card */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: collapsed ? '6px 0' : '6px 8px',
-            justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'rgba(255, 255, 255, 0.03)'
-          }}
-        >
-          <div
+        {!collapsed ? (
+          <div 
             style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '6px',
-              backgroundColor: 'rgba(240, 90, 34, 0.2)',
-              border: '1px solid rgba(240, 90, 34, 0.4)',
-              color: 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 'bold',
-              fontSize: '12px'
+              gap: '10px',
+              padding: '8px 10px',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(255,255,255,0.04)'
             }}
           >
-            {user.nome.charAt(0)}
-          </div>
-          {!collapsed && (
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', textAlign: 'left' }}>
-              <span style={{ color: '#FFFFFF', fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                {user.nome}
+            <div 
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--primary)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '13px',
+                flexShrink: 0
+              }}
+            >
+              {user.nome.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                {toTitleCase(user.nome)}
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, textTransform: 'uppercase' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)' }}>
                 {user.perfil}
               </span>
             </div>
-          )}
-        </div>
-
-        {/* Controls: Theme & Logout */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between' }}>
-          <button
-            onClick={toggleTheme}
+          </div>
+        ) : (
+          <div 
+            title={`${toTitleCase(user.nome)} (${user.perfil})`}
             style={{
-              padding: '6px 8px',
-              color: 'var(--text-muted)',
-              borderRadius: 'var(--radius-sm)',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--primary)',
+              color: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              fontSize: '11px'
+              justifyContent: 'center',
+              fontWeight: 800,
+              margin: '0 auto'
             }}
-            className="hover:text-white hover:bg-white/10"
-            title={theme === 'dark' ? 'Mudar para Tema Claro' : 'Mudar para Tema Escuro'}
           >
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-            {!collapsed && <span>{theme === 'dark' ? 'Claro' : 'Escuro'}</span>}
-          </button>
+            {user.nome.charAt(0).toUpperCase()}
+          </div>
+        )}
 
-          <button
-            onClick={logout}
-            style={{
-              padding: '6px 8px',
-              color: '#F87171',
-              borderRadius: 'var(--radius-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '11px'
-            }}
-            className="hover:bg-rose-500/10"
-            title="Sair do Sistema"
-          >
-            <LogOut size={15} />
-            {!collapsed && <span>Sair</span>}
-          </button>
-        </div>
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: '10px',
+            padding: '9px 10px',
+            borderRadius: '6px',
+            color: 'var(--text-muted)',
+            width: '100%',
+            backgroundColor: 'rgba(255,255,255,0.02)',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#FFFFFF';
+            e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)';
+          }}
+        >
+          {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+          {!collapsed && <span style={{ fontSize: '12px', fontWeight: 500 }}>Modo {theme === 'light' ? 'Escuro' : 'Claro'}</span>}
+        </button>
+
+        {/* Logout Button (ABAIXO DO MODO CLARO/ESCURO) */}
+        <button
+          onClick={logout}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: '10px',
+            padding: '9px 10px',
+            borderRadius: '6px',
+            color: '#E74C3C',
+            width: '100%',
+            backgroundColor: 'rgba(231, 76, 60, 0.08)',
+            cursor: 'pointer'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(231, 76, 60, 0.18)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(231, 76, 60, 0.08)';
+          }}
+        >
+          <LogOut size={16} />
+          {!collapsed && <span style={{ fontSize: '12px', fontWeight: 700 }}>Sair</span>}
+        </button>
       </div>
     </aside>
   );
