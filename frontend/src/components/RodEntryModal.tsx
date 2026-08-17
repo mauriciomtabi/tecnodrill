@@ -2,6 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra } from '../types';
 import { 
+  applyTecnodrillWatermark, 
+  reverseGeocode, 
+  AddressDetails, 
+  decToDMSForWatermark 
+} from '../utils/watermark';
+import { 
   Camera, 
   Image as ImageIcon, 
   X, 
@@ -38,7 +44,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
   const [precisao, setPrecisao] = useState<number | null>(null);
+  const [addressDetails, setAddressDetails] = useState<AddressDetails | null>(null);
   const [capturingGps, setCapturingGps] = useState<boolean>(false);
+  const [processingWatermark, setProcessingWatermark] = useState<boolean>(false);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -47,11 +55,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     if ('geolocation' in navigator) {
       setCapturingGps(true);
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLatitude(pos.coords.latitude);
-          setLongitude(pos.coords.longitude);
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          setLatitude(lat);
+          setLongitude(lon);
           setPrecisao(Math.round(pos.coords.accuracy));
           setCapturingGps(false);
+
+          // Reverse geocoding para endereço legível
+          const addr = await reverseGeocode(lat, lon);
+          if (addr) {
+            setAddressDetails(addr);
+          }
         },
         () => {
           setCapturingGps(false);
@@ -68,59 +84,44 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setMetros(3);
       setTemCaixa(false);
       setObservacao('');
+      setAddressDetails(null);
       captureLocation();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setProcessingWatermark(true);
+
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1280;
-        const MAX_HEIGHT = 1280;
-        let width = img.width;
-        let height = img.height;
+    reader.onload = async (event) => {
+      const rawBase64 = event.target?.result as string;
+      if (!rawBase64) {
+        setProcessingWatermark(false);
+        return;
+      }
 
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Carimbo com data, hora e marca TecnoDrill
-          const now = new Date();
-          const dataHoraStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.fillRect(10, height - 38, 330, 28);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.font = 'bold 13px Inter, sans-serif';
-          ctx.fillText(`TecnoDrill INFRA • ${dataHoraStr}`, 18, height - 19);
-
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
-          setFotoUrl(compressed);
-          setStep(2); // Avança automaticamente para o Passo 2
-        }
-      };
-      img.src = event.target?.result as string;
+      try {
+        // Aplicar marca d'água oficial da TecnoDrill (mesmo padrão JLE: Logo superior direito, Data/Hora + DMS + Endereço inferior direito)
+        const watermarked = await applyTecnodrillWatermark(
+          rawBase64,
+          latitude,
+          longitude,
+          addressDetails,
+          new Date()
+        );
+        setFotoUrl(watermarked);
+        setStep(2); // Avança para o Passo 2
+      } catch (err) {
+        setFotoUrl(rawBase64);
+        setStep(2);
+      } finally {
+        setProcessingWatermark(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -254,6 +255,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
                 <button
                   type="button"
+                  disabled={processingWatermark}
                   onClick={() => cameraInputRef.current?.click()}
                   style={{
                     backgroundColor: 'var(--primary)',
@@ -272,11 +274,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   }}
                 >
                   <Camera size={18} />
-                  <span>Tirar Foto (Câmera)</span>
+                  <span>{processingWatermark ? 'Processando Carimbo...' : 'Tirar Foto (Câmera)'}</span>
                 </button>
 
                 <button
                   type="button"
+                  disabled={processingWatermark}
                   onClick={() => galleryInputRef.current?.click()}
                   style={{
                     backgroundColor: 'rgba(42, 138, 204, 0.15)',
@@ -294,7 +297,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   }}
                 >
                   <ImageIcon size={18} />
-                  <span>Escolher da Galeria</span>
+                  <span>{processingWatermark ? 'Processando...' : 'Escolher da Galeria'}</span>
                 </button>
               </div>
 
@@ -436,10 +439,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 Metragem Apontada (Metros)
               </span>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => Math.max(1, prev - 3))}
+                  onClick={() => setMetros(prev => Math.max(1, (Number(prev) || 3) - 3))}
                   style={{
                     width: '44px',
                     height: '44px',
@@ -450,24 +453,42 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    flexShrink: 0
                   }}
                 >
                   <Minus size={18} />
                 </button>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                  <span style={{ fontSize: '32px', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}>
-                    {metros}
-                  </span>
-                  <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    metros
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={metros}
+                    onChange={(e) => setMetros(e.target.value === '' ? '' as any : Number(e.target.value))}
+                    style={{
+                      fontSize: '28px',
+                      fontWeight: 800,
+                      color: 'var(--primary)',
+                      fontFamily: 'var(--font-mono)',
+                      width: '100px',
+                      textAlign: 'center',
+                      backgroundColor: 'var(--bg-app)',
+                      border: '1.5px solid var(--primary)',
+                      borderRadius: '8px',
+                      padding: '4px 8px',
+                      outline: 'none'
+                    }}
+                  />
+                  <span style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    m
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => prev + 3)}
+                  onClick={() => setMetros(prev => (Number(prev) || 0) + 3)}
                   style={{
                     width: '44px',
                     height: '44px',
@@ -478,7 +499,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    flexShrink: 0
                   }}
                 >
                   <Plus size={18} />
@@ -587,12 +609,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </span>
             </div>
 
-            {/* Big Photo Preview with Badges */}
+            {/* Big Photo Preview with Watermark Stamp */}
             <div 
               style={{
                 position: 'relative',
                 width: '100%',
-                height: '180px',
+                height: '190px',
                 borderRadius: 'var(--radius-md)',
                 overflow: 'hidden',
                 backgroundColor: '#000',
@@ -684,13 +706,20 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <Check size={14} style={{ color: 'var(--success)' }} />
-                <span>
-                  {latitude && longitude 
-                    ? `${latitude.toFixed(6)}, ${longitude.toFixed(6)} · prec: ${precisao || 10}m` 
-                    : 'GPS obtido pelo dispositivo'}
-                </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Check size={13} style={{ color: 'var(--success)' }} />
+                  <span>
+                    {latitude && longitude 
+                      ? `${decToDMSForWatermark(latitude, true)} ${decToDMSForWatermark(longitude, false)} · prec: ${precisao || 10}m` 
+                      : 'GPS obtido pelo dispositivo'}
+                  </span>
+                </div>
+                {addressDetails && addressDetails.road && (
+                  <span style={{ paddingLeft: '19px', color: 'var(--text-main)', fontWeight: 600 }}>
+                    {addressDetails.road}{addressDetails.houseNumber ? `, ${addressDetails.houseNumber}` : ''} - {addressDetails.city || ''} ({addressDetails.state || ''})
+                  </span>
+                )}
               </div>
             </div>
 

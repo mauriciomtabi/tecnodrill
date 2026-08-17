@@ -115,24 +115,51 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
             </button>
           </>
         ) : (
-          <button
-            onClick={onToggleCollapse}
-            title="Expandir Menu"
-            style={{
-              padding: '8px',
-              borderRadius: '6px',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(255,255,255,0.04)'
+          <div 
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '100%',
+              gap: '6px'
             }}
-            onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
-            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
           >
-            <ChevronRight size={16} />
-          </button>
+            <div
+              onClick={() => onNavigate(isGestor ? '/app/obras' : '/tecnico/obras')}
+              title="TecnoDrill INFRA"
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <img 
+                src="/icon-192.png" 
+                alt="TecnoDrill" 
+                style={{ 
+                  height: '32px', 
+                  width: '32px', 
+                  objectFit: 'contain'
+                }} 
+              />
+            </div>
+
+            <button
+              onClick={onToggleCollapse}
+              title="Expandir Menu"
+              style={{
+                padding: '4px',
+                borderRadius: '4px',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255,255,255,0.04)'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
         )}
       </div>
 
