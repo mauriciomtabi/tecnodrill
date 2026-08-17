@@ -225,38 +225,22 @@ export const ObrasList: React.FC<ObrasListProps> = ({
           </button>
         </div>
 
-        {/* Search Input and Status Dropdown */}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flex: 1, maxWidth: '420px', minWidth: '240px' }}>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="Buscar por serviço, cliente ou local..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                paddingLeft: '34px',
-                fontSize: '12px',
-                height: '36px'
-              }}
-            />
-          </div>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+        {/* Search Input expandido cobrindo todo o espaço restante da linha */}
+        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input
+            type="text"
+            placeholder="Buscar por serviço, cliente ou local..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
             style={{
-              width: '130px',
+              paddingLeft: '36px',
               fontSize: '12px',
               height: '36px',
-              padding: '6px 10px'
+              width: '100%',
+              boxSizing: 'border-box'
             }}
-          >
-            <option value="TODAS">Todos Status</option>
-            <option value="EM_ANDAMENTO">Ativas</option>
-            <option value="PAUSADO">Pausadas</option>
-            <option value="CONCLUIDO">Concluídas</option>
-          </select>
+          />
         </div>
       </div>
 
