@@ -1,21 +1,36 @@
 {
-  "short_name": "Tecnodrill INFRA",
   "name": "Tecnodrill INFRA | Gestão",
+  "short_name": "Tecnodrill",
+  "description": "Tecnodrill INFRA - Gestão de Perfuração MND e Canalização",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0D1C24",
+  "theme_color": "#F05A22",
   "icons": [
     {
-      "src": "/logo-icon.png",
+      "src": "/icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "sizes": "192x192"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/logo-icon.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "sizes": "512x512"
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#0F1215",
-  "theme_color": "#F05A22",
-  "display": "standalone",
-  "orientation": "portrait"
+  ]
 }
