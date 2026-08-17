@@ -23,6 +23,10 @@ export interface Servico {
   centro_custo?: string;
   local: string;
   gestor_id?: string;
+  navegador_id?: string;
+  navegador_nome?: string;
+  operador_id?: string;
+  operador_nome?: string;
   status: StatusServico;
   cenario_financeiro: CenarioFinanceiro;
   valor_metro: number;

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Servico, CenarioFinanceiro } from '../types';
-import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit } from 'lucide-react';
+import { Servico, CenarioFinanceiro, Usuario } from '../types';
+import { ApiService } from '../services/api';
+import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat } from 'lucide-react';
 
 interface NovoServicoModalProps {
   isOpen: boolean;
@@ -26,6 +27,11 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Lista de Usuários do Sistema
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [navegadorId, setNavegadorId] = useState<string>('');
+  const [operadorId, setOperadorId] = useState<string>('');
 
   // Step 1: Informações Gerais
   const [nome, setNome] = useState('');
@@ -59,6 +65,24 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [diametroMm, setDiametroMm] = useState('150');
   const [valorFechado, setValorFechado] = useState('50000');
 
+  // Carregar usuários para seleção de equipe
+  useEffect(() => {
+    if (isOpen) {
+      ApiService.getUsuarios()
+        .then(data => {
+          setUsuarios(data);
+          // Set initial defaults if creating new
+          if (!initialData) {
+            const nav = data.find(u => u.perfil === 'NAVEGADOR');
+            if (nav) setNavegadorId(nav.id);
+            const op = data.find(u => u.perfil === 'OPERADOR');
+            if (op) setOperadorId(op.id);
+          }
+        })
+        .catch(err => console.error('Erro ao carregar usuários:', err));
+    }
+  }, [isOpen]);
+
   // Carregar dados iniciais ao abrir para edição ou resetar para novo cadastro
   useEffect(() => {
     if (isOpen) {
@@ -67,6 +91,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setCliente(initialData.cliente || '');
         setDescricao(initialData.descricao || '');
         setLocalizacao(initialData.local || '');
+        setNavegadorId(initialData.navegador_id || '');
+        setOperadorId(initialData.operador_id || '');
         setMetragemPrevista(String(initialData.metragem_prevista_total || 1000));
         setMetaDiaria(String(initialData.meta_metros || 100));
         setCenario(initialData.cenario_financeiro || 'VALOR_METRO');
@@ -169,6 +195,9 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const mTotal = Number(metragemPrevista) || 1000;
     const mDia = Number(metaDiaria) || 100;
 
+    const navObj = usuarios.find(u => u.id === navegadorId);
+    const opObj = usuarios.find(u => u.id === operadorId);
+
     try {
       const localCompleto = cidade 
         ? `${cidade} - ${uf} • ${localizacao.trim()}`
@@ -179,6 +208,10 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         cliente: cliente.trim(),
         local: localCompleto,
         descricao: descricao.trim() || undefined,
+        navegador_id: navegadorId || undefined,
+        navegador_nome: navObj?.nome || undefined,
+        operador_id: operadorId || undefined,
+        operador_nome: opObj?.nome || undefined,
         cenario_financeiro: cenario,
         valor_metro: Number(valorMetro) || 0,
         fator_financeiro: Number(fator) || 0,
@@ -195,7 +228,6 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     }
   };
 
-  // Cálculo prévio do valor por metro estimado
   const valorUnitarioEstimado = () => {
     if (cenario === 'VALOR_METRO') {
       return Number(valorMetro) || 0;
@@ -204,38 +236,20 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       return (Number(fator) || 0) * (Number(diametroMm) || 0);
     }
     if (cenario === 'VALOR_FECHADO') {
-      const total = Number(metragemPrevista) || 1;
-      return (Number(valorFechado) || 0) / total;
+      const m = Number(metragemPrevista) || 1;
+      return (Number(valorFechado) || 0) / m;
     }
     return 0;
   };
 
-  // Cálculo da Projeção de Término em Dias Úteis
-  const calculateProjection = () => {
-    const mTotal = Number(metragemPrevista) || 0;
-    const mDia = Number(metaDiaria) || 1;
-    if (mTotal <= 0 || mDia <= 0) return null;
-
-    const diasUteis = Math.ceil(mTotal / mDia);
-
-    const data = new Date();
-    let diasAdicionados = 0;
-    while (diasAdicionados < diasUteis) {
-      data.setDate(data.getDate() + 1);
-      const dayOfWeek = data.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        diasAdicionados++;
-      }
-    }
-
-    const dataFormatada = data.toLocaleDateString('pt-BR');
-    return {
-      diasUteis,
-      dataEstimada: dataFormatada
-    };
+  const retornoPrevistoTotal = () => {
+    const m = Number(metragemPrevista) || 0;
+    if (cenario === 'VALOR_FECHADO') return Number(valorFechado) || 0;
+    return m * valorUnitarioEstimado();
   };
 
-  const projection = calculateProjection();
+  const navegadoresList = usuarios.filter(u => u.perfil === 'NAVEGADOR' || u.perfil === 'ADMIN' || u.perfil === 'GESTOR');
+  const operadoresList = usuarios.filter(u => u.perfil === 'OPERADOR' || u.perfil === 'ADMIN' || u.perfil === 'GESTOR');
 
   return createPortal(
     <div 
@@ -246,8 +260,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         left: 0,
         width: '100vw',
         height: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.82)',
-        backdropFilter: 'blur(5px)',
+        backgroundColor: 'rgba(5, 12, 16, 0.85)',
+        backdropFilter: 'blur(6px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -261,15 +275,15 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         style={{
           width: '100%',
           maxWidth: '560px',
-          backgroundColor: 'var(--bg-card)',
+          backgroundColor: '#0D1C24',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border-color)',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6)',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           maxHeight: '90vh',
-          overflow: 'hidden',
-          margin: 'auto'
+          boxSizing: 'border-box'
         }}
       >
         {/* Modal Header */}
@@ -288,7 +302,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
             </h2>
             <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
               {currentStep === 1 
-                ? 'Passo 1 de 2: Informações e Localização do Serviço' 
+                ? 'Passo 1 de 2: Informações, Equipe e Localização' 
                 : 'Passo 2 de 2: Metas de Perfuração & Retorno Financeiro'}
             </span>
           </div>
@@ -320,7 +334,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
             </div>
           )}
 
-          {/* PASSO 1: INFORMAÇÕES GERAIS E LOCALIZAÇÃO */}
+          {/* PASSO 1: INFORMAÇÕES GERAIS, EQUIPE E LOCALIZAÇÃO */}
           {currentStep === 1 && (
             <form id="step1-form" onSubmit={handleNext} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
@@ -354,6 +368,41 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 />
               </div>
 
+              {/* SELEÇÃO DE EQUIPE (NAVEGADOR E OPERADOR) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Navegador *
+                  </label>
+                  <select
+                    value={navegadorId}
+                    onChange={(e) => setNavegadorId(e.target.value)}
+                    style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
+                  >
+                    <option value="">Selecione o Navegador</option>
+                    {navegadoresList.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Operador *
+                  </label>
+                  <select
+                    value={operadorId}
+                    onChange={(e) => setOperadorId(e.target.value)}
+                    style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
+                  >
+                    <option value="">Selecione o Operador</option>
+                    {operadoresList.map(u => (
+                      <option key={u.id} value={u.id}>{u.nome} ({u.perfil})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               {/* UF e Cidade do IBGE Pesquisáveis */}
               <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '12px' }}>
                 
@@ -378,7 +427,6 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                     <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   </div>
 
-                  {/* Dropdown UF */}
                   {ufDropdownOpen && (
                     <div 
                       style={{
@@ -386,36 +434,36 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                         top: '100%',
                         left: 0,
                         right: 0,
+                        maxHeight: '180px',
+                        overflowY: 'auto',
                         backgroundColor: 'var(--bg-card)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '6px',
-                        maxHeight: '180px',
-                        overflowY: 'auto',
                         zIndex: 99999,
                         marginTop: '4px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+                        boxShadow: 'var(--shadow-lg)'
                       }}
                     >
-                      {filteredUfs.length === 0 ? (
-                        <div style={{ padding: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>Não encontrado</div>
-                      ) : (
-                        filteredUfs.map(u => (
-                          <div
-                            key={u}
-                            onClick={() => handleSelectUf(u)}
-                            style={{
-                              padding: '8px 12px',
-                              fontSize: '12px',
-                              fontWeight: uf === u ? 800 : 500,
-                              color: uf === u ? 'var(--primary)' : 'var(--text-main)',
-                              backgroundColor: uf === u ? 'rgba(240, 90, 34, 0.1)' : 'transparent',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {u}
-                          </div>
-                        ))
-                      )}
+                      {filteredUfs.map((item) => (
+                        <div
+                          key={item}
+                          onClick={() => handleSelectUf(item)}
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: '12.5px',
+                            fontWeight: uf === item ? 700 : 400,
+                            color: uf === item ? 'var(--primary)' : 'var(--text-main)',
+                            backgroundColor: uf === item ? 'rgba(240, 90, 34, 0.1)' : 'transparent',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <span>{item}</span>
+                          {uf === item && <Check size={12} />}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -423,7 +471,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 {/* Campo Cidade */}
                 <div ref={cidadeContainerRef} style={{ position: 'relative' }}>
                   <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Cidade *
+                    Cidade (IBGE {uf}) *
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -434,50 +482,53 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                         setCidadeDropdownOpen(true);
                       }}
                       onFocus={() => setCidadeDropdownOpen(true)}
-                      placeholder={loadingCidades ? 'Carregando cidades...' : 'Digite para buscar a cidade...'}
-                      required
-                      style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
+                      placeholder={loadingCidades ? 'Carregando cidades...' : 'Digite para pesquisar a cidade...'}
+                      disabled={loadingCidades}
+                      style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', paddingRight: '30px' }}
                     />
                     <Search size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   </div>
 
-                  {/* Dropdown Cidades */}
-                  {cidadeDropdownOpen && (
+                  {cidadeDropdownOpen && !loadingCidades && (
                     <div 
                       style={{
                         position: 'absolute',
                         top: '100%',
                         left: 0,
                         right: 0,
+                        maxHeight: '200px',
+                        overflowY: 'auto',
                         backgroundColor: 'var(--bg-card)',
                         border: '1px solid var(--border-color)',
                         borderRadius: '6px',
-                        maxHeight: '200px',
-                        overflowY: 'auto',
                         zIndex: 99999,
                         marginTop: '4px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+                        boxShadow: 'var(--shadow-lg)'
                       }}
                     >
-                      {loadingCidades ? (
-                        <div style={{ padding: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>Carregando IBGE...</div>
-                      ) : filteredCidades.length === 0 ? (
-                        <div style={{ padding: '10px', fontSize: '12px', color: 'var(--text-muted)' }}>Nenhuma cidade encontrada</div>
+                      {filteredCidades.length === 0 ? (
+                        <div style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Nenhuma cidade encontrada
+                        </div>
                       ) : (
-                        filteredCidades.slice(0, 50).map(c => (
+                        filteredCidades.slice(0, 50).map((item) => (
                           <div
-                            key={c}
-                            onClick={() => handleSelectCidade(c)}
+                            key={item}
+                            onClick={() => handleSelectCidade(item)}
                             style={{
                               padding: '8px 12px',
-                              fontSize: '12px',
-                              fontWeight: cidade === c ? 800 : 500,
-                              color: cidade === c ? 'var(--primary)' : 'var(--text-main)',
-                              backgroundColor: cidade === c ? 'rgba(240, 90, 34, 0.1)' : 'transparent',
-                              cursor: 'pointer'
+                              fontSize: '12.5px',
+                              fontWeight: cidade === item ? 700 : 400,
+                              color: cidade === item ? 'var(--primary)' : 'var(--text-main)',
+                              backgroundColor: cidade === item ? 'rgba(240, 90, 34, 0.1)' : 'transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
                             }}
                           >
-                            {c}
+                            <span>{item}</span>
+                            {cidade === item && <Check size={12} />}
                           </div>
                         ))
                       )}
@@ -487,16 +538,16 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
               </div>
 
-              {/* Endereço / Ponto de Referência */}
+              {/* Endereço / Referência */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Endereço / Ponto de Referência (Opcional)
+                  Endereço / Referência do Trecho
                 </label>
                 <input
                   type="text"
                   value={localizacao}
                   onChange={(e) => setLocalizacao(e.target.value)}
-                  placeholder="ex: Av. Paulista, altura do nº 1000"
+                  placeholder="ex: Av. Ana Costa, 1500 - Gonzaga"
                   style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
                 />
               </div>
@@ -504,12 +555,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
               {/* Observações / Descrição */}
               <div>
                 <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Observações Gerais (Opcional)
+                  Observações Gerais do Serviço (Opcional)
                 </label>
                 <textarea
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
-                  placeholder="Detalhes adicionais sobre solo, interferências..."
+                  placeholder="Detalhes adicionais, licenças ambientais, interferências previstas..."
                   rows={2}
                   style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', resize: 'none' }}
                 />
@@ -518,189 +569,198 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
             </form>
           )}
 
-          {/* PASSO 2: METRAGEM, META DIÁRIA & MODELO FINANCEIRO */}
+          {/* PASSO 2: METAS E RETORNO FINANCEIRO */}
           {currentStep === 2 && (
-            <form id="step2-form" onSubmit={handleFinalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <form id="step2-form" onSubmit={handleFinalSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               
-              {/* Metragem Total e Meta Diária */}
+              {/* Row 1: Metragem Total (Inicial: 1000) e Meta Diária (Inicial: 100) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 
-                {/* 1. Metragem Total (1000m Inicial) */}
+                {/* Metragem Prevista */}
                 <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Metragem Total da Obra (Metros) *
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Metragem Prevista (m) *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={metragemPrevista}
-                    onChange={(e) => setMetragemPrevista(e.target.value)}
-                    required
-                    style={{ fontSize: '16px', fontWeight: 800, color: 'var(--primary)', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="number"
+                      value={metragemPrevista}
+                      onChange={(e) => setMetragemPrevista(e.target.value)}
+                      min="1"
+                      required
+                      style={{ fontSize: '18px', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>m</span>
+                  </div>
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                    Extensão total do furo/canalização
+                    Total planejado para a obra
                   </span>
                 </div>
 
-                {/* 2. Meta Diária (100m Inicial) */}
+                {/* Meta Diária */}
                 <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Meta Diária de Produção (m/dia) *
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Meta Diária (m) *
                   </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={metaDiaria}
-                    onChange={(e) => setMetaDiaria(e.target.value)}
-                    required
-                    style={{ fontSize: '16px', fontWeight: 800, color: 'var(--success)', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="number"
+                      value={metaDiaria}
+                      onChange={(e) => setMetaDiaria(e.target.value)}
+                      min="1"
+                      required
+                      style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)', fontFamily: 'var(--font-mono)' }}
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>m/dia</span>
+                  </div>
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                    Produção estimada por dia de trabalho
+                    Dispara celebração em campo
                   </span>
                 </div>
 
               </div>
 
-              {/* Informativo de Projeção de Término do Serviço */}
-              {projection && (
-                <div 
-                  style={{
-                    backgroundColor: 'rgba(240, 90, 34, 0.08)',
-                    border: '1px solid rgba(240, 90, 34, 0.3)',
-                    borderRadius: '8px',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ padding: '6px', borderRadius: '50%', backgroundColor: 'rgba(240, 90, 34, 0.2)', color: 'var(--primary)' }}>
-                      <Clock size={16} />
-                    </div>
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', display: 'block' }}>
-                        Projeção Estimada de Conclusão
-                      </span>
-                      <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
-                        {projection.diasUteis} {projection.diasUteis === 1 ? 'dia útil' : 'dias úteis'} de operação
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block' }}>Término Previsto:</span>
-                    <strong style={{ fontSize: '13px', color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>
-                      {projection.dataEstimada}
-                    </strong>
-                  </div>
-                </div>
-              )}
-
-              {/* Modelo de Retorno Financeiro */}
+              {/* Row 2: Seleção do Modelo de Retorno Financeiro */}
               <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                  Escolha o Modelo de Retorno Financeiro
+                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                  Modelo de Retorno Financeiro *
                 </label>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '14px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                   
-                  {/* Opção 1: Valor por Metro */}
+                  {/* Opção 1: Valor Fixo por Metro */}
                   <div
                     onClick={() => setCenario('VALOR_METRO')}
                     style={{
-                      padding: '12px',
+                      padding: '12px 10px',
                       borderRadius: '8px',
                       border: `1.5px solid ${cenario === 'VALOR_METRO' ? 'var(--primary)' : 'var(--border-color)'}`,
                       backgroundColor: cenario === 'VALOR_METRO' ? 'rgba(240, 90, 34, 0.08)' : 'var(--bg-app)',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px'
+                      gap: '4px',
+                      transition: 'var(--transition)'
                     }}
                   >
-                    <strong style={{ fontSize: '12px', color: cenario === 'VALOR_METRO' ? 'var(--primary)' : 'var(--text-main)' }}>
-                      Valor por Metro
-                    </strong>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                      R$ fixo por metro perfurado
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <strong style={{ fontSize: '11.5px', color: cenario === 'VALOR_METRO' ? 'var(--primary)' : 'var(--text-main)' }}>
+                        R$ / Metro
+                      </strong>
+                      <div 
+                        style={{ 
+                          width: '14px', 
+                          height: '14px', 
+                          borderRadius: '50%', 
+                          border: `2px solid ${cenario === 'VALOR_METRO' ? 'var(--primary)' : 'var(--text-muted)'}`,
+                          backgroundColor: cenario === 'VALOR_METRO' ? 'var(--primary)' : 'transparent'
+                        }} 
+                      />
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Preço fixo por metro perfurado
                     </span>
                   </div>
 
-                  {/* Opção 2: Fator x Diâmetro */}
+                  {/* Opção 2: Fator × Diâmetro × Metro */}
                   <div
                     onClick={() => setCenario('FATOR_DIAMETRO_METRO')}
                     style={{
-                      padding: '12px',
+                      padding: '12px 10px',
                       borderRadius: '8px',
                       border: `1.5px solid ${cenario === 'FATOR_DIAMETRO_METRO' ? 'var(--primary)' : 'var(--border-color)'}`,
                       backgroundColor: cenario === 'FATOR_DIAMETRO_METRO' ? 'rgba(240, 90, 34, 0.08)' : 'var(--bg-app)',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px'
+                      gap: '4px',
+                      transition: 'var(--transition)'
                     }}
                   >
-                    <strong style={{ fontSize: '12px', color: cenario === 'FATOR_DIAMETRO_METRO' ? 'var(--primary)' : 'var(--text-main)' }}>
-                      Fator × Diâmetro
-                    </strong>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                      Fator × Diâmetro (mm)
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <strong style={{ fontSize: '11.5px', color: cenario === 'FATOR_DIAMETRO_METRO' ? 'var(--primary)' : 'var(--text-main)' }}>
+                        Fator × Diâmetro
+                      </strong>
+                      <div 
+                        style={{ 
+                          width: '14px', 
+                          height: '14px', 
+                          borderRadius: '50%', 
+                          border: `2px solid ${cenario === 'FATOR_DIAMETRO_METRO' ? 'var(--primary)' : 'var(--text-muted)'}`,
+                          backgroundColor: cenario === 'FATOR_DIAMETRO_METRO' ? 'var(--primary)' : 'transparent'
+                        }} 
+                      />
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Fator × Diâm(mm) × Metros
                     </span>
                   </div>
 
-                  {/* Opção 3: Valor Fechado */}
+                  {/* Opção 3: Valor Fechado da Obra */}
                   <div
                     onClick={() => setCenario('VALOR_FECHADO')}
                     style={{
-                      padding: '12px',
+                      padding: '12px 10px',
                       borderRadius: '8px',
                       border: `1.5px solid ${cenario === 'VALOR_FECHADO' ? 'var(--primary)' : 'var(--border-color)'}`,
                       backgroundColor: cenario === 'VALOR_FECHADO' ? 'rgba(240, 90, 34, 0.08)' : 'var(--bg-app)',
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '4px'
+                      gap: '4px',
+                      transition: 'var(--transition)'
                     }}
                   >
-                    <strong style={{ fontSize: '12px', color: cenario === 'VALOR_FECHADO' ? 'var(--primary)' : 'var(--text-main)' }}>
-                      Valor Fechado
-                    </strong>
-                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                      Valor total global da obra
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <strong style={{ fontSize: '11.5px', color: cenario === 'VALOR_FECHADO' ? 'var(--primary)' : 'var(--text-main)' }}>
+                        Valor Fechado
+                      </strong>
+                      <div 
+                        style={{ 
+                          width: '14px', 
+                          height: '14px', 
+                          borderRadius: '50%', 
+                          border: `2px solid ${cenario === 'VALOR_FECHADO' ? 'var(--primary)' : 'var(--text-muted)'}`,
+                          backgroundColor: cenario === 'VALOR_FECHADO' ? 'var(--primary)' : 'transparent'
+                        }} 
+                      />
+                    </div>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Contrato por preço global
                     </span>
                   </div>
 
                 </div>
+              </div>
 
-                {/* Campos Específicos do Modelo Selecionado */}
+              {/* Row 3: Inputs específicos do modelo selecionado */}
+              <div style={{ backgroundColor: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                
                 {cenario === 'VALOR_METRO' && (
-                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Valor por Metro Perfurado (R$/m)
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      VALOR POR METRO (R$) *
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={valorMetro}
-                      onChange={(e) => setValorMetro(e.target.value)}
-                      placeholder="180.00"
-                      required
-                      style={{ fontSize: '14px', fontWeight: 700, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)' }}>R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={valorMetro}
+                        onChange={(e) => setValorMetro(e.target.value)}
+                        placeholder="180.00"
+                        required
+                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
+                      />
+                    </div>
                   </div>
                 )}
 
                 {cenario === 'FATOR_DIAMETRO_METRO' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                        Fator Financeiro (R$)
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
+                        FATOR FINANCEIRO *
                       </label>
                       <input
                         type="number"
@@ -709,43 +769,55 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                         onChange={(e) => setFator(e.target.value)}
                         placeholder="2.85"
                         required
-                        style={{ fontSize: '14px', fontWeight: 700, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
+                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                        Diâmetro do Furo (mm)
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
+                        DIÂMETRO DO FURO (MM) *
                       </label>
                       <input
                         type="number"
-                        step="1"
                         value={diametroMm}
                         onChange={(e) => setDiametroMm(e.target.value)}
                         placeholder="150"
                         required
-                        style={{ fontSize: '14px', fontWeight: 700, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
+                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
                       />
                     </div>
                   </div>
                 )}
 
                 {cenario === 'VALOR_FECHADO' && (
-                  <div style={{ backgroundColor: 'var(--bg-app)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                      Valor Global Fechado da Obra (R$)
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      VALOR GLOBAL DO CONTRATO (R$) *
                     </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={valorFechado}
-                      onChange={(e) => setValorFechado(e.target.value)}
-                      placeholder="50000.00"
-                      required
-                      style={{ fontSize: '14px', fontWeight: 700, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)' }}>R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={valorFechado}
+                        onChange={(e) => setValorFechado(e.target.value)}
+                        placeholder="50000.00"
+                        required
+                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
+                      />
+                    </div>
                   </div>
                 )}
+
+                {/* Resumo do Cálculo em Tempo Real */}
+                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Faturamento Previsto Total:
+                  </span>
+                  <strong style={{ fontSize: '15px', color: 'var(--success)', fontWeight: 800 }}>
+                    R$ {retornoPrevistoTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </strong>
+                </div>
 
               </div>
 
@@ -759,52 +831,54 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
           style={{
             padding: '16px 24px',
             borderTop: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-app)',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
-            backgroundColor: 'var(--bg-app)'
+            alignItems: 'center'
           }}
         >
           {currentStep === 1 ? (
-            <div>
+            <>
               <button
                 type="button"
                 onClick={onClose}
-                style={{ fontSize: '12.5px', color: 'var(--text-muted)', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer' }}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '13px' }}
               >
                 Cancelar
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCurrentStep(1)}
-              className="btn-secondary"
-              style={{ fontSize: '12.5px', padding: '8px 16px' }}
-            >
-              ← Voltar ao Passo 1
-            </button>
-          )}
 
-          {currentStep === 1 ? (
-            <button
-              type="submit"
-              form="step1-form"
-              className="btn-primary"
-              style={{ fontSize: '13px', fontWeight: 700, padding: '9px 22px' }}
-            >
-              Avançar para Metas →
-            </button>
+              <button
+                type="submit"
+                form="step1-form"
+                className="header-action-btn"
+                style={{ padding: '9px 20px', fontSize: '13px' }}
+              >
+                <span>Avançar para Metas</span>
+                <span>→</span>
+              </button>
+            </>
           ) : (
-            <button
-              type="submit"
-              form="step2-form"
-              disabled={loading}
-              className="btn-primary"
-              style={{ fontSize: '13px', fontWeight: 700, padding: '9px 24px' }}
-            >
-              {loading ? 'Salvando...' : initialData ? 'Salvar Alterações' : 'Criar Serviço'}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setCurrentStep(1)}
+                className="btn-secondary"
+                style={{ padding: '8px 16px', fontSize: '13px' }}
+              >
+                ← Voltar
+              </button>
+
+              <button
+                type="submit"
+                form="step2-form"
+                disabled={loading}
+                className="header-action-btn"
+                style={{ padding: '9px 22px', fontSize: '13px' }}
+              >
+                {loading ? 'Salvando...' : initialData ? 'Salvar Alterações' : 'Criar Serviço'}
+              </button>
+            </>
           )}
         </div>
 

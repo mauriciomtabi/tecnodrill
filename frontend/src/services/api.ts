@@ -200,8 +200,24 @@ export class ApiService {
 
     if (!servicosData || servicosData.length === 0) return [];
 
+    // Filtrar por usuário caso seja NAVEGADOR ou OPERADOR
+    const usuarioAtual = this.getUsuarioAtual();
+    let listaFiltrada = servicosData;
+    if (usuarioAtual && (usuarioAtual.perfil === 'NAVEGADOR' || usuarioAtual.perfil === 'OPERADOR')) {
+      listaFiltrada = servicosData.filter(s => {
+        if (!s.navegador_id && !s.operador_id) return true; // se não vinculado especificamente, fica visível
+        return (
+          s.navegador_id === usuarioAtual.id ||
+          s.navegador_nome?.toLowerCase() === usuarioAtual.nome.toLowerCase() ||
+          s.operador_id === usuarioAtual.id ||
+          s.operador_nome?.toLowerCase() === usuarioAtual.nome.toLowerCase() ||
+          s.gestor_id === usuarioAtual.id
+        );
+      });
+    }
+
     const result: Servico[] = [];
-    for (const s of servicosData) {
+    for (const s of listaFiltrada) {
       const { data: furos } = await supabase
         .from('tecnodrill_furos')
         .select('id')
@@ -265,6 +281,11 @@ export class ApiService {
         obra: s.obra || '',
         centro_custo: s.centro_custo || '',
         local: s.local || '',
+        gestor_id: s.gestor_id,
+        navegador_id: s.navegador_id,
+        navegador_nome: s.navegador_nome,
+        operador_id: s.operador_id,
+        operador_nome: s.operador_nome,
         status: s.status,
         cenario_financeiro: s.cenario_financeiro,
         valor_metro: Number(s.valor_metro) || 0,
@@ -303,8 +324,8 @@ export class ApiService {
       id: f.id,
       servico_id: f.servico_id,
       data_furo: f.data_furo,
-      navegador_nome: f.navegador_nome || '',
-      operador_nome: f.operador_nome || '',
+      navegador_nome: f.navegador_nome || s.navegador_nome || '',
+      operador_nome: f.operador_nome || s.operador_nome || '',
       tubo_aplicado: f.tubo_aplicado || '',
       diametro_furo: f.diametro_furo || '',
       comprimento_furo: Number(f.comprimento_furo) || 0,
@@ -325,6 +346,11 @@ export class ApiService {
       obra: s.obra || '',
       centro_custo: s.centro_custo || '',
       local: s.local || '',
+      gestor_id: s.gestor_id,
+      navegador_id: s.navegador_id,
+      navegador_nome: s.navegador_nome,
+      operador_id: s.operador_id,
+      operador_nome: s.operador_nome,
       status: s.status,
       cenario_financeiro: s.cenario_financeiro,
       valor_metro: Number(s.valor_metro) || 0,
@@ -353,6 +379,11 @@ export class ApiService {
       obra: data.obra || null,
       centro_custo: data.centro_custo || null,
       local: data.local || '',
+      gestor_id: data.gestor_id || null,
+      navegador_id: data.navegador_id || null,
+      navegador_nome: data.navegador_nome || null,
+      operador_id: data.operador_id || null,
+      operador_nome: data.operador_nome || null,
       status: data.status || 'EM_ANDAMENTO',
       cenario_financeiro: data.cenario_financeiro || 'VALOR_METRO',
       valor_metro: Number(data.valor_metro) || 0,
@@ -375,11 +406,11 @@ export class ApiService {
       throw new Error('Erro ao salvar novo serviço.');
     }
 
-    // Criar primeiro furo associado
+    // Criar primeiro furo associado com a equipe
     await supabase.from('tecnodrill_furos').insert({
       servico_id: servicoId,
-      navegador_nome: 'Navegador',
-      operador_nome: 'Operador',
+      navegador_nome: data.navegador_nome || 'Navegador',
+      operador_nome: data.operador_nome || 'Operador',
       status: 'EM_EXECUCAO'
     });
 

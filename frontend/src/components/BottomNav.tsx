@@ -1,23 +1,27 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
-  BarChart3, 
   HardHat, 
-  Radio, 
-  FileSpreadsheet, 
-  Plus, 
-  Zap, 
-  TrendingUp 
+  Users, 
+  Camera, 
+  LogOut,
+  Plus
 } from 'lucide-react';
 
 interface BottomNavProps {
   currentPath: string;
   onNavigate: (path: string) => void;
   onQuickAddBarra?: () => void;
+  onOpenNovoServico?: () => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ currentPath, onNavigate, onQuickAddBarra }) => {
-  const { user } = useAuth();
+export const BottomNav: React.FC<BottomNavProps> = ({ 
+  currentPath, 
+  onNavigate, 
+  onQuickAddBarra,
+  onOpenNovoServico 
+}) => {
+  const { user, logout } = useAuth();
 
   if (!user) return null;
   const isGestor = user.perfil === 'GESTOR' || user.perfil === 'ADMIN';
@@ -37,8 +41,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentPath, onNavigate, o
         justifyContent: 'space-around',
         alignItems: 'center',
         zIndex: 100,
-        padding: '0 8px',
-        boxShadow: '0 -4px 16px rgba(0,0,0,0.25)'
+        padding: '0 12px',
+        boxShadow: '0 -4px 16px rgba(0,0,0,0.35)'
       }}
     >
       <style>{`
@@ -49,89 +53,99 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentPath, onNavigate, o
         }
       `}</style>
 
-      {/* Item 1: Dashboard ou Obras */}
-      {isGestor ? (
-        <button
-          onClick={() => onNavigate('dashboard')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 ${
-            currentPath === 'dashboard' ? 'text-[#F05A22] font-bold' : 'text-gray-400'
-          }`}
-        >
-          <BarChart3 size={20} />
-          <span className="text-[10px]">Dashboard</span>
-        </button>
-      ) : (
-        <button
-          onClick={() => onNavigate('obras')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 ${
-            currentPath === 'obras' ? 'text-[#F05A22] font-bold' : 'text-gray-400'
-          }`}
-        >
-          <HardHat size={20} />
-          <span className="text-[10px]">Serviços</span>
-        </button>
-      )}
+      {/* 1. LADO ESQUERDO: SERVIÇOS */}
+      <button
+        onClick={() => onNavigate('/app/obras')}
+        title="Serviços"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: currentPath.includes('/app/obras') || currentPath === '/' ? 'var(--primary)' : 'var(--text-muted)',
+          padding: '10px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        <HardHat size={24} />
+      </button>
 
-      {/* Item 2: Obras / Finanças */}
-      {isGestor && (
-        <button
-          onClick={() => onNavigate('obras')}
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 ${
-            currentPath === 'obras' ? 'text-[#F05A22] font-bold' : 'text-gray-400'
-          }`}
-        >
-          <HardHat size={20} />
-          <span className="text-[10px]">Obras</span>
-        </button>
-      )}
-
-      {/* Centered Action Button: + 3m Apontamento */}
+      {/* 2. CENTRO: BOTÃO PRINCIPAL COM CONTORNO CLARO (56px) */}
       <button
         onClick={() => {
-          onNavigate('campo');
-          if (onQuickAddBarra) onQuickAddBarra();
+          if (isGestor && onOpenNovoServico) {
+            onOpenNovoServico();
+          } else if (onQuickAddBarra) {
+            onQuickAddBarra();
+          } else {
+            onNavigate('/app/campo');
+          }
         }}
+        title={isGestor ? 'Novo Serviço' : 'Novo Registro Fotográfico'}
         style={{
-          width: '52px',
-          height: '52px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '56px',
+          height: '56px',
           borderRadius: '50%',
           backgroundColor: 'var(--primary)',
           color: '#FFFFFF',
+          border: '3.5px solid #FFFFFF',
+          transform: 'translateY(-16px)',
+          boxShadow: '0 4px 18px rgba(240, 90, 34, 0.65), 0 0 12px rgba(255, 255, 255, 0.4)',
+          cursor: 'pointer',
+          padding: 0,
+          boxSizing: 'border-box',
+          transition: 'transform 0.2s ease'
+        }}
+        onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(-16px) scale(0.92)'}
+        onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(-16px) scale(1)'}
+      >
+        {isGestor ? (
+          <Plus size={26} strokeWidth={2.5} />
+        ) : (
+          <Camera size={25} strokeWidth={2.2} />
+        )}
+      </button>
+
+      {/* 3. LADO DIREITO: GESTÃO DE USUÁRIOS (SE GESTOR) */}
+      {isGestor && (
+        <button
+          onClick={() => onNavigate('/app/usuarios')}
+          title="Gestão de Usuários"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: currentPath.includes('/app/usuarios') ? 'var(--primary)' : 'var(--text-muted)',
+            padding: '10px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          <Users size={24} />
+        </button>
+      )}
+
+      {/* 4. LADO DIREITO: BOTÃO DE SAIR */}
+      <button
+        onClick={() => logout()}
+        title="Sair do Sistema"
+        style={{
           display: 'flex',
-          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 4px 15px rgba(240, 90, 34, 0.5)',
-          marginTop: '-24px',
-          border: '3px solid var(--bg-sidebar)'
+          color: 'var(--danger)',
+          padding: '10px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer'
         }}
-        className="active:scale-95 transition-transform"
-        title="Lançar Nova Barra (+3m)"
       >
-        <Radio size={22} className="animate-pulse" />
-        <span className="text-[8px] font-black tracking-tighter uppercase -mt-0.5">+3M</span>
-      </button>
-
-      {/* Item 3: Campo */}
-      <button
-        onClick={() => onNavigate('campo')}
-        className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 ${
-          currentPath === 'campo' ? 'text-[#F05A22] font-bold' : 'text-gray-400'
-        }`}
-      >
-        <Zap size={20} />
-        <span className="text-[10px]">Sonda 3m</span>
-      </button>
-
-      {/* Item 4: Ficha Oficial */}
-      <button
-        onClick={() => onNavigate('relatorios')}
-        className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 ${
-          currentPath === 'relatorios' ? 'text-[#F05A22] font-bold' : 'text-gray-400'
-        }`}
-      >
-        <FileSpreadsheet size={20} />
-        <span className="text-[10px]">Ficha PDF</span>
+        <LogOut size={22} />
       </button>
     </nav>
   );
