@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Eye, EyeOff, ArrowRight, ShieldCheck, HardHat, Radio } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight, HardHat, Radio, AlertCircle } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
@@ -22,7 +22,7 @@ export const Login: React.FC = () => {
     try {
       await login(identificador.trim(), senha);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Falha ao autenticar.');
+      setErrorMsg(err.message || 'Falha ao autenticar credenciais.');
     } finally {
       setLoading(false);
     }
@@ -43,70 +43,162 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#0B0E11] relative overflow-hidden">
+    <div 
+      style={{
+        minHeight: '100vh',
+        width: '100vw',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'var(--bg-app)',
+        padding: '20px',
+        position: 'relative',
+        overflow: 'hidden',
+        boxSizing: 'border-box'
+      }}
+    >
       {/* Background Decorative Gradients */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#F05A22]/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div 
+        style={{
+          position: 'absolute',
+          width: '500px',
+          height: '500px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(240, 90, 34, 0.12) 0%, transparent 70%)',
+          top: '-150px',
+          right: '-150px',
+          pointerEvents: 'none'
+        }} 
+      />
+      <div 
+        style={{
+          position: 'absolute',
+          width: '400px',
+          height: '400px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(39, 174, 96, 0.08) 0%, transparent 70%)',
+          bottom: '-100px',
+          left: '-100px',
+          pointerEvents: 'none'
+        }} 
+      />
 
-      <div className="w-full max-w-md bg-[#141A21] border border-[#26313D] rounded-3xl p-8 shadow-2xl relative z-10 animate-fade-in">
+      {/* Main Login Card */}
+      <div 
+        className="fade-in"
+        style={{
+          width: '100%',
+          maxWidth: '420px',
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '36px 30px',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.5)',
+          position: 'relative',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          boxSizing: 'border-box'
+        }}
+      >
         {/* Brand Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-3">
-            <img src="/logo.png" alt="TecnoDrill INFRA" className="h-12 w-auto object-contain drop-shadow-md" />
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">
-            Tecno<span className="text-[#F05A22]">Drill</span> INFRA
-          </h1>
-          <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mt-1">
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+          <img 
+            src="/logo.png" 
+            alt="TecnoDrill INFRA" 
+            style={{ height: '48px', maxWidth: '200px', width: 'auto', objectFit: 'contain' }} 
+          />
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0 }}>
             Sistema de Canalização, MND & Metas
           </p>
         </div>
 
         {errorMsg && (
-          <div className="mb-5 p-3.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-xs font-semibold">
-            {errorMsg}
+          <div 
+            style={{
+              padding: '10px 14px',
+              backgroundColor: 'rgba(231, 76, 60, 0.15)',
+              border: '1px solid var(--danger)',
+              borderRadius: '6px',
+              color: '#FADBD8',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <AlertCircle size={15} style={{ color: 'var(--danger)', flexShrink: 0 }} />
+            <span>{errorMsg}</span>
           </div>
         )}
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
-            <label className="text-xs font-bold text-gray-300 block mb-1.5 uppercase">
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
               Usuário ou E-mail
             </label>
-            <div className="relative">
+            <div style={{ position: 'relative' }}>
               <input
                 type="text"
                 value={identificador}
                 onChange={(e) => setIdentificador(e.target.value)}
-                placeholder="eduardo ou marcelo"
+                placeholder="ex: eduardo ou marcelo"
                 required
-                className="pl-10 text-sm font-medium"
+                style={{
+                  paddingLeft: '38px',
+                  fontSize: '13px',
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  height: '42px',
+                  boxSizing: 'border-box'
+                }}
               />
-              <User className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+              <User size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             </div>
           </div>
 
           <div>
-            <label className="text-xs font-bold text-gray-300 block mb-1.5 uppercase">
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
               Senha
             </label>
-            <div className="relative">
+            <div style={{ position: 'relative' }}>
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="pl-10 pr-10 text-sm font-medium"
+                style={{
+                  paddingLeft: '38px',
+                  paddingRight: '38px',
+                  fontSize: '13px',
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  height: '42px',
+                  boxSizing: 'border-box'
+                }}
               />
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
+              <Lock size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-white p-0.5"
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)',
+                  padding: '2px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
           </div>
@@ -114,58 +206,111 @@ export const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="btn-primary py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 mt-2"
+            className="btn-primary"
+            style={{
+              padding: '12px',
+              fontSize: '13.5px',
+              fontWeight: 700,
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              marginTop: '6px',
+              boxShadow: '0 4px 15px rgba(240, 90, 34, 0.35)'
+            }}
           >
             {loading ? (
               <span>Entrando...</span>
             ) : (
               <>
                 <span>Acessar Painel TecnoDrill</span>
-                <ArrowRight size={17} />
+                <ArrowRight size={16} />
               </>
             )}
           </button>
         </form>
 
-        {/* Quick Access Profiles for Pair Testing */}
-        <div className="mt-8 pt-6 border-t border-[#26313D]">
-          <span className="text-[11px] font-bold text-gray-400 uppercase block text-center mb-3">
+        {/* Quick Access Profiles */}
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+          <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', textAlign: 'center', marginBottom: '10px' }}>
             Acesso Rápido por Perfil:
           </span>
-          <div className="grid grid-cols-2 gap-2">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             <button
               onClick={() => handleQuickLogin('eduardo', 'Gestor@123')}
-              className="btn-secondary text-[11px] py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              className="btn-secondary"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '8px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
             >
-              <HardHat size={14} className="text-[#F05A22]" />
+              <HardHat size={13} style={{ color: 'var(--primary)' }} />
               <span>Eduardo (Gestor)</span>
             </button>
 
             <button
               onClick={() => handleQuickLogin('carlos', 'Gestor@123')}
-              className="btn-secondary text-[11px] py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              className="btn-secondary"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '8px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
             >
-              <HardHat size={14} className="text-[#F05A22]" />
+              <HardHat size={13} style={{ color: 'var(--primary)' }} />
               <span>Carlos (Gestor)</span>
             </button>
 
             <button
               onClick={() => handleQuickLogin('marcelo', 'Tecno@123')}
-              className="btn-secondary text-[11px] py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              className="btn-secondary"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '8px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
             >
-              <Radio size={14} className="text-emerald-400" />
+              <Radio size={13} style={{ color: 'var(--primary-light)' }} />
               <span>Marcelo (Navegador)</span>
             </button>
 
             <button
               onClick={() => handleQuickLogin('antonio', 'Tecno@123')}
-              className="btn-secondary text-[11px] py-2 px-2.5 rounded-lg flex items-center justify-center gap-1.5"
+              className="btn-secondary"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '8px 6px',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
+              }}
             >
-              <Radio size={14} className="text-blue-400" />
+              <User size={13} style={{ color: 'var(--success)' }} />
               <span>Antônio (Operador)</span>
             </button>
           </div>
         </div>
+
       </div>
     </div>
   );
