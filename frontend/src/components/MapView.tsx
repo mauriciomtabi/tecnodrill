@@ -138,7 +138,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
           <div style="display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #64748B;">
             <div><strong>Metros:</strong> ${b.metros}m (Acum: ${b.metros_acumulados}m)</div>
-            <div><strong>Data:</strong> ${new Date(b.created_at).toLocaleString('pt-BR')}</div>
+            <div><strong>Data:</strong> ${new Date(b.created_at || Date.now()).toLocaleString('pt-BR')}</div>
             ${b.observacao ? `<div><strong>Obs:</strong> ${b.observacao}</div>` : ''}
           </div>
         </div>
