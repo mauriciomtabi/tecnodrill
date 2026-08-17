@@ -84,6 +84,32 @@
   ],
   "furos": [
     {
+      "id": "cea52b47-9057-43c7-84f0-e86e7838fdea",
+      "servico_id": "TD-01",
+      "data_furo": "2026-08-17",
+      "navegador_nome": "Eduardo Gestor",
+      "operador_nome": "Operador",
+      "tubo_aplicado": "",
+      "diametro_furo": "",
+      "comprimento_furo": 0,
+      "tipo_perfuracao": [],
+      "utilizacao_tubo": [],
+      "hora_inicio_furo": "",
+      "hora_fim_furo": "",
+      "horimetro_inicio_furo": "",
+      "horimetro_fim_furo": "",
+      "hora_inicio_pux": "",
+      "hora_fim_pux": "",
+      "horimetro_inicio_pux": "",
+      "horimetro_fim_pux": "",
+      "status": "EM_EXECUCAO",
+      "observacoes": "",
+      "assinatura_navegador": "",
+      "assinatura_fiscal": "",
+      "criado_em": "2026-08-17T19:10:13.036Z",
+      "atualizado_em": "2026-08-17T19:10:13.036Z"
+    },
+    {
       "id": "78e27e3f-1c85-4e3c-b505-75dc7a3151cc",
       "servico_id": "TD-02",
       "data_furo": "2026-08-17",
@@ -310,6 +336,20 @@
       "acao": "CRIAR_SERVICO",
       "detalhes": "Serviço CANALIZAÇÃO E TRAVESSIA - TRECHO SANTOS criado com sucesso.",
       "criado_em": "2026-08-17T17:29:42.109Z"
+    },
+    {
+      "id": "b1a0b8a4-86c6-4592-a3a0-892905ecc466",
+      "usuario_id": "11111111-1111-1111-1111-111111111111",
+      "acao": "LOGIN",
+      "detalhes": "Login realizado por Eduardo Gestor (GESTOR)",
+      "criado_em": "2026-08-17T19:09:57.655Z"
+    },
+    {
+      "id": "bcd5ee5d-f948-430a-a984-767ce38e9a85",
+      "usuario_id": "11111111-1111-1111-1111-111111111111",
+      "acao": "LOGIN",
+      "detalhes": "Login realizado por Eduardo Gestor (GESTOR)",
+      "criado_em": "2026-08-17T19:14:32.736Z"
     }
   ]
 }

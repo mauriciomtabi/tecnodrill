@@ -7,6 +7,7 @@ import { RodEntryModal } from '../components/RodEntryModal';
 import { MetaCelebration } from '../components/MetaCelebration';
 import { MapView } from '../components/MapView';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { NovoServicoModal } from '../components/NovoServicoModal';
 import { 
   ArrowLeft, 
   Trash2, 
@@ -18,7 +19,8 @@ import {
   X,
   Clock,
   Map as MapIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Edit
 } from 'lucide-react';
 
 interface ObraDetalhesProps {
@@ -48,6 +50,10 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  // Modal Editar Serviço
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [savingEditServico, setSavingEditServico] = useState(false);
 
   // Confirm Dialogs (Custom UI, never native browser alerts)
   const [confirmDeleteServicoOpen, setConfirmDeleteServicoOpen] = useState(false);
@@ -122,6 +128,22 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       showToast(err.message || 'Erro ao registrar progresso.', 'error');
     } finally {
       setSavingBarra(false);
+    }
+  };
+
+  const handleUpdateServico = async (servicoData: Partial<Servico>) => {
+    if (!servico) return;
+    setSavingEditServico(true);
+    try {
+      const updated = await ApiService.updateServico(servico.id, servicoData);
+      setServico(updated);
+      showToast('Serviço atualizado com sucesso!', 'success');
+      setShowEditModal(false);
+      fetchDados();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar serviço.', 'error');
+    } finally {
+      setSavingEditServico(false);
     }
   };
 
@@ -227,29 +249,51 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {isGestor && (
-            <button
-              onClick={() => setConfirmDeleteServicoOpen(true)}
-              style={{
-                backgroundColor: 'rgba(231, 76, 60, 0.15)',
-                color: 'var(--danger)',
-                border: '1px solid var(--danger)',
-                padding: '9px 14px',
-                borderRadius: 'var(--radius-sm)',
-                fontSize: '12px',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer'
-              }}
-            >
-              <Trash2 size={14} />
-              <span>Excluir Serviço</span>
-            </button>
+            <>
+              {/* Botão Editar Serviço */}
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="btn-secondary"
+                style={{
+                  padding: '8px 13px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Edit size={14} />
+                <span>Editar</span>
+              </button>
+
+              {/* Botão Excluir Serviço */}
+              <button
+                onClick={() => setConfirmDeleteServicoOpen(true)}
+                style={{
+                  backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                  color: 'var(--danger)',
+                  border: '1px solid var(--danger)',
+                  padding: '8px 13px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 size={14} />
+                <span>Excluir</span>
+              </button>
+            </>
           )}
 
+          {/* Botão Novo Registro */}
           <button
             onClick={() => setShowAddModal(true)}
             className="header-action-btn"
@@ -717,6 +761,15 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         nextBarraNumber={barras.length + 1}
         onSubmit={handleAddBarra}
         loading={savingBarra}
+      />
+
+      {/* MODAL DE EDITAR SERVIÇO (PORTAL CENTRALIZADO) */}
+      <NovoServicoModal
+        isOpen={showEditModal}
+        initialData={servico}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleUpdateServico}
+        loading={savingEditServico}
       />
 
       {/* MODAL DE CELEBRAÇÃO (PORTAL CENTRALIZADO) */}

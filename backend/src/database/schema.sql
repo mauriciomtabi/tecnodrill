@@ -121,9 +121,3 @@ VALUES
   ('33333333-3333-3333-3333-333333333333', 'Marcelo Navegador', 'NAVEGADOR', 'marcelo', 'marcelo@tecnodrill.com.br', '$2a$10$1W2V4Q5P6O7N8M9L0K1J2u3H4G5F6E7D8C9B0A1Z2Y3X4W5V6U7T8', TRUE),
   ('44444444-4444-4444-4444-444444444444', 'Antônio Operador', 'OPERADOR', 'antonio', 'antonio@tecnodrill.com.br', '$2a$10$1W2V4Q5P6O7N8M9L0K1J2u3H4G5F6E7D8C9B0A1Z2Y3X4W5V6U7T8', TRUE)
 ON CONFLICT (username) DO NOTHING;
-
--- SERVIÇO INICIAL DEMO
-INSERT INTO tecnodrill_servicos (id, nome, cliente, local, cidade, uf, status, cenario_financeiro, valor_metro, metragem_prevista_total, tipo_meta, meta_metros)
-VALUES 
-  ('TD-01', 'Travessia Rodovia BR-101 KM 48', 'Enel Distribuição', 'Marginal Leste KM 48', 'Joinville', 'SC', 'EM_ANDAMENTO', 'VALOR_METRO', 180.00, 1000.00, 'DIARIA', 100.00)
-ON CONFLICT (id) DO NOTHING;
