@@ -471,7 +471,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 {/* Campo Cidade */}
                 <div ref={cidadeContainerRef} style={{ position: 'relative' }}>
                   <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                    Cidade (IBGE {uf}) *
+                    CIDADE *
                   </label>
                   <div style={{ position: 'relative' }}>
                     <input
@@ -536,20 +536,6 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   )}
                 </div>
 
-              </div>
-
-              {/* Endereço / Referência */}
-              <div>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Endereço / Referência do Trecho
-                </label>
-                <input
-                  type="text"
-                  value={localizacao}
-                  onChange={(e) => setLocalizacao(e.target.value)}
-                  placeholder="ex: Av. Ana Costa, 1500 - Gonzaga"
-                  style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                />
               </div>
 
               {/* Observações / Descrição */}

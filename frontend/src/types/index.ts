@@ -86,6 +86,8 @@ export interface Barra {
   longitude?: number;
   horario_registro?: string;
   registrado_por?: string;
+  created_at?: string;
+  data_registro?: string;
 }
 
 export interface ResumoFinanceiroServico {
