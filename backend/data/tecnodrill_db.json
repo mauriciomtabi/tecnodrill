@@ -1,0 +1,314 @@
+{
+  "usuarios": [
+    {
+      "id": "11111111-1111-4111-a111-111111111111",
+      "nome": "Eduardo Gestor",
+      "perfil": "GESTOR",
+      "email": "eduardo@tecnodrill.com.br",
+      "username": "eduardo",
+      "senha_hash": "$2a$10$KQGRAgx4Du9/DocFvXcxjODVbVOwTmT5Rmlfv46uUipYSPFeFu7ZS",
+      "ativo": true
+    },
+    {
+      "id": "22222222-2222-4222-a222-222222222222",
+      "nome": "Carlos Gestor",
+      "perfil": "GESTOR",
+      "email": "carlos@tecnodrill.com.br",
+      "username": "carlos",
+      "senha_hash": "$2a$10$KQGRAgx4Du9/DocFvXcxjODVbVOwTmT5Rmlfv46uUipYSPFeFu7ZS",
+      "ativo": true
+    },
+    {
+      "id": "33333333-3333-4333-a333-333333333333",
+      "nome": "Marcelo Navegador",
+      "perfil": "NAVEGADOR",
+      "email": "marcelo@tecnodrill.com.br",
+      "username": "marcelo",
+      "senha_hash": "$2a$10$uVAQUI5CiFvgDrw024WISOPURrx0l33o8hfngXCpyuj4EUgJ0uDWG",
+      "ativo": true
+    },
+    {
+      "id": "44444444-4444-4444-a444-444444444444",
+      "nome": "Antônio Operador",
+      "perfil": "OPERADOR",
+      "email": "antonio@tecnodrill.com.br",
+      "username": "antonio",
+      "senha_hash": "$2a$10$uVAQUI5CiFvgDrw024WISOPURrx0l33o8hfngXCpyuj4EUgJ0uDWG",
+      "ativo": true
+    }
+  ],
+  "servicos": [
+    {
+      "id": "TD-02",
+      "nome": "CANALIZAÇÃO E TRAVESSIA - TRECHO SANTOS",
+      "descricao": "",
+      "cliente": "Sabesp",
+      "projeto": "PRJ-MND",
+      "obra": "",
+      "centro_custo": "CC-01",
+      "local": "Santos SP - Av. Ana Costa",
+      "status": "EM_ANDAMENTO",
+      "cenario_financeiro": "VALOR_METRO",
+      "valor_metro": 180,
+      "fator_financeiro": 2.85,
+      "diametro_furo_mm": 150,
+      "valor_total_fechado": 50000,
+      "metragem_prevista_total": 54,
+      "tipo_meta": "DIARIA",
+      "meta_metros": 54,
+      "criado_em": "2026-08-17T17:29:41.683Z",
+      "atualizado_em": "2026-08-17T17:29:41.684Z"
+    },
+    {
+      "id": "TD-OBRA-01",
+      "nome": "Canalização e Perfuração - Itapoá Centro",
+      "descricao": "Cruzamento com rede subterrânea e travessia urbana",
+      "cliente": "Vale do Ouro",
+      "projeto": "PRJ-ITAPOA-2026",
+      "obra": "OBRA-01-SP",
+      "centro_custo": "CC-3021",
+      "local": "Itapoá SP - Rua Sol Nascente",
+      "gestor_id": "11111111-1111-4111-a111-111111111111",
+      "status": "EM_ANDAMENTO",
+      "cenario_financeiro": "FATOR_DIAMETRO_METRO",
+      "valor_metro": 0,
+      "fator_financeiro": 2.85,
+      "diametro_furo_mm": 150,
+      "valor_total_fechado": 0,
+      "metragem_prevista_total": 54,
+      "tipo_meta": "DIARIA",
+      "meta_metros": 54,
+      "criado_em": "2026-08-17T16:58:03.411Z"
+    }
+  ],
+  "furos": [
+    {
+      "id": "78e27e3f-1c85-4e3c-b505-75dc7a3151cc",
+      "servico_id": "TD-02",
+      "data_furo": "2026-08-17",
+      "navegador_nome": "Marcelo",
+      "operador_nome": "Antônio",
+      "tubo_aplicado": "",
+      "diametro_furo": "",
+      "comprimento_furo": 0,
+      "tipo_perfuracao": [],
+      "utilizacao_tubo": [],
+      "hora_inicio_furo": "",
+      "hora_fim_furo": "",
+      "horimetro_inicio_furo": "",
+      "horimetro_fim_furo": "",
+      "hora_inicio_pux": "",
+      "hora_fim_pux": "",
+      "horimetro_inicio_pux": "",
+      "horimetro_fim_pux": "",
+      "status": "EM_EXECUCAO",
+      "observacoes": "",
+      "assinatura_navegador": "",
+      "assinatura_fiscal": "",
+      "criado_em": "2026-08-17T17:29:43.069Z",
+      "atualizado_em": "2026-08-17T17:29:43.069Z"
+    },
+    {
+      "id": "55555555-5555-4555-a555-555555555555",
+      "servico_id": "TD-OBRA-01",
+      "data_furo": "2026-08-14",
+      "navegador_id": "33333333-3333-4333-a333-333333333333",
+      "operador_id": "44444444-4444-4444-a444-444444444444",
+      "navegador_nome": "Marcelo",
+      "operador_nome": "Antônio",
+      "tubo_aplicado": "PEAD 150mm",
+      "diametro_furo": "150 MM",
+      "comprimento_furo": 57,
+      "tipo_perfuracao": [
+        "Ruas/Av"
+      ],
+      "utilizacao_tubo": [
+        "Esgoto"
+      ],
+      "hora_inicio_furo": "08:00",
+      "hora_fim_furo": "17:30",
+      "horimetro_inicio_furo": "1240.5",
+      "horimetro_fim_furo": "1249.0",
+      "hora_inicio_pux": "18:00",
+      "hora_fim_pux": "20:15",
+      "horimetro_inicio_pux": "1249.0",
+      "horimetro_fim_pux": "1251.2",
+      "status": "FINALIZADO",
+      "observacoes": "Perfuração concluída com sucesso conforme ficha técnica de campo",
+      "atualizado_em": "2026-08-17T17:05:26.222Z"
+    }
+  ],
+  "barras": [
+    {
+      "id": "029c7ac9-f409-497d-98e0-1c0b0b241275",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 1,
+      "metros_acumulados": 3,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 167
+    },
+    {
+      "id": "1bdee894-3e51-407d-bd7c-3f951c0f9ee1",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 2,
+      "metros_acumulados": 6,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 164
+    },
+    {
+      "id": "92843215-4905-4d82-b415-9433572e5193",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 3,
+      "metros_acumulados": 9,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 164
+    },
+    {
+      "id": "a95f2ff0-5f58-41e9-baa7-b6d8f8965d2a",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 4,
+      "metros_acumulados": 12,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 160
+    },
+    {
+      "id": "93538a85-b7ba-4b66-b819-b58c93c62461",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 5,
+      "metros_acumulados": 15,
+      "angulo_pitch": "+0,09",
+      "profundidade_cm": 161
+    },
+    {
+      "id": "2e8ce517-dc8d-4cb1-907e-181b58e80401",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 6,
+      "metros_acumulados": 18,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 155
+    },
+    {
+      "id": "71a7295e-1485-44ba-964d-700f7c1b8a24",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 7,
+      "metros_acumulados": 21,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 157
+    },
+    {
+      "id": "f4580e7e-5665-4831-8137-3240ea125c99",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 8,
+      "metros_acumulados": 24,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 151
+    },
+    {
+      "id": "5960c88e-acc8-402c-9190-d52c74b2b098",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 9,
+      "metros_acumulados": 27,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 150
+    },
+    {
+      "id": "7e9c3816-1724-4a82-8497-dabf1dbc152e",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 10,
+      "metros_acumulados": 30,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 155
+    },
+    {
+      "id": "ad96c5de-3a06-48e8-9ee1-11975ea59abc",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 11,
+      "metros_acumulados": 33,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 152
+    },
+    {
+      "id": "fb6cca90-90de-4ee9-8ba5-50a71aeddd60",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 12,
+      "metros_acumulados": 36,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 151
+    },
+    {
+      "id": "8f932b5b-d407-4d05-99b4-3c0b3619dde1",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 13,
+      "metros_acumulados": 39,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 157
+    },
+    {
+      "id": "e651e362-dd63-4fe9-9aaf-d2c348ec146c",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 14,
+      "metros_acumulados": 42,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 150
+    },
+    {
+      "id": "0a7006b8-908c-4d09-afd7-20c6460e7a0d",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 15,
+      "metros_acumulados": 45,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 150
+    },
+    {
+      "id": "2ef43975-d228-45d3-a3b5-89d5f0dda2b3",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 16,
+      "metros_acumulados": 48,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 141
+    },
+    {
+      "id": "643dc285-cee7-4113-9a16-be288dfff057",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 17,
+      "metros_acumulados": 51,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 137
+    },
+    {
+      "id": "4529aab4-23dc-4144-b92f-c8d0fcac4885",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 18,
+      "metros_acumulados": 54,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 135
+    },
+    {
+      "id": "bfa7cb01-640b-4196-a0f3-3bfdef831480",
+      "furo_id": "55555555-5555-4555-a555-555555555555",
+      "numero_barra": 19,
+      "metros_acumulados": 57,
+      "angulo_pitch": "+0,08",
+      "profundidade_cm": 132,
+      "distancia_pista_cm": 0,
+      "foto_url": "",
+      "horario_registro": "2026-08-17T17:05:26.079Z"
+    }
+  ],
+  "logs": [
+    {
+      "id": "54a3ea8e-3a3d-48bf-b1cb-c30a9fb4e47b",
+      "usuario_id": "11111111-1111-4111-a111-111111111111",
+      "acao": "LOGIN",
+      "detalhes": "Login realizado por Eduardo Gestor (GESTOR)",
+      "criado_em": "2026-08-17T17:01:21.938Z"
+    },
+    {
+      "id": "42e79a88-f91e-413e-bb08-ffed13d0cd85",
+      "usuario_id": "SISTEMA",
+      "acao": "CRIAR_SERVICO",
+      "detalhes": "Serviço CANALIZAÇÃO E TRAVESSIA - TRECHO SANTOS criado com sucesso.",
+      "criado_em": "2026-08-17T17:29:42.109Z"
+    }
+  ]
+}
