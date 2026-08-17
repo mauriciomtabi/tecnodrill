@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import { Trophy, Sparkles, CheckCircle2, X, Zap } from 'lucide-react';
 
@@ -52,12 +53,11 @@ export const MetaCelebration: React.FC<MetaCelebrationProps> = ({
       };
       frame();
 
-      // Som sutil de celebração (usando Web Audio API para zero dependência externa)
+      // Som sutil de celebração (Web Audio API)
       try {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const now = audioCtx.currentTime;
         
-        // Acorde triunfal simples (Dó - Mi - Sol - Dó Maior)
         [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
           const osc = audioCtx.createOscillator();
           const gain = audioCtx.createGain();
@@ -71,7 +71,7 @@ export const MetaCelebration: React.FC<MetaCelebrationProps> = ({
           osc.stop(now + i * 0.08 + 0.65);
         });
       } catch (e) {
-        // Ignora caso áudio esteja bloqueado pelo browser
+        // Ignora
       }
     }
   }, [isOpen]);
@@ -80,75 +80,178 @@ export const MetaCelebration: React.FC<MetaCelebrationProps> = ({
 
   const percentual = metaMetros > 0 ? Math.round((metrosAtingidos / metaMetros) * 100) : 100;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-gradient-to-b from-[#1F2730] to-[#12161A] border-2 border-[#F05A22] rounded-3xl p-6 sm:p-8 text-center shadow-[0_0_50px_rgba(240,90,34,0.4)] bounce-in overflow-hidden">
-        
-        {/* Background Glow Accents */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-[#F05A22]/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
-
+  return createPortal(
+    <div 
+      style={{
+        position: 'fixed',
+        inset: 0,
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(5, 12, 16, 0.94)',
+        backdropFilter: 'blur(8px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999999,
+        padding: '16px',
+        boxSizing: 'border-box'
+      }}
+    >
+      <div 
+        className="fade-in"
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: '420px',
+          backgroundColor: '#0D1C24',
+          border: '2px solid var(--primary)',
+          borderRadius: '24px',
+          padding: '28px 24px',
+          textAlign: 'center',
+          boxShadow: '0 0 50px rgba(240, 90, 34, 0.4), 0 25px 60px rgba(0,0,0,0.8)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          boxSizing: 'border-box',
+          overflow: 'hidden'
+        }}
+      >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-full bg-white/5 hover:bg-white/10 transition-all"
+          style={{
+            position: 'absolute',
+            top: '14px',
+            right: '14px',
+            color: 'var(--text-muted)',
+            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
         >
-          <X className="w-5 h-5" />
+          <X size={18} />
         </button>
 
-        {/* Trophy Icon with Pulse */}
-        <div className="relative mx-auto w-24 h-24 mb-5 flex items-center justify-center">
-          <div className="absolute inset-0 bg-[#F05A22]/30 rounded-full animate-ping opacity-75" />
-          <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-tr from-[#F05A22] to-[#FF8844] flex items-center justify-center text-white shadow-xl shadow-[#F05A22]/40">
-            <Trophy className="w-11 h-11 text-yellow-200 drop-shadow-md" />
-          </div>
+        {/* Trophy Icon with Glowing Circle */}
+        <div 
+          style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '20px',
+            backgroundColor: 'rgba(240, 90, 34, 0.15)',
+            border: '2px solid var(--primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '16px',
+            boxShadow: '0 8px 24px rgba(240, 90, 34, 0.35)'
+          }}
+        >
+          <Trophy size={42} style={{ color: '#FFD700' }} />
         </div>
 
-        {/* Title & Badge */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-extrabold uppercase tracking-wider mb-2 border border-emerald-500/30">
-          <Sparkles className="w-3.5 h-3.5" />
-          Meta {tipoMeta === 'DIARIA' ? 'Diária' : 'Semanal'} Conquistada!
+        {/* Badge */}
+        <div 
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 12px',
+            borderRadius: '20px',
+            backgroundColor: 'rgba(39, 174, 96, 0.15)',
+            border: '1px solid rgba(39, 174, 96, 0.35)',
+            color: 'var(--success)',
+            fontSize: '11px',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: '10px'
+          }}
+        >
+          <Sparkles size={13} />
+          <span>Meta {tipoMeta === 'DIARIA' ? 'Diária' : 'Semanal'} Conquistada!</span>
         </div>
 
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-white mb-2 tracking-tight">
+        {/* Headline */}
+        <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 8px 0' }}>
           Parabéns, Equipe! 🎉
         </h2>
 
-        <p className="text-gray-300 text-sm mb-6 leading-relaxed">
-          {nomeServico ? <span className="font-semibold text-white block mb-1">{nomeServico}</span> : null}
-          A meta estipulada de <strong className="text-[#F05A22]">{metaMetros} metros</strong> foi atingida e superada com <strong className="text-emerald-400">{metrosAtingidos} metros</strong> perfurados!
+        {/* Description */}
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 20px 0', lineHeight: '1.5' }}>
+          {nomeServico && <strong style={{ color: '#FFFFFF', display: 'block', marginBottom: '4px' }}>{nomeServico}</strong>}
+          A meta de <strong style={{ color: 'var(--primary)' }}>{metaMetros} metros</strong> foi atingida e superada com <strong style={{ color: 'var(--success)' }}>{metrosAtingidos} metros</strong> perfurados!
         </p>
 
-        {/* Stats Card */}
-        <div className="grid grid-cols-2 gap-3 bg-[#161B22] p-4 rounded-2xl border border-white/10 mb-6">
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-xs text-gray-400 font-medium">Metragem Realizada</span>
-            <span className="text-2xl font-black text-white">{metrosAtingidos}m</span>
-            <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
-              <Zap className="w-3 h-3" /> {percentual}% da meta
+        {/* Stats Grid */}
+        <div 
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+            width: '100%',
+            backgroundColor: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            padding: '14px',
+            marginBottom: '20px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Metragem Total</span>
+            <span style={{ fontSize: '24px', fontWeight: 800, color: '#FFFFFF', fontFamily: 'var(--font-mono)' }}>
+              {metrosAtingidos}m
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+              <Zap size={11} /> {percentual}% da meta
             </span>
           </div>
 
-          <div className="flex flex-col items-center justify-center border-l border-white/10 pl-3">
-            <span className="text-xs text-gray-400 font-medium">Frente em Ação</span>
-            <span className="text-xs font-bold text-[#F05A22] truncate max-w-[140px]">
-              {navegadorNome ? `Nav: ${navegadorNome}` : 'Navegador'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid var(--border-color)', paddingLeft: '8px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>Frente de Trabalho</span>
+            <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', marginTop: '4px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '130px' }}>
+              {navegadorNome || 'Navegador'}
             </span>
-            <span className="text-[11px] text-gray-300 truncate max-w-[140px]">
-              {operadorNome ? `Op: ${operadorNome}` : 'Operador'}
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: '130px' }}>
+              {operadorNome || 'Operador'}
             </span>
           </div>
         </div>
 
-        {/* Action Button */}
+        {/* Confirm Button */}
         <button
           onClick={onClose}
-          className="w-full btn-primary py-3.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#F05A22]/30 active:scale-98 transition-all"
+          style={{
+            width: '100%',
+            backgroundColor: 'var(--primary)',
+            color: '#FFFFFF',
+            fontWeight: 800,
+            fontSize: '14px',
+            padding: '14px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            boxShadow: '0 4px 18px rgba(240, 90, 34, 0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
+          }}
         >
-          <CheckCircle2 className="w-5 h-5" />
-          Continuar Produzindo
+          <CheckCircle2 size={18} />
+          <span>Continuar Produzindo</span>
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

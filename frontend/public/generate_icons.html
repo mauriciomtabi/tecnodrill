@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Generate Square PWA Icons</title>
+</head>
+<body style="background: #0D1C24; color: #FFF; font-family: sans-serif; padding: 20px;">
+  <h2>Gerando Ícones Quadrados Perfeitos para PWA...</h2>
+  <canvas id="c512" width="512" height="512" style="border: 1px solid #FFF; margin: 10px;"></canvas>
+  <canvas id="c192" width="192" height="192" style="border: 1px solid #FFF; margin: 10px;"></canvas>
+  <div id="status">Processando...</div>
+
+  <script>
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = '/logo-icon.png';
+
+    img.onload = () => {
+      // 1. Draw 512x512
+      const c512 = document.getElementById('c512');
+      const ctx512 = c512.getContext('2d');
+      
+      // Background #0D1C24
+      ctx512.fillStyle = '#0D1C24';
+      ctx512.fillRect(0, 0, 512, 512);
+
+      // Scale and center logo with 15% padding
+      const maxDim = 512 * 0.75;
+      let w = img.width;
+      let h = img.height;
+      if (w > h) {
+        h = h * (maxDim / w);
+        w = maxDim;
+      } else {
+        w = w * (maxDim / h);
+        h = maxDim;
+      }
+      const x = (512 - w) / 2;
+      const y = (512 - h) / 2;
+
+      ctx512.drawImage(img, x, y, w, h);
+
+      // 2. Draw 192x192
+      const c192 = document.getElementById('c192');
+      const ctx192 = c192.getContext('2d');
+      ctx192.fillStyle = '#0D1C24';
+      ctx192.fillRect(0, 0, 192, 192);
+
+      const maxDim192 = 192 * 0.75;
+      let w192 = img.width;
+      let h192 = img.height;
+      if (w192 > h192) {
+        h192 = h192 * (maxDim192 / w192);
+        w192 = maxDim192;
+      } else {
+        w192 = w192 * (maxDim192 / h192);
+        h192 = maxDim192;
+      }
+      const x192 = (192 - w192) / 2;
+      const y192 = (192 - h192) / 2;
+
+      ctx192.drawImage(img, x192, y192, w192, h192);
+
+      const data512 = c512.toDataURL('image/png');
+      const data192 = c192.toDataURL('image/png');
+
+      fetch('http://localhost:4899', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          icon512: data512,
+          icon192: data192,
+          favicon: data192
+        })
+      })
+      .then(res => res.json())
+      .then(d => {
+        document.getElementById('status').innerText = 'Ícones gerados com sucesso!';
+      })
+      .catch(e => {
+        document.getElementById('status').innerText = 'Erro ao enviar: ' + e.message;
+      });
+    };
+  </script>
+</body>
+</html>
