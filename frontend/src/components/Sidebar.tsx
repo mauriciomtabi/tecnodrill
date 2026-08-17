@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   HardHat, 
   Users, 
+  Trophy,
   Sun, 
   Moon, 
   LogOut, 
@@ -30,10 +31,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
   const menuItems = isGestor
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
+        { path: '/app/performance', label: 'Performance', icon: Trophy },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
       ]
     : [
         { path: '/tecnico/obras', label: 'Serviços', icon: HardHat },
+        { path: '/app/performance', label: 'Performance', icon: Trophy },
       ];
 
   return (

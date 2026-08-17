@@ -4,7 +4,7 @@ import {
   HardHat, 
   Users, 
   Camera, 
-  LogOut,
+  Trophy,
   Plus
 } from 'lucide-react';
 
@@ -21,7 +21,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onQuickAddBarra,
   onOpenNovoServico 
 }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   if (!user) return null;
   const isGestor = user.perfil === 'GESTOR' || user.perfil === 'ADMIN';
@@ -55,13 +55,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
       {/* 1. LADO ESQUERDO: SERVIÇOS */}
       <button
-        onClick={() => onNavigate('/app/obras')}
+        onClick={() => onNavigate(isGestor ? '/app/obras' : '/tecnico/obras')}
         title="Serviços"
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: currentPath.includes('/app/obras') || currentPath === '/' ? 'var(--primary)' : 'var(--text-muted)',
+          color: currentPath.includes('/obras') || currentPath === '/' ? 'var(--primary)' : 'var(--text-muted)',
           padding: '10px',
           background: 'none',
           border: 'none',
@@ -71,18 +71,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <HardHat size={24} />
       </button>
 
-      {/* 2. CENTRO: BOTÃO PRINCIPAL COM CONTORNO CLARO (56px) */}
+      {/* 2. CENTRO: BOTÃO PRINCIPAL FLUTUANTE COM CONTORNO CLARO (56px) */}
       <button
         onClick={() => {
-          if (isGestor && onOpenNovoServico) {
-            onOpenNovoServico();
-          } else if (onQuickAddBarra) {
+          if (onQuickAddBarra) {
             onQuickAddBarra();
-          } else {
-            onNavigate('/app/campo');
+          } else if (isGestor && onOpenNovoServico) {
+            onOpenNovoServico();
           }
         }}
-        title={isGestor ? 'Novo Serviço' : 'Novo Registro Fotográfico'}
+        title="Novo Registro Fotográfico"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -103,14 +101,28 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         onMouseDown={(e) => e.currentTarget.style.transform = 'translateY(-16px) scale(0.92)'}
         onMouseUp={(e) => e.currentTarget.style.transform = 'translateY(-16px) scale(1)'}
       >
-        {isGestor ? (
-          <Plus size={26} strokeWidth={2.5} />
-        ) : (
-          <Camera size={25} strokeWidth={2.2} />
-        )}
+        <Camera size={26} strokeWidth={2.2} />
       </button>
 
-      {/* 3. LADO DIREITO: GESTÃO DE USUÁRIOS (SE GESTOR) */}
+      {/* 3. LADO DIREITO: PERFORMANCE & METAS */}
+      <button
+        onClick={() => onNavigate('/app/performance')}
+        title="Performance & Metas"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: currentPath === '/app/performance' ? 'var(--primary)' : 'var(--text-muted)',
+          padding: '10px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        <Trophy size={24} />
+      </button>
+
+      {/* 4. SE FOR GESTOR: USUÁRIOS */}
       {isGestor && (
         <button
           onClick={() => onNavigate('/app/usuarios')}
@@ -129,24 +141,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <Users size={24} />
         </button>
       )}
-
-      {/* 4. LADO DIREITO: BOTÃO DE SAIR */}
-      <button
-        onClick={() => logout()}
-        title="Sair do Sistema"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--danger)',
-          padding: '10px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer'
-        }}
-      >
-        <LogOut size={22} />
-      </button>
     </nav>
   );
 };

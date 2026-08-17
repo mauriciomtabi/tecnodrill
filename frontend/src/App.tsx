@@ -6,6 +6,7 @@ import { Login } from './pages/Login';
 import { ObrasList } from './pages/ObrasList';
 import { ObraDetalhes } from './pages/ObraDetalhes';
 import { UsuariosPage } from './pages/UsuariosPage';
+import { PerformancePage } from './pages/PerformancePage';
 import { NovoServicoModal } from './components/NovoServicoModal';
 import { RodEntryModal } from './components/RodEntryModal';
 import { MetaCelebration } from './components/MetaCelebration';
@@ -221,6 +222,13 @@ export const App: React.FC = () => {
       case '/app/usuarios':
         return (
           <UsuariosPage
+            setHeaderInfo={setHeaderInfo}
+          />
+        );
+
+      case '/app/performance':
+        return (
+          <PerformancePage
             setHeaderInfo={setHeaderInfo}
           />
         );

@@ -8,15 +8,14 @@ import { MetaCelebration } from '../components/MetaCelebration';
 import { MapView } from '../components/MapView';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { NovoServicoModal } from '../components/NovoServicoModal';
+import { RegistroDetalhesModal } from '../components/RegistroDetalhesModal';
 import { 
   ArrowLeft, 
   Trash2, 
   Camera, 
   CheckCircle2, 
   AlertTriangle, 
-  Box, 
   ArrowUpDown, 
-  X,
   Clock,
   Map as MapIcon,
   Image as ImageIcon,
@@ -49,13 +48,13 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
-  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [selectedBarraDetails, setSelectedBarraDetails] = useState<Barra | null>(null);
 
   // Modal Editar Serviço
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingEditServico, setSavingEditServico] = useState(false);
 
-  // Confirm Dialogs (Custom UI, never native browser alerts)
+  // Confirm Dialogs
   const [confirmDeleteServicoOpen, setConfirmDeleteServicoOpen] = useState(false);
   const [confirmDeleteBarraId, setConfirmDeleteBarraId] = useState<string | null>(null);
 
@@ -93,7 +92,6 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       }
     } catch (err) {
       console.error('Erro ao carregar obra:', err);
-      showToast('Erro ao carregar detalhes do serviço.', 'error');
     } finally {
       setLoading(false);
     }
@@ -106,44 +104,26 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const handleAddBarra = async (barraData: Partial<Barra>) => {
     if (!furo) return;
     setSavingBarra(true);
-
     try {
       const res = await ApiService.addBarra(furo.id, barraData);
-      setBarras(prev => [...prev, res.barra]);
-      setShowAddModal(false);
       showToast(res.mensagem, 'success');
+      setShowAddModal(false);
+      await fetchDados();
 
-      const metaTotal = servico?.meta_metros || 100;
-      const totalApos = res.barra.metros_acumulados;
-      if (res.celebrarMeta || totalApos >= metaTotal) {
+      if (res.celebrarMeta) {
+        const total = res.barra.metros_acumulados;
+        const meta = servico?.meta_metros || 54;
         setCelebrationData({
-          metaMetros: metaTotal,
-          metrosAtingidos: totalApos,
+          metaMetros: meta,
+          metrosAtingidos: total,
           tipoMeta: 'DIARIA'
         });
         setCelebrationOpen(true);
       }
-      fetchDados();
     } catch (err: any) {
-      showToast(err.message || 'Erro ao registrar progresso.', 'error');
+      showToast(err.message || 'Erro ao registrar apontamento.', 'error');
     } finally {
       setSavingBarra(false);
-    }
-  };
-
-  const handleUpdateServico = async (servicoData: Partial<Servico>) => {
-    if (!servico) return;
-    setSavingEditServico(true);
-    try {
-      const updated = await ApiService.updateServico(servico.id, servicoData);
-      setServico(updated);
-      showToast('Serviço atualizado com sucesso!', 'success');
-      setShowEditModal(false);
-      fetchDados();
-    } catch (err: any) {
-      showToast(err.message || 'Erro ao atualizar serviço.', 'error');
-    } finally {
-      setSavingEditServico(false);
     }
   };
 
@@ -151,52 +131,93 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     if (!confirmDeleteBarraId) return;
     try {
       await ApiService.deleteBarra(confirmDeleteBarraId);
-      setBarras(prev => prev.filter(b => b.id !== confirmDeleteBarraId));
-      showToast('Registro de campo excluído com sucesso.', 'info');
+      showToast('Registro de apontamento excluído.', 'info');
       setConfirmDeleteBarraId(null);
-      fetchDados();
-    } catch (err) {
-      showToast('Erro ao excluir registro.', 'error');
+      await fetchDados();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir registro.', 'error');
     }
   };
 
-  const handleConfirmDeleteServico = () => {
-    showToast(`Serviço ${servico?.nome} excluído.`, 'info');
-    setConfirmDeleteServicoOpen(false);
-    onBack();
+  const handleConfirmDeleteServico = async () => {
+    if (!servico) return;
+    try {
+      await ApiService.deleteServico(servico.id);
+      showToast(`Serviço ${servico.nome} excluído com sucesso.`, 'info');
+      onBack();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao excluir serviço.', 'error');
+    }
+  };
+
+  const handleUpdateServico = async (dadosAtualizados: Partial<Servico>) => {
+    if (!servico) return;
+    setSavingEditServico(true);
+    try {
+      const res = await ApiService.updateServico(servico.id, dadosAtualizados);
+      setServico(res);
+      showToast('Serviço atualizado com sucesso!', 'success');
+      setShowEditModal(false);
+      await fetchDados();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao atualizar serviço.', 'error');
+    } finally {
+      setSavingEditServico(false);
+    }
   };
 
   const handleConcluirServico = async () => {
     if (!servico) return;
     try {
-      await ApiService.updateServico(servico.id, { status: 'CONCLUIDO' });
-      showToast('Serviço alterado para Concluído com sucesso!', 'success');
-      fetchDados();
-    } catch (err) {
-      showToast('Erro ao concluir serviço.', 'error');
+      const res = await ApiService.updateServico(servico.id, { status: 'CONCLUIDO' });
+      setServico(res);
+      showToast('Serviço marcado como CONCLUÍDO com sucesso!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao concluir serviço.', 'error');
     }
   };
 
-  if (loading || !servico) {
+  if (loading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <div className="skeleton" style={{ width: '100%', height: '260px', borderRadius: 'var(--radius-md)' }} />
+      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="skeleton" style={{ height: '40px', width: '200px' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+          <div className="skeleton" style={{ height: '100px' }} />
+          <div className="skeleton" style={{ height: '100px' }} />
+          <div className="skeleton" style={{ height: '100px' }} />
+        </div>
       </div>
     );
   }
 
-  // Cálculos de Métricas
-  const metrosExec = barras.length > 0 ? (barras[barras.length - 1]?.metros_acumulados || 0) : 0;
-  const metrosTotalPrevisto = servico.metragem_prevista_total || 1000;
-  const percentualConcluido = metrosTotalPrevisto > 0 
-    ? Math.min(100, Math.round((metrosExec / metrosTotalPrevisto) * 100))
-    : 0;
+  if (!servico) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <p style={{ color: 'var(--text-muted)' }}>Serviço não encontrado.</p>
+        <button onClick={onBack} className="btn-secondary" style={{ marginTop: '16px' }}>
+          Voltar para lista
+        </button>
+      </div>
+    );
+  }
 
+  // Cálculos Oficiais
+  const metrosExecutadosTotal = furo?.comprimento_furo || barras.reduce((acc, b) => acc + (b.metros || 3), 0);
+  const metrosTotalPrevisto = servico.metragem_prevista_total || 54;
+  const percentualConcluido = Math.min(100, Math.round((metrosExecutadosTotal / (metrosTotalPrevisto || 1)) * 100));
   const totalComCaixa = barras.filter(b => b.tem_caixa).length;
-  const totalSemCaixa = barras.filter(b => !b.tem_caixa).length;
-  const retornoCalculado = servico.metricas?.retornoFinanceiroCalculado || 0;
+  const totalSemCaixa = barras.length - totalComCaixa;
 
-  // Filtragem de fotos e registros
+  let retornoCalculado = 0;
+  if (servico.cenario_financeiro === 'VALOR_METRO') {
+    retornoCalculado = metrosExecutadosTotal * (servico.valor_metro || 180);
+  } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+    retornoCalculado = metrosExecutadosTotal * (servico.fator_financeiro || 2.85) * (servico.diametro_furo_mm || 150);
+  } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
+    retornoCalculado = (metrosExecutadosTotal / (metrosTotalPrevisto || 1)) * (servico.valor_total_fechado || 0);
+  }
+
+  // Filtragem de Barras
   const filteredBarras = barras
     .filter(b => {
       if (filterType === 'COM_CAIXA') return b.tem_caixa;
@@ -204,33 +225,43 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       return true;
     })
     .sort((a, b) => {
-      if (sortOrder === 'DESC') return b.numero_barra - a.numero_barra;
-      return a.numero_barra - b.numero_barra;
+      return sortOrder === 'DESC' 
+        ? b.numero_barra - a.numero_barra
+        : a.numero_barra - b.numero_barra;
     });
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       
-      {/* 1. UPPER HEADER (Padrão de todas as telas) */}
-      <div className="upper-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <button
+      {/* 1. TOP HEADER ROW (BOTÃO VOLTAR + TÍTULO DA OBRA + AÇÕES) */}
+      <div 
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '12px',
+          paddingBottom: '4px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button 
             onClick={onBack}
             className="btn-secondary"
-            style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <ArrowLeft size={15} />
+            <ArrowLeft size={16} />
             <span>Voltar</span>
           </button>
 
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 className="header-title" style={{ margin: 0, textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', margin: 0, textTransform: 'uppercase' }}>
                 {servico.nome}
               </h1>
               <span 
                 style={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   fontWeight: 800,
                   padding: '2px 8px',
                   borderRadius: '4px',
@@ -242,14 +273,14 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 OS: {servico.id}
               </span>
             </div>
-
-            <p className="header-subtitle" style={{ margin: '3px 0 0 0' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
               {servico.cliente} • {servico.local}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Action Buttons Right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           {isGestor && (
             <>
               {/* Botão Editar Serviço */}
@@ -257,16 +288,15 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 onClick={() => setShowEditModal(true)}
                 className="btn-secondary"
                 style={{
-                  padding: '8px 13px',
-                  fontSize: '12px',
+                  padding: '8px 14px',
+                  fontSize: '12.5px',
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer'
+                  gap: '6px'
                 }}
               >
-                <Edit size={14} />
+                <Edit size={14} style={{ color: 'var(--primary)' }} />
                 <span>Editar</span>
               </button>
 
@@ -355,11 +385,11 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         </div>
       )}
 
-      {/* 3. OVERVIEW CARDS ROW (4 CARDS LADO A LADO - PADRÃO JLE) */}
+      {/* 3. OVERVIEW CARDS ROW */}
       <div 
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: isGestor ? 'repeat(auto-fit, minmax(200px, 1fr))' : 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: '12px'
         }}
       >
@@ -379,8 +409,15 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', display: 'block', margin: '4px 0' }}>
             {percentualConcluido}%
           </strong>
-          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-            <div style={{ width: `${percentualConcluido}%`, height: '100%', backgroundColor: percentualConcluido >= 100 ? 'var(--success)' : 'var(--primary)', transition: 'width 0.4s ease' }} />
+          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
+            <div 
+              style={{ 
+                width: `${percentualConcluido}%`, 
+                height: '100%', 
+                backgroundColor: 'var(--primary)', 
+                transition: 'width 0.4s ease' 
+              }} 
+            />
           </div>
         </div>
 
@@ -399,9 +436,9 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', margin: '4px 0' }}>
             <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)' }}>
-              {metrosExec}
+              {metrosExecutadosTotal}
             </strong>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               / {metrosTotalPrevisto}m
             </span>
           </div>
@@ -410,7 +447,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </span>
         </div>
 
-        {/* Card 3: Caixas Instaladas */}
+        {/* Card 3: Possui Caixa */}
         <div 
           style={{
             backgroundColor: 'var(--bg-card)',
@@ -585,7 +622,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
               </div>
             </div>
 
-            {/* Photo Cards Grid */}
+            {/* Photo Cards Grid (Layout Compacto Padrão JLE) */}
             {filteredBarras.length === 0 ? (
               <div 
                 style={{
@@ -604,25 +641,21 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 </p>
               </div>
             ) : (
-              <div 
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                  gap: '14px'
-                }}
-              >
+              <div className="photo-grid">
                 {filteredBarras.map((b) => (
                   <div
                     key={b.id}
+                    onClick={() => setSelectedBarraDetails(b)}
                     style={{
                       backgroundColor: 'var(--bg-card)',
                       border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--radius-md)',
+                      borderRadius: '10px',
                       overflow: 'hidden',
                       display: 'flex',
                       flexDirection: 'column',
                       boxShadow: 'var(--shadow-sm)',
-                      transition: 'var(--transition)'
+                      cursor: 'pointer',
+                      transition: 'transform 0.2s ease, border-color 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.borderColor = 'var(--primary)';
@@ -633,15 +666,13 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                       e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
-                    {/* Photo Area */}
+                    {/* Photo Area 4:3 Aspect */}
                     <div 
-                      onClick={() => b.foto_url && setPreviewPhotoUrl(b.foto_url)}
                       style={{
                         width: '100%',
-                        height: '160px',
+                        aspectRatio: '4 / 3',
                         backgroundColor: '#0D1C24',
                         position: 'relative',
-                        cursor: b.foto_url ? 'pointer' : 'default',
                         overflow: 'hidden',
                         display: 'flex',
                         alignItems: 'center',
@@ -655,24 +686,24 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '6px' }}>
-                          <Camera size={24} />
-                          <span style={{ fontSize: '11px' }}>Sem foto anexada</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '4px' }}>
+                          <Camera size={20} />
+                          <span style={{ fontSize: '10px' }}>Sem foto</span>
                         </div>
                       )}
 
-                      {/* Meter Tag Top Right */}
+                      {/* Tag Superior Direita Metros */}
                       <div 
                         style={{
                           position: 'absolute',
-                          top: '8px',
-                          right: '8px',
-                          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                          top: '6px',
+                          right: '6px',
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
                           color: '#FFFFFF',
-                          padding: '3px 8px',
+                          padding: '2px 6px',
                           borderRadius: '4px',
-                          fontSize: '10.5px',
-                          fontWeight: 700,
+                          fontSize: '10px',
+                          fontWeight: 800,
                           fontFamily: 'var(--font-mono)'
                         }}
                       >
@@ -680,62 +711,65 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                       </div>
                     </div>
 
-                    {/* Card Footer Info */}
-                    <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {/* Card Footer Info (Idêntico ao App JLE) */}
+                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       
-                      {/* Header: Name and Box Badge */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ fontSize: '12.5px', color: 'var(--text-main)' }}>
-                          REGISTRO {b.numero_barra}
-                        </strong>
+                      {/* Title: REGISTRO N */}
+                      <strong style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF' }}>
+                        REGISTRO {b.numero_barra}
+                      </strong>
 
-                        {b.tem_caixa ? (
-                          <span style={{ fontSize: '9.5px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(39, 174, 96, 0.15)', color: 'var(--success)', textTransform: 'uppercase' }}>
-                            CAIXA
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                            CANALIZAÇÃO
-                          </span>
-                        )}
-                      </div>
+                      {/* Sub-label Tipo */}
+                      <span 
+                        style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: b.tem_caixa ? 'var(--success)' : '#2A8ACC',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '3px'
+                        }}
+                      >
+                        <Camera size={10} />
+                        <span>{b.tem_caixa ? 'CAIXA' : 'CANALIZAÇÃO'}</span>
+                      </span>
 
-                      {/* Timestamp */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                        <Clock size={11} />
-                        <span>
-                          {b.horario_registro ? new Date(b.horario_registro).toLocaleString('pt-BR') : 'Data não informada'}
-                        </span>
-                      </div>
+                      {/* Date Timestamp */}
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        {b.created_at || b.data_registro || b.horario_registro
+                          ? new Date(b.created_at || b.data_registro || b.horario_registro!).toLocaleString('pt-BR')
+                          : new Date().toLocaleString('pt-BR')}
+                      </span>
 
-                      {/* Observation */}
-                      {b.observacao && (
-                        <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0 0', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }} title={b.observacao}>
-                          {b.observacao}
-                        </p>
-                      )}
-
-                      {/* Actions (Excluir) */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '6px', marginTop: '4px' }}>
-                        <button
-                          onClick={() => setConfirmDeleteBarraId(b.id)}
+                      {/* Badges Footer Row */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                        <span 
                           style={{
-                            color: 'var(--danger)',
-                            fontSize: '10.5px',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            padding: '2px 4px',
-                            cursor: 'pointer',
-                            background: 'none',
-                            border: 'none'
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            backgroundColor: 'rgba(240, 90, 34, 0.15)',
+                            color: 'var(--primary)',
+                            fontFamily: 'var(--font-mono)'
                           }}
-                          title="Excluir Registro"
                         >
-                          <Trash2 size={11} />
-                          <span>Excluir</span>
-                        </button>
+                          {b.metros || 3}m
+                        </span>
+
+                        <span 
+                          style={{
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            backgroundColor: b.tem_caixa ? 'rgba(39, 174, 96, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                            color: b.tem_caixa ? 'var(--success)' : 'var(--danger)',
+                            textTransform: 'uppercase'
+                          }}
+                        >
+                          {b.tem_caixa ? 'COM CAIXA' : 'SEM CAIXA'}
+                        </span>
                       </div>
 
                     </div>
@@ -750,7 +784,10 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         {activeTab === 'mapa' && (
           <MapView
             barras={barras}
-            onSelectPhoto={(url) => setPreviewPhotoUrl(url)}
+            onSelectPhoto={(url) => {
+              const matched = barras.find(b => b.foto_url === url);
+              if (matched) setSelectedBarraDetails(matched);
+            }}
           />
         )}
 
@@ -763,6 +800,19 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         nextBarraNumber={barras.length + 1}
         onSubmit={handleAddBarra}
         loading={savingBarra}
+      />
+
+      {/* MODAL DETALHES DO REGISTRO (PADRÃO JLE COM TOOLBAR DE ZOOM E INFORMAÇÕES) */}
+      <RegistroDetalhesModal
+        isOpen={Boolean(selectedBarraDetails)}
+        onClose={() => setSelectedBarraDetails(null)}
+        barra={selectedBarraDetails}
+        servico={servico}
+        isGestor={isGestor}
+        onDelete={(id) => {
+          setSelectedBarraDetails(null);
+          setConfirmDeleteBarraId(id);
+        }}
       />
 
       {/* MODAL DE EDITAR SERVIÇO (PORTAL CENTRALIZADO) */}
@@ -808,54 +858,8 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         onCancel={() => setConfirmDeleteBarraId(null)}
       />
 
-      {/* LIGHTBOX AMPLIADO (PORTAL CENTRALIZADO) */}
-      {previewPhotoUrl && createPortal(
-        <div 
-          onClick={() => setPreviewPhotoUrl(null)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-            backdropFilter: 'blur(6px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 999999,
-            padding: '20px',
-            boxSizing: 'border-box'
-          }}
-        >
-          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
-            <img 
-              src={previewPhotoUrl} 
-              alt="Foto Ampliada" 
-              style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: '8px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }} 
-            />
-            <button
-              onClick={() => setPreviewPhotoUrl(null)}
-              style={{
-                position: 'absolute',
-                top: '-12px',
-                right: '-12px',
-                backgroundColor: 'var(--primary)',
-                color: '#FFFFFF',
-                borderRadius: '50%',
-                padding: '6px',
-                border: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-        </div>,
-        document.body
-      )}
-
     </div>
   );
 };
+
+export default ObraDetalhes;
