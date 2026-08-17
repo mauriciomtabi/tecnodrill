@@ -5,12 +5,13 @@ import { BottomNav } from './components/BottomNav';
 import { Login } from './pages/Login';
 import { ObrasList } from './pages/ObrasList';
 import { ObraDetalhes } from './pages/ObraDetalhes';
-import { CampoNavigator } from './pages/CampoNavigator';
 import { UsuariosPage } from './pages/UsuariosPage';
 import { NovoServicoModal } from './components/NovoServicoModal';
+import { RodEntryModal } from './components/RodEntryModal';
+import { MetaCelebration } from './components/MetaCelebration';
 import { PwaInstall } from './components/PwaInstall';
 import { ApiService } from './services/api';
-import { Servico } from './types';
+import { Servico, Furo, Barra } from './types';
 
 export const App: React.FC = () => {
   const { user, token, isLoading, showToast } = useAuth();
@@ -23,9 +24,24 @@ export const App: React.FC = () => {
   const [pageTitle, setPageTitle] = useState('TecnoDrill INFRA');
   const [pageSubtitle, setPageSubtitle] = useState('');
 
-  // Modal Novo Serviço
+  // Modal Novo Serviço (Gestor)
   const [showNovoServicoModal, setShowNovoServicoModal] = useState(false);
   const [creatingServico, setCreatingServico] = useState(false);
+
+  // Modal Novo Registro Direto (Câmera / Botão Central)
+  const [showDirectRodModal, setShowDirectRodModal] = useState(false);
+  const [activeFuro, setActiveFuro] = useState<Furo | null>(null);
+  const [activeBarraCount, setActiveBarraCount] = useState<number>(1);
+  const [savingDirectRod, setSavingDirectRod] = useState(false);
+
+  // Celebração de Meta
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
+  const [celebrationData, setCelebrationData] = useState<{
+    metaMetros: number;
+    metrosAtingidos: number;
+    tipoMeta: 'DIARIA' | 'SEMANAL';
+    nomeServico: string;
+  }>({ metaMetros: 54, metrosAtingidos: 54, tipoMeta: 'DIARIA', nomeServico: '' });
 
   useEffect(() => {
     localStorage.setItem('tecnodrill_sidebar_collapsed', String(sidebarCollapsed));
@@ -48,7 +64,10 @@ export const App: React.FC = () => {
         ? '/tecnico/obras'
         : '/app/obras';
 
-      const initialPath = savedPath || defaultRoute;
+      const initialPath = savedPath && savedPath !== '/app/campo' && savedPath !== '/tecnico/campo'
+        ? savedPath 
+        : defaultRoute;
+
       setCurrentPath(initialPath);
       setSelectedObraId(savedObraId || null);
     } else {
@@ -84,17 +103,72 @@ export const App: React.FC = () => {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-app)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div className="skeleton" style={{ width: '60px', height: '60px', borderRadius: '50%' }} />
-      </div>
-    );
-  }
+  // Acionamento direto do formulário de novo registro pelo botão central da Câmera
+  const handleOpenDirectRodModal = async () => {
+    try {
+      const servicos = await ApiService.getServicos();
+      if (servicos.length === 0) {
+        showToast('Nenhum serviço ativo encontrado para realizar apontamentos.', 'info');
+        return;
+      }
 
-  if (!user || !token) {
-    return <Login />;
-  }
+      // Escolher o serviço atualmente selecionado ou o primeiro disponível
+      const targetServicoId = selectedObraId || servicos[0].id;
+      const furos = await ApiService.getFuros(targetServicoId);
+
+      let furoToUse: Furo;
+      if (furos.length > 0) {
+        furoToUse = furos[0];
+      } else {
+        furoToUse = await ApiService.createFuro({
+          servico_id: targetServicoId,
+          navegador_nome: user?.nome || 'Navegador',
+          operador_nome: 'Operador',
+          status: 'EM_EXECUCAO'
+        });
+      }
+
+      const barras = await ApiService.getBarras(furoToUse.id);
+      setActiveFuro(furoToUse);
+      setActiveBarraCount(barras.length + 1);
+      setShowDirectRodModal(true);
+    } catch (err: any) {
+      showToast('Erro ao preparar formulário de registro.', 'error');
+    }
+  };
+
+  const handleSubmitDirectRod = async (barraData: Partial<Barra>) => {
+    if (!activeFuro) return;
+    setSavingDirectRod(true);
+    try {
+      const res = await ApiService.addBarra(activeFuro.id, barraData);
+      showToast(res.mensagem, 'success');
+      setShowDirectRodModal(false);
+
+      const servico = await ApiService.getServico(activeFuro.servico_id);
+      const metaTotal = servico.meta_metros || 100;
+      const totalMetros = res.barra.metros_acumulados;
+
+      if (res.celebrarMeta || totalMetros >= metaTotal) {
+        setCelebrationData({
+          metaMetros: metaTotal,
+          metrosAtingidos: totalMetros,
+          tipoMeta: 'DIARIA',
+          nomeServico: servico.nome
+        });
+        setCelebrationOpen(true);
+      }
+
+      // Redireciona para o detalhe da obra caso não esteja
+      if (selectedObraId !== activeFuro.servico_id) {
+        handleNavigate(`/app/obras/${activeFuro.servico_id}`);
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao registrar apontamento.', 'error');
+    } finally {
+      setSavingDirectRod(false);
+    }
+  };
 
   const handleCreateServico = async (servicoData: Partial<Servico>) => {
     setCreatingServico(true);
@@ -109,6 +183,18 @@ export const App: React.FC = () => {
       setCreatingServico(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg-app)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="skeleton" style={{ width: '60px', height: '60px', borderRadius: '50%' }} />
+      </div>
+    );
+  }
+
+  if (!user || !token) {
+    return <Login />;
+  }
 
   const renderActivePage = () => {
     switch (currentPath) {
@@ -126,17 +212,8 @@ export const App: React.FC = () => {
         return (
           <ObraDetalhes
             setHeaderInfo={setHeaderInfo}
-            servicoId={selectedObraId || 'TD-OBRA-01'}
+            servicoId={selectedObraId || 'TD-01'}
             onBack={() => handleNavigate(user.perfil === 'OPERADOR' || user.perfil === 'NAVEGADOR' ? '/tecnico/obras' : '/app/obras')}
-            onVerFichaOficial={() => {}}
-          />
-        );
-
-      case '/app/campo':
-      case '/tecnico/campo':
-        return (
-          <CampoNavigator
-            servicoIdProp={selectedObraId || undefined}
             onVerFichaOficial={() => {}}
           />
         );
@@ -174,14 +251,15 @@ export const App: React.FC = () => {
         {renderActivePage()}
       </main>
 
-      {/* 3. MOBILE BOTTOM NAVIGATION */}
+      {/* 3. MOBILE BOTTOM NAVIGATION (Abre direto o formulário de foto/novo registro) */}
       <BottomNav
         currentPath={currentPath}
         onNavigate={handleNavigate}
-        onQuickAddBarra={() => handleNavigate('/app/campo')}
+        onQuickAddBarra={handleOpenDirectRodModal}
+        onOpenNovoServico={() => setShowNovoServicoModal(true)}
       />
 
-      {/* 4. MODAL NOVO SERVIÇO (2 Passos Idêntico ao App JLE) */}
+      {/* 4. MODAL NOVO SERVIÇO (Gestor) */}
       <NovoServicoModal
         isOpen={showNovoServicoModal}
         onClose={() => setShowNovoServicoModal(false)}
@@ -189,7 +267,26 @@ export const App: React.FC = () => {
         loading={creatingServico}
       />
 
-      {/* 5. DETECÇÃO & INSTALAÇÃO DO PWA (PADRÃO JLE) */}
+      {/* 5. MODAL NOVO REGISTRO DIRETO (3 PASSOS JLE) */}
+      <RodEntryModal
+        isOpen={showDirectRodModal}
+        onClose={() => setShowDirectRodModal(false)}
+        nextBarraNumber={activeBarraCount}
+        onSubmit={handleSubmitDirectRod}
+        loading={savingDirectRod}
+      />
+
+      {/* 6. MODAL CELEBRAÇÃO DE META */}
+      <MetaCelebration
+        isOpen={celebrationOpen}
+        onClose={() => setCelebrationOpen(false)}
+        metaMetros={celebrationData.metaMetros}
+        metrosAtingidos={celebrationData.metrosAtingidos}
+        tipoMeta={celebrationData.tipoMeta}
+        nomeServico={celebrationData.nomeServico}
+      />
+
+      {/* 7. DETECÇÃO & INSTALAÇÃO DO PWA */}
       <PwaInstall />
     </div>
   );

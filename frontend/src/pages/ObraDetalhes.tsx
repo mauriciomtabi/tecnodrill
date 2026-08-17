@@ -431,28 +431,30 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </span>
         </div>
 
-        {/* Card 4: Retorno Financeiro */}
-        <div 
-          style={{
-            backgroundColor: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            borderRadius: 'var(--radius-md)',
-            padding: '14px 16px',
-            boxShadow: 'var(--shadow-sm)'
-          }}
-        >
-          <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
-            Retorno Financeiro
-          </span>
-          <strong style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)', display: 'block', margin: '4px 0' }}>
-            R$ {retornoCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </strong>
-          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-            {servico.cenario_financeiro === 'VALOR_METRO' && `R$ ${servico.valor_metro}/m`}
-            {servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO' && `Fator ${servico.fator_financeiro} × ${servico.diametro_furo_mm}mm`}
-            {servico.cenario_financeiro === 'VALOR_FECHADO' && `Valor Fechado`}
-          </span>
-        </div>
+        {/* Card 4: Retorno Financeiro (Apenas Gestores/Admin) */}
+        {isGestor && (
+          <div 
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px 16px',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          >
+            <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
+              Retorno Financeiro
+            </span>
+            <strong style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)', display: 'block', margin: '4px 0' }}>
+              R$ {retornoCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </strong>
+            <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+              {servico.cenario_financeiro === 'VALOR_METRO' && `R$ ${servico.valor_metro}/m`}
+              {servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO' && `Fator ${servico.fator_financeiro} × ${servico.diametro_furo_mm}mm`}
+              {servico.cenario_financeiro === 'VALOR_FECHADO' && `Valor Fechado`}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 4. SUBHEADER TABS: FOTOS | MAPA (PADRÃO JLE) */}

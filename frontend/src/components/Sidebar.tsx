@@ -27,12 +27,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
   const menuItems = isGestor
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
-        { path: '/app/campo', label: 'Apontamento', icon: Radio },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
       ]
     : [
-        { path: '/tecnico/obras', label: 'Meus Serviços', icon: HardHat },
-        { path: '/tecnico/campo', label: 'Apontamento', icon: Radio },
+        { path: '/tecnico/obras', label: 'Serviços', icon: HardHat },
       ];
 
   return (
