@@ -116,6 +116,7 @@ ALTER TABLE tecnodrill_logs DISABLE ROW LEVEL SECURITY;
 -- ==============================================================================
 INSERT INTO tecnodrill_usuarios (id, nome, perfil, username, email, senha_hash, ativo)
 VALUES 
+  ('00000000-0000-4000-a000-000000000001', 'Mauricio Maciel', 'ADMIN', 'mauricio.maciel', 'mauricio.maciel@jletelecom.com.br', '$2a$10$P9vtcSUCUBRV09cg/Gb6be0quO1II.G3bp4yWvgqPzM1Yze.YSzCm', TRUE),
   ('11111111-1111-1111-1111-111111111111', 'Eduardo Gestor', 'GESTOR', 'eduardo', 'eduardo@tecnodrill.com.br', '$2a$10$7KzT3XfOqJ2nUo8yQ1L5/e0m7M3Z5R6K9X7P2W4Y1Z9B6C3D5E7F9', TRUE),
   ('22222222-2222-2222-2222-222222222222', 'Carlos Diretor', 'GESTOR', 'carlos', 'carlos@tecnodrill.com.br', '$2a$10$7KzT3XfOqJ2nUo8yQ1L5/e0m7M3Z5R6K9X7P2W4Y1Z9B6C3D5E7F9', TRUE),
   ('33333333-3333-3333-3333-333333333333', 'Marcelo Navegador', 'NAVEGADOR', 'marcelo', 'marcelo@tecnodrill.com.br', '$2a$10$1W2V4Q5P6O7N8M9L0K1J2u3H4G5F6E7D8C9B0A1Z2Y3X4W5V6U7T8', TRUE),
