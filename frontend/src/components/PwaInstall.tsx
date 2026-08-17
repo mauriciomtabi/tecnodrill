@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Download, X, Smartphone, Share, PlusSquare } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 
 export const PwaInstall: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isVisible, setIsVisible] = useState(true);
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Verificar se o app já está rodando em modo standalone (já instalado)
+    // Check if app is already running in standalone mode (installed)
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches 
       || (navigator as any).standalone 
       || document.referrer.includes('android-app://');
@@ -15,11 +14,6 @@ export const PwaInstall: React.FC = () => {
     if (isStandalone) {
       setIsVisible(false);
       return;
-    }
-
-    const dismissed = sessionStorage.getItem('pwa_dismissed');
-    if (dismissed) {
-      setIsVisible(false);
     }
 
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -44,20 +38,17 @@ export const PwaInstall: React.FC = () => {
   }, []);
 
   const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      console.log(`Resposta do usuário para instalação: ${outcome}`);
-      setDeferredPrompt(null);
-      setIsVisible(false);
-    } else {
-      setShowInstructions(true);
-    }
+    if (!deferredPrompt) return;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`Resposta do usuário para instalação: ${outcome}`);
+    setDeferredPrompt(null);
+    setIsVisible(false);
   };
 
   const handleDismiss = () => {
     setIsVisible(false);
-    sessionStorage.setItem('pwa_dismissed', 'true');
   };
 
   if (!isVisible) return null;
@@ -138,89 +129,6 @@ export const PwaInstall: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {/* Modal Instruções de Instalação Manual (Fallback) */}
-      {showInstructions && (
-        <div 
-          onClick={() => setShowInstructions(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-            padding: '16px'
-          }}
-        >
-          <div 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: '#0D1C24',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              padding: '24px',
-              maxWidth: '380px',
-              width: '100%',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              color: '#FFFFFF'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Smartphone size={20} style={{ color: 'var(--primary)' }} />
-                <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Como Instalar o App</h3>
-              </div>
-              <button 
-                onClick={() => setShowInstructions(false)}
-                style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', color: 'var(--text-muted)' }}>
-              
-              {/* iPhone / iPad */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <strong style={{ color: 'var(--primary)', minWidth: '60px' }}>iPhone / iPad:</strong>
-                <div>
-                  Toque no botão <strong>Compartilhar</strong> <Share size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> no Safari e selecione <strong>Adicionar à Tela de Início</strong> <PlusSquare size={12} style={{ display: 'inline', verticalAlign: 'middle' }} />.
-                </div>
-              </div>
-
-              {/* Android */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <strong style={{ color: 'var(--primary)', minWidth: '60px' }}>Android (Chrome):</strong>
-                <div>
-                  Toque no menu (3 pontinhos) no topo do Chrome e selecione <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.
-                </div>
-              </div>
-
-              {/* Computador */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <strong style={{ color: 'var(--primary)', minWidth: '60px' }}>Computador (PC/Mac):</strong>
-                <div>
-                  Clique no ícone de <strong>Instalar</strong> na barra de endereços do Chrome/Edge.
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setShowInstructions(false)}
-              className="btn-primary"
-              style={{ width: '100%', padding: '10px', fontSize: '13px', fontWeight: 700, marginTop: '8px' }}
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 };
