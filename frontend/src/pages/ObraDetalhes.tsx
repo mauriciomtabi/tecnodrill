@@ -177,15 +177,13 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       
-      {/* 1. CABEÇALHO DO SERVIÇO: TÍTULO, OS E BOTÕES */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-        
-        {/* Left: Voltar + Nome do Serviço e OS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+      {/* 1. UPPER HEADER (Padrão de todas as telas) */}
+      <div className="upper-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <button
             onClick={onBack}
             className="btn-secondary"
-            style={{ padding: '8px 14px', fontSize: '12px', fontWeight: 600 }}
+            style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
             <ArrowLeft size={15} />
             <span>Voltar</span>
@@ -193,32 +191,30 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0, color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+              <h1 className="header-title" style={{ margin: 0, textTransform: 'uppercase' }}>
                 {servico.nome}
               </h1>
               <span 
                 style={{
                   fontSize: '11px',
                   fontWeight: 800,
-                  padding: '3px 8px',
-                  borderRadius: '6px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
                   backgroundColor: 'rgba(240, 90, 34, 0.15)',
                   color: 'var(--primary)',
-                  fontFamily: 'var(--font-mono)',
-                  letterSpacing: '0.5px'
+                  fontFamily: 'var(--font-mono)'
                 }}
               >
                 OS: {servico.id}
               </span>
             </div>
 
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+            <p className="header-subtitle" style={{ margin: '3px 0 0 0' }}>
               {servico.cliente} • {servico.local}
             </p>
           </div>
         </div>
 
-        {/* Right: Ações */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {isGestor && (
             <button
@@ -232,7 +228,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 backgroundColor: 'rgba(231, 76, 60, 0.15)',
                 color: 'var(--danger)',
                 border: '1px solid var(--danger)',
-                padding: '8px 14px',
+                padding: '9px 14px',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: '12px',
                 fontWeight: 600,
@@ -249,15 +245,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="btn-primary"
-            style={{
-              padding: '9px 18px',
-              fontSize: '13px',
-              fontWeight: 700,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
+            className="header-action-btn"
           >
             <Camera size={16} />
             <span>Novo Registro</span>
