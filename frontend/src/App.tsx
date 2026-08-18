@@ -11,6 +11,7 @@ import { NovoServicoModal } from './components/NovoServicoModal';
 import { RodEntryModal } from './components/RodEntryModal';
 import { MetaCelebration } from './components/MetaCelebration';
 import { PwaInstall } from './components/PwaInstall';
+import { PrimeiroAcessoModal } from './components/PrimeiroAcessoModal';
 import { ApiService } from './services/api';
 import { Servico, Furo, Barra } from './types';
 
@@ -296,6 +297,11 @@ export const App: React.FC = () => {
 
       {/* 7. DETECÇÃO & INSTALAÇÃO DO PWA */}
       <PwaInstall />
+
+      {/* 8. MODAL OBRIGATÓRIO DE PRIMEIRO ACESSO (TROCA DE SENHA) */}
+      <PrimeiroAcessoModal
+        isOpen={Boolean(user?.trocar_senha_primeiro_acesso)}
+      />
     </div>
   );
 };

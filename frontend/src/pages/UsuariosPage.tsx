@@ -196,7 +196,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
 
   const getShareText = (creds: { nome: string; perfil: PerfilUsuario; username: string; senha: string }) => {
     const appUrl = getAppUrl();
-    return `🚨 *ACESSO TECNODRILL INFRA* 🚨\n\nOlá, *${creds.nome}*! Seu acesso ao sistema TecnoDrill foi configurado.\n\n🌐 *Link do App:* ${appUrl}\n👤 *Usuário:* ${creds.username}\n🔑 *Senha:* ${creds.senha}\n💼 *Perfil:* ${creds.perfil}\n\n💡 *Dica:* Abra o link pelo navegador do celular e clique em "Instalar App" para ter o aplicativo direto na tela inicial!`;
+    return `🚨 *ACESSO TECNODRILL INFRA* 🚨\n\nOlá, *${creds.nome}*! Seu acesso ao sistema TecnoDrill foi configurado.\n\n🌐 *Link do App:* ${appUrl}\n👤 *Usuário:* ${creds.username}\n🔑 *Senha Inicial:* ${creds.senha}\n💼 *Perfil:* ${creds.perfil}\n\n⚠️ *Importante:* No primeiro acesso, você deverá cadastrar uma nova senha pessoal.\n\n💡 *Dica:* Abra o link pelo navegador do celular e clique em "Instalar App" para ter o aplicativo direto na tela inicial!`;
   };
 
   const handleCopyCredentials = () => {
@@ -231,10 +231,28 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
 
     setSavingPassword(true);
     try {
-      await ApiService.updateUsuario(passwordModalUser.id, { senha: newPassword.trim() });
-      showToast(`Senha de ${passwordModalUser.nome} alterada com sucesso!`, 'success');
+      const senhaInformada = newPassword.trim();
+      const targetUser = passwordModalUser;
+
+      await ApiService.updateUsuario(targetUser.id, { 
+        senha: senhaInformada,
+        trocar_senha_primeiro_acesso: true 
+      });
+      
+      showToast(`Senha de ${targetUser.nome} alterada! O usuário deverá trocá-la no próximo acesso.`, 'success');
       setPasswordModalUser(null);
       setNewPassword('');
+      
+      // Abre a tela de compartilhamento com a nova senha provisória
+      setCopied(false);
+      setShareCredentials({
+        nome: targetUser.nome,
+        perfil: targetUser.perfil,
+        username: targetUser.username,
+        senha: senhaInformada,
+        email: targetUser.email || undefined
+      });
+      fetchUsuarios();
     } catch (err: any) {
       showToast(err.message || 'Erro ao redefinir senha.', 'error');
     } finally {

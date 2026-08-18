@@ -7,6 +7,7 @@ export interface Usuario {
   email: string;
   username: string;
   ativo: boolean;
+  trocar_senha_primeiro_acesso?: boolean;
 }
 
 export type CenarioFinanceiro = 'VALOR_METRO' | 'FATOR_DIAMETRO_METRO' | 'VALOR_FECHADO';

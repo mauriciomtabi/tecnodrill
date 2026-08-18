@@ -36,6 +36,7 @@ export interface TecnodrillUsuario {
   username: string;
   senha_hash: string;
   ativo: boolean;
+  trocar_senha_primeiro_acesso?: boolean;
   criado_em?: string;
 }
 
@@ -331,6 +332,7 @@ export class DBManager {
       username: user.username || user.email?.split('@')[0] || `user_${Date.now()}`,
       senha_hash: user.senha_hash || '',
       ativo: user.ativo !== undefined ? user.ativo : true,
+      trocar_senha_primeiro_acesso: user.trocar_senha_primeiro_acesso !== undefined ? Boolean(user.trocar_senha_primeiro_acesso) : true,
       criado_em: new Date().toISOString()
     };
 

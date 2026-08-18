@@ -21,6 +21,7 @@ interface AuthContextType {
   toggleTheme: () => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   syncOfflineData: () => Promise<void>;
+  trocarSenhaPrimeiroAcesso: (novaSenha: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -107,6 +108,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showToast('Sessão encerrada.', 'info');
   };
 
+  const trocarSenhaPrimeiroAcesso = async (novaSenha: string) => {
+    if (!user) return;
+    const atualizado = await ApiService.trocarSenhaPrimeiroAcesso(user.id, novaSenha);
+    setUser(atualizado);
+    showToast('Senha alterada com sucesso! Bem-vindo(a).', 'success');
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -119,7 +127,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         logout,
         toggleTheme,
         showToast,
-        syncOfflineData
+        syncOfflineData,
+        trocarSenhaPrimeiroAcesso
       }}
     >
       {children}

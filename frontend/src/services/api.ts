@@ -76,7 +76,8 @@ export class ApiService {
       perfil: user.perfil as PerfilUsuario,
       username: user.username,
       email: user.email || '',
-      ativo: Boolean(user.ativo)
+      ativo: Boolean(user.ativo),
+      trocar_senha_primeiro_acesso: user.trocar_senha_primeiro_acesso !== undefined ? Boolean(user.trocar_senha_primeiro_acesso) : false
     };
 
     const token = `td_token_${user.id}_${Date.now()}`;
@@ -85,10 +86,53 @@ export class ApiService {
     return { token, usuario };
   }
 
+  public static async trocarSenhaPrimeiroAcesso(usuarioId: string, novaSenha: string): Promise<Usuario> {
+    if (!novaSenha || novaSenha.length < 6) {
+      throw new Error('A nova senha deve possuir pelo menos 6 caracteres.');
+    }
+    const senhaHash = bcrypt.hashSync(novaSenha, 10);
+
+    try {
+      await supabase
+        .from('tecnodrill_usuarios')
+        .update({
+          senha_hash: senhaHash,
+          trocar_senha_primeiro_acesso: false
+        })
+        .eq('id', usuarioId);
+    } catch (err) {
+      console.warn('[Supabase trocarSenhaPrimeiroAcesso]:', err);
+    }
+
+    try {
+      await fetch('/api/auth/trocar-senha-primeiro-acesso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario_id: usuarioId, nova_senha: novaSenha })
+      });
+    } catch (_) {}
+
+    const usuarioAtual = this.getUsuarioAtual();
+    const atualizado: Usuario = {
+      ...(usuarioAtual || {
+        id: usuarioId,
+        nome: 'Colaborador',
+        perfil: 'OPERADOR',
+        username: 'user',
+        email: '',
+        ativo: true
+      }),
+      trocar_senha_primeiro_acesso: false
+    };
+
+    localStorage.setItem('tecnodrill_usuario', JSON.stringify(atualizado));
+    return atualizado;
+  }
+
   public static async getUsuarios(): Promise<Usuario[]> {
     const { data, error } = await supabase
       .from('tecnodrill_usuarios')
-      .select('id, nome, perfil, username, email, ativo, criado_em')
+      .select('id, nome, perfil, username, email, ativo, trocar_senha_primeiro_acesso, criado_em')
       .order('criado_em', { ascending: false });
 
     if (error) {
@@ -102,7 +146,8 @@ export class ApiService {
       perfil: u.perfil as PerfilUsuario,
       username: u.username,
       email: u.email || '',
-      ativo: Boolean(u.ativo)
+      ativo: Boolean(u.ativo),
+      trocar_senha_primeiro_acesso: u.trocar_senha_primeiro_acesso !== undefined ? Boolean(u.trocar_senha_primeiro_acesso) : false
     }));
   }
 
@@ -118,9 +163,10 @@ export class ApiService {
         username: data.username || data.nome?.toLowerCase().replace(/\s+/g, '.'),
         email: data.email || null,
         senha_hash: senhaHash,
-        ativo: data.ativo !== undefined ? data.ativo : true
+        ativo: data.ativo !== undefined ? data.ativo : true,
+        trocar_senha_primeiro_acesso: true
       })
-      .select('id, nome, perfil, username, email, ativo')
+      .select('id, nome, perfil, username, email, ativo, trocar_senha_primeiro_acesso')
       .single();
 
     if (error) {
@@ -134,7 +180,8 @@ export class ApiService {
       perfil: created.perfil as PerfilUsuario,
       username: created.username,
       email: created.email || '',
-      ativo: Boolean(created.ativo)
+      ativo: Boolean(created.ativo),
+      trocar_senha_primeiro_acesso: true
     };
   }
 

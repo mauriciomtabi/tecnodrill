@@ -119,4 +119,37 @@ router.delete('/usuarios/:id', async (req: Request, res: Response): Promise<any>
   }
 });
 
+// POST /api/auth/trocar-senha-primeiro-acesso
+router.post('/trocar-senha-primeiro-acesso', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { usuario_id, nova_senha } = req.body;
+    if (!usuario_id || !nova_senha || nova_senha.length < 6) {
+      return res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres.' });
+    }
+
+    const senhaHash = await bcrypt.hash(nova_senha, 10);
+    const atualizado = await DBManager.updateUsuario(usuario_id, {
+      senha_hash: senhaHash,
+      trocar_senha_primeiro_acesso: false
+    });
+
+    if (!atualizado) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    await DBManager.logAction(usuario_id, 'PRIMEIRO_ACESSO', `Senha alterada com sucesso no primeiro acesso.`);
+
+    const { senha_hash, ...sanitizado } = atualizado;
+    return res.json({
+      success: true,
+      message: 'Senha alterada com sucesso!',
+      usuario: sanitizado
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Erro ao redefinir senha no primeiro acesso.' });
+  }
+});
+
 export default router;
+
+
