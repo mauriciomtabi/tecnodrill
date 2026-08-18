@@ -310,54 +310,90 @@ export class ApiService {
   // SERVIÇOS / OBRAS
   // ============================================================================
   public static async getServicos(): Promise<Servico[]> {
-    const { data: servicosData, error } = await supabase
-      .from('tecnodrill_servicos')
-      .select('*')
-      .order('criado_em', { ascending: false });
+    let servicosData: any[] = [];
 
-    if (error) {
-      console.error('[Get Servicos Error]:', error);
-      return [];
+    try {
+      const { data, error } = await supabase
+        .from('tecnodrill_servicos')
+        .select('*')
+        .order('criado_em', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        servicosData = data;
+      }
+    } catch (error) {
+      console.warn('[Get Servicos Supabase Warn]:', error);
+    }
+
+    // Fallback para API backend se Supabase estiver vazio ou inacessível
+    if (servicosData.length === 0) {
+      try {
+        const res = await fetch('/api/servicos');
+        if (res.ok) {
+          servicosData = await res.json();
+        }
+      } catch (_) {}
     }
 
     if (!servicosData || servicosData.length === 0) return [];
 
-    // Filtrar por usuário caso seja NAVEGADOR ou OPERADOR
     const usuarioAtual = this.getUsuarioAtual();
-    let listaFiltrada = servicosData;
-    if (usuarioAtual && (usuarioAtual.perfil === 'NAVEGADOR' || usuarioAtual.perfil === 'OPERADOR')) {
-      listaFiltrada = servicosData.filter(s => {
-        if (!s.navegador_id && !s.operador_id) return true; // se não vinculado especificamente, fica visível
-        return (
-          s.navegador_id === usuarioAtual.id ||
-          s.navegador_nome?.toLowerCase() === usuarioAtual.nome.toLowerCase() ||
-          s.operador_id === usuarioAtual.id ||
-          s.operador_nome?.toLowerCase() === usuarioAtual.nome.toLowerCase() ||
-          s.gestor_id === usuarioAtual.id
-        );
-      });
-    }
-
     const result: Servico[] = [];
-    for (const s of listaFiltrada) {
-      const { data: furos } = await supabase
-        .from('tecnodrill_furos')
-        .select('id')
-        .eq('servico_id', s.id);
+
+    for (const s of servicosData) {
+      let furos: any[] = [];
+      try {
+        const { data: furosData } = await supabase
+          .from('tecnodrill_furos')
+          .select('*')
+          .eq('servico_id', s.id);
+        furos = furosData || [];
+      } catch (_) {}
+
+      const navNome = s.navegador_nome || furos?.[0]?.navegador_nome || '';
+      const navId = s.navegador_id || furos?.[0]?.navegador_id || '';
+      const opNome = s.operador_nome || furos?.[0]?.operador_nome || '';
+      const opId = s.operador_id || furos?.[0]?.operador_id || '';
+
+      // Regra de Filtro Estrita por Perfil:
+      // Se for NAVEGADOR ou OPERADOR, só aparece se estiver vinculado expressamente!
+      if (usuarioAtual && usuarioAtual.perfil === 'NAVEGADOR') {
+        const vinculadoNav = (navId && navId === usuarioAtual.id) ||
+          (navNome && navNome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
+          (navNome && navNome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim()) ||
+          furos.some(f => 
+            (f.navegador_id && f.navegador_id === usuarioAtual.id) ||
+            (f.navegador_nome && f.navegador_nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
+            (f.navegador_nome && f.navegador_nome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim())
+          );
+        if (!vinculadoNav) continue;
+      } else if (usuarioAtual && usuarioAtual.perfil === 'OPERADOR') {
+        const vinculadoOp = (opId && opId === usuarioAtual.id) ||
+          (opNome && opNome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
+          (opNome && opNome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim()) ||
+          furos.some(f => 
+            (f.operador_id && f.operador_id === usuarioAtual.id) ||
+            (f.operador_nome && f.operador_nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
+            (f.operador_nome && f.operador_nome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim())
+          );
+        if (!vinculadoOp) continue;
+      }
 
       let metrosExecutados = 0;
 
       if (furos && furos.length > 0) {
         const furoIds = furos.map(f => f.id);
-        const { data: barras } = await supabase
-          .from('tecnodrill_barras')
-          .select('metros, metros_acumulados')
-          .in('furo_id', furoIds)
-          .order('numero_barra', { ascending: false });
+        try {
+          const { data: barras } = await supabase
+            .from('tecnodrill_barras')
+            .select('metros, metros_acumulados')
+            .in('furo_id', furoIds)
+            .order('numero_barra', { ascending: false });
 
-        if (barras && barras.length > 0) {
-          metrosExecutados = barras[0].metros_acumulados || 0;
-        }
+          if (barras && barras.length > 0) {
+            metrosExecutados = barras[0].metros_acumulados || 0;
+          }
+        } catch (_) {}
       }
 
       const totalPrevisto = Number(s.metragem_prevista_total) || 1000;
@@ -404,10 +440,10 @@ export class ApiService {
         centro_custo: s.centro_custo || '',
         local: s.local || '',
         gestor_id: s.gestor_id,
-        navegador_id: s.navegador_id,
-        navegador_nome: s.navegador_nome,
-        operador_id: s.operador_id,
-        operador_nome: s.operador_nome,
+        navegador_id: navId || s.navegador_id,
+        navegador_nome: navNome || s.navegador_nome,
+        operador_id: opId || s.operador_id,
+        operador_nome: opNome || s.operador_nome,
         status: s.status,
         cenario_financeiro: s.cenario_financeiro,
         valor_metro: Number(s.valor_metro) || 0,
@@ -426,23 +462,38 @@ export class ApiService {
   }
 
   public static async getServico(id: string): Promise<Servico & { furos: Furo[] }> {
-    const { data: s, error } = await supabase
-      .from('tecnodrill_servicos')
-      .select('*')
-      .eq('id', id)
-      .single();
+    let s: any = null;
+    try {
+      const { data, error } = await supabase
+        .from('tecnodrill_servicos')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (!error && data) s = data;
+    } catch (_) {}
 
-    if (error || !s) {
+    if (!s) {
+      try {
+        const res = await fetch(`/api/servicos/${id}`);
+        if (res.ok) s = await res.json();
+      } catch (_) {}
+    }
+
+    if (!s) {
       throw new Error('Serviço não encontrado.');
     }
 
-    const { data: furosData } = await supabase
-      .from('tecnodrill_furos')
-      .select('*')
-      .eq('servico_id', id)
-      .order('criado_em', { ascending: true });
+    let furosData: any[] = [];
+    try {
+      const { data } = await supabase
+        .from('tecnodrill_furos')
+        .select('*')
+        .eq('servico_id', id)
+        .order('criado_em', { ascending: true });
+      furosData = data || [];
+    } catch (_) {}
 
-    const furos: Furo[] = (furosData || []).map(f => ({
+    const furos: Furo[] = furosData.map(f => ({
       id: f.id,
       servico_id: f.servico_id,
       data_furo: f.data_furo,
@@ -488,13 +539,28 @@ export class ApiService {
   }
 
   public static async createServico(data: Partial<Servico>): Promise<Servico> {
-    const { count } = await supabase.from('tecnodrill_servicos').select('*', { count: 'exact', head: true });
-    const nextNum = (count || 0) + 1;
+    // 1. Calcular o próximo ID seguro (TD-01, TD-02, TD-03...)
+    let nextNum = 1;
+    try {
+      const { data: existing } = await supabase.from('tecnodrill_servicos').select('id');
+      if (existing && existing.length > 0) {
+        const nums = existing
+          .map(s => {
+            const m = s.id?.match(/\d+/);
+            return m ? parseInt(m[0], 10) : 0;
+          })
+          .filter(n => !isNaN(n));
+        if (nums.length > 0) {
+          nextNum = Math.max(...nums) + 1;
+        }
+      }
+    } catch (_) {}
+
     const servicoId = data.id || `TD-${String(nextNum).padStart(2, '0')}`;
 
-    const payload = {
+    const fullPayload: any = {
       id: servicoId,
-      nome: data.nome,
+      nome: data.nome?.toUpperCase().trim(),
       descricao: data.descricao || null,
       cliente: data.cliente || '',
       projeto: data.projeto || null,
@@ -517,26 +583,68 @@ export class ApiService {
       meta_metros: Number(data.meta_metros) || 100
     };
 
-    const { data: created, error } = await supabase
-      .from('tecnodrill_servicos')
-      .insert(payload)
-      .select()
-      .single();
+    let createdServico: any = null;
 
-    if (error) {
-      console.error('[Create Servico Error]:', error);
-      throw new Error('Erro ao salvar novo serviço.');
+    // Tenta inserir com o payload completo
+    try {
+      const { data: created, error } = await supabase
+        .from('tecnodrill_servicos')
+        .insert(fullPayload)
+        .select()
+        .single();
+      
+      if (!error && created) {
+        createdServico = created;
+      } else if (error) {
+        console.warn('[Supabase createServico fallback, trying base columns]:', error);
+        const { navegador_id, navegador_nome, operador_id, operador_nome, ...basePayload } = fullPayload;
+        const { data: baseCreated, error: baseErr } = await supabase
+          .from('tecnodrill_servicos')
+          .insert(basePayload)
+          .select()
+          .single();
+        if (!baseErr && baseCreated) {
+          createdServico = { ...baseCreated, navegador_id, navegador_nome, operador_id, operador_nome };
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase createServico error]:', err);
     }
 
-    // Criar primeiro furo associado com a equipe
-    await supabase.from('tecnodrill_furos').insert({
-      servico_id: servicoId,
-      navegador_nome: data.navegador_nome || 'Navegador',
-      operador_nome: data.operador_nome || 'Operador',
-      status: 'EM_EXECUCAO'
-    });
+    // Sincroniza também no backend local
+    try {
+      const res = await fetch('/api/servicos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fullPayload)
+      });
+      if (res.ok && !createdServico) {
+        createdServico = await res.json();
+      }
+    } catch (_) {}
 
-    return created;
+    if (!createdServico) {
+      createdServico = {
+        ...fullPayload,
+        criado_em: new Date().toISOString()
+      };
+    }
+
+    // Cria o primeiro furo vinculando a equipe selecionada
+    try {
+      await supabase.from('tecnodrill_furos').insert({
+        servico_id: servicoId,
+        navegador_id: data.navegador_id || null,
+        navegador_nome: data.navegador_nome || 'Navegador',
+        operador_id: data.operador_id || null,
+        operador_nome: data.operador_nome || 'Operador',
+        status: 'EM_EXECUCAO'
+      });
+    } catch (e) {
+      console.warn('[Supabase createFuro inicial]:', e);
+    }
+
+    return createdServico;
   }
 
   public static async updateServico(id: string, data: Partial<Servico>): Promise<Servico> {

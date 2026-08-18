@@ -83,6 +83,10 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
       centro_custo,
       local,
       gestor_id,
+      navegador_id: req.body.navegador_id || null,
+      navegador_nome: req.body.navegador_nome || null,
+      operador_id: req.body.operador_id || null,
+      operador_nome: req.body.operador_nome || null,
       cenario_financeiro: cenario_financeiro || 'VALOR_METRO',
       valor_metro: Number(valor_metro) || 0,
       fator_financeiro: Number(fator_financeiro) || 0,
@@ -90,8 +94,20 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
       valor_total_fechado: Number(valor_total_fechado) || 0,
       metragem_prevista_total: Number(metragem_prevista_total) || 0,
       tipo_meta: tipo_meta || 'DIARIA',
-      meta_metros: Number(meta_metros) || 54
+      meta_metros: Number(meta_metros) || 100
     });
+
+    // Cria também o primeiro furo inicial no banco local
+    try {
+      await DBManager.createFuro({
+        servico_id: novoServico.id,
+        navegador_id: req.body.navegador_id || undefined,
+        navegador_nome: req.body.navegador_nome || 'Navegador',
+        operador_id: req.body.operador_id || undefined,
+        operador_nome: req.body.operador_nome || 'Operador',
+        status: 'EM_EXECUCAO'
+      });
+    } catch (_) {}
 
     await DBManager.logAction(gestor_id || 'SISTEMA', 'CRIAR_SERVICO', `Serviço ${novoServico.nome} criado com sucesso.`);
 
