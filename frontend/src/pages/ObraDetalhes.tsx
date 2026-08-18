@@ -273,9 +273,21 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 OS: {servico.id}
               </span>
             </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 6px 0' }}>
               {servico.cliente} • {servico.local}
             </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {(servico.navegador_nome || furo?.navegador_nome) && (
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(240, 90, 34, 0.12)', color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  🧭 Navegador: <strong style={{ color: 'var(--text-main)' }}>{servico.navegador_nome || furo?.navegador_nome}</strong>
+                </span>
+              )}
+              {(servico.operador_nome || furo?.operador_nome) && (
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(93, 173, 226, 0.12)', color: '#5DADE2', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  👷 Operador: <strong style={{ color: 'var(--text-main)' }}>{servico.operador_nome || furo?.operador_nome}</strong>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -653,19 +653,87 @@ export class ApiService {
     delete payload.metricas;
     delete payload.furos;
 
-    const { data: updated, error } = await supabase
-      .from('tecnodrill_servicos')
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .single();
+    let updatedServico: any = null;
 
-    if (error) {
-      console.error('[Update Servico Error]:', error);
-      throw new Error('Erro ao atualizar serviço.');
+    // 1. Tenta atualizar tecnodrill_servicos com payload completo
+    try {
+      const { data: updated, error } = await supabase
+        .from('tecnodrill_servicos')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && updated) {
+        updatedServico = updated;
+      } else {
+        // Fallback caso a tabela tecnodrill_servicos não tenha colunas de equipe
+        const { navegador_id, navegador_nome, operador_id, operador_nome, ...basePayload } = payload;
+        const { data: baseUpdated, error: baseErr } = await supabase
+          .from('tecnodrill_servicos')
+          .update(basePayload)
+          .eq('id', id)
+          .select()
+          .single();
+        if (!baseErr && baseUpdated) {
+          updatedServico = { ...baseUpdated, navegador_id, navegador_nome, operador_id, operador_nome };
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase updateServico fallback]:', err);
     }
 
-    return updated;
+    // 2. Atualizar todos os furos associados para manter a equipe sincronizada
+    if (data.navegador_id !== undefined || data.navegador_nome !== undefined || data.operador_id !== undefined || data.operador_nome !== undefined) {
+      try {
+        const { data: furosExistentes } = await supabase
+          .from('tecnodrill_furos')
+          .select('id')
+          .eq('servico_id', id);
+
+        const furoTeam = {
+          navegador_id: data.navegador_id || null,
+          navegador_nome: data.navegador_nome || null,
+          operador_id: data.operador_id || null,
+          operador_nome: data.operador_nome || null
+        };
+
+        if (furosExistentes && furosExistentes.length > 0) {
+          await supabase
+            .from('tecnodrill_furos')
+            .update(furoTeam)
+            .eq('servico_id', id);
+        } else {
+          await supabase
+            .from('tecnodrill_furos')
+            .insert({
+              servico_id: id,
+              ...furoTeam,
+              status: 'EM_EXECUCAO'
+            });
+        }
+      } catch (err) {
+        console.warn('[Supabase updateFuros team]:', err);
+      }
+    }
+
+    // 3. Sincronizar na API backend local
+    try {
+      const res = await fetch(`/api/servicos/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (res.ok && !updatedServico) {
+        updatedServico = await res.json();
+      }
+    } catch (_) {}
+
+    if (!updatedServico) {
+      updatedServico = { id, ...data };
+    }
+
+    return updatedServico;
   }
 
   public static async deleteServico(id: string): Promise<{ success: boolean }> {

@@ -71,8 +71,15 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       ApiService.getUsuarios()
         .then(data => {
           setUsuarios(data);
-          // Set initial defaults if creating new
-          if (!initialData) {
+          if (initialData) {
+            const nav = data.find(u => u.id === initialData.navegador_id || (initialData.navegador_nome && u.nome.toLowerCase() === initialData.navegador_nome.toLowerCase()));
+            if (nav) setNavegadorId(nav.id);
+            else if (initialData.navegador_id) setNavegadorId(initialData.navegador_id);
+
+            const op = data.find(u => u.id === initialData.operador_id || (initialData.operador_nome && u.nome.toLowerCase() === initialData.operador_nome.toLowerCase()));
+            if (op) setOperadorId(op.id);
+            else if (initialData.operador_id) setOperadorId(initialData.operador_id);
+          } else {
             const nav = data.find(u => u.perfil === 'NAVEGADOR');
             if (nav) setNavegadorId(nav.id);
             const op = data.find(u => u.perfil === 'OPERADOR');
@@ -81,7 +88,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         })
         .catch(err => console.error('Erro ao carregar usuários:', err));
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   // Carregar dados iniciais ao abrir para edição ou resetar para novo cadastro
   useEffect(() => {
@@ -195,8 +202,13 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const mTotal = Number(metragemPrevista) || 1000;
     const mDia = Number(metaDiaria) || 100;
 
-    const navObj = usuarios.find(u => u.id === navegadorId);
-    const opObj = usuarios.find(u => u.id === operadorId);
+    const navObj = usuarios.find(u => u.id === navegadorId || (navegadorId && u.nome.toLowerCase() === navegadorId.toLowerCase()));
+    const opObj = usuarios.find(u => u.id === operadorId || (operadorId && u.nome.toLowerCase() === operadorId.toLowerCase()));
+
+    const navIdFinal = navObj?.id || navegadorId || undefined;
+    const navNomeFinal = navObj?.nome || (navegadorId && !navObj ? navegadorId : undefined);
+    const opIdFinal = opObj?.id || operadorId || undefined;
+    const opNomeFinal = opObj?.nome || (operadorId && !opObj ? operadorId : undefined);
 
     try {
       const localCompleto = cidade 
@@ -208,10 +220,10 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         cliente: cliente.trim(),
         local: localCompleto,
         descricao: descricao.trim() || undefined,
-        navegador_id: navegadorId || undefined,
-        navegador_nome: navObj?.nome || undefined,
-        operador_id: operadorId || undefined,
-        operador_nome: opObj?.nome || undefined,
+        navegador_id: navIdFinal,
+        navegador_nome: navNomeFinal,
+        operador_id: opIdFinal,
+        operador_nome: opNomeFinal,
         cenario_financeiro: cenario,
         valor_metro: Number(valorMetro) || 0,
         fator_financeiro: Number(fator) || 0,
