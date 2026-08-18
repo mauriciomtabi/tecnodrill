@@ -145,8 +145,6 @@ export const App: React.FC = () => {
     setSavingDirectRod(true);
     try {
       const res = await ApiService.addBarra(activeFuro.id, barraData);
-      showToast(res.mensagem, 'success');
-      setShowDirectRodModal(false);
 
       const servico = await ApiService.getServico(activeFuro.servico_id);
       const metaTotal = servico.meta_metros || 100;
@@ -164,10 +162,14 @@ export const App: React.FC = () => {
 
       // Redireciona para o detalhe da obra caso não esteja
       if (selectedObraId !== activeFuro.servico_id) {
-        handleNavigate(`/app/obras/${activeFuro.servico_id}`);
+        setSelectedObraId(activeFuro.servico_id);
+        setCurrentPath('/app/obras/detalhe');
       }
+
+      return res;
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar apontamento.', 'error');
+      throw err;
     } finally {
       setSavingDirectRod(false);
     }

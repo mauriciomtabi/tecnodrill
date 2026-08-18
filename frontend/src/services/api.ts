@@ -920,6 +920,13 @@ export class ApiService {
       horario_registro: created.horario_registro
     };
 
+    // Disparar evento para atualização em tempo real sem precisar de reload
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tecnodrill:barra_added', {
+        detail: { barra, furoId }
+      }));
+    }
+
     return {
       barra,
       celebrarMeta: false,

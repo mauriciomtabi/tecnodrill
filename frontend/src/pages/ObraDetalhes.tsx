@@ -101,14 +101,38 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     fetchDados();
   }, [servicoId]);
 
+  // Listener para atualização em tempo real se uma barra for adicionada de qualquer lugar (ex: BottomNav)
+  useEffect(() => {
+    const handleRealtimeBarra = (e: any) => {
+      const newBarra = e.detail?.barra;
+      if (newBarra && (!furo || newBarra.furo_id === furo.id)) {
+        setBarras(prev => {
+          if (prev.some(b => b.id === newBarra.id)) return prev;
+          return [...prev, newBarra].sort((a, b) => a.numero_barra - b.numero_barra);
+        });
+        setFuro(prev => prev ? ({
+          ...prev,
+          comprimento_furo: Math.max(prev.comprimento_furo || 0, newBarra.metros_acumulados)
+        }) : null);
+      }
+    };
+
+    window.addEventListener('tecnodrill:barra_added', handleRealtimeBarra);
+    return () => window.removeEventListener('tecnodrill:barra_added', handleRealtimeBarra);
+  }, [furo]);
+
   const handleAddBarra = async (barraData: Partial<Barra>) => {
     if (!furo) return;
     setSavingBarra(true);
     try {
       const res = await ApiService.addBarra(furo.id, barraData);
-      showToast(res.mensagem, 'success');
-      setShowAddModal(false);
-      await fetchDados();
+      
+      // Atualização imediata em memória
+      setBarras(prev => {
+        if (prev.some(b => b.id === res.barra.id)) return prev;
+        return [...prev, res.barra].sort((a, b) => a.numero_barra - b.numero_barra);
+      });
+      setFuro(prev => prev ? ({ ...prev, comprimento_furo: res.barra.metros_acumulados }) : null);
 
       if (res.celebrarMeta) {
         const total = res.barra.metros_acumulados;
@@ -120,8 +144,11 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         });
         setCelebrationOpen(true);
       }
+
+      return res;
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar apontamento.', 'error');
+      throw err;
     } finally {
       setSavingBarra(false);
     }

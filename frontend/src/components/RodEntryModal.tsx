@@ -15,17 +15,20 @@ import {
   ArrowLeft, 
   MapPin, 
   Check, 
-  RefreshCw,
-  Plus,
-  Minus,
-  Loader2
+  RefreshCw, 
+  Plus, 
+  Minus, 
+  Loader2,
+  CheckCircle2,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 
 interface RodEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
   nextBarraNumber: number;
-  onSubmit: (barraData: Partial<Barra>) => Promise<void>;
+  onSubmit: (barraData: Partial<Barra>) => Promise<any>;
   loading?: boolean;
 }
 
@@ -36,7 +39,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   onSubmit,
   loading = false
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [currentBarraNumber, setCurrentBarraNumber] = useState<number>(nextBarraNumber);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [rawPhotoBase64, setRawPhotoBase64] = useState<string | null>(null);
   const [metros, setMetros] = useState<number>(3);
@@ -50,7 +54,17 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [addressDetails, setAddressDetails] = useState<AddressDetails | null>(null);
   const [capturingGps, setCapturingGps] = useState<boolean>(false);
   const [processingWatermark, setProcessingWatermark] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Saved result for Step 4 Success screen
+  const [savedSuccessData, setSavedSuccessData] = useState<{
+    numero_barra: number;
+    metros: number;
+    tem_caixa: boolean;
+    endereco?: string;
+    foto_url?: string;
+  } | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +123,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setStep(1);
+      setCurrentBarraNumber(nextBarraNumber);
       setFotoUrl(null);
       setRawPhotoBase64(null);
       setMetros(3);
@@ -116,9 +131,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setObservacao('');
       setAddressDetails(null);
       setStatusMessage('');
+      setSavedSuccessData(null);
       captureLocation();
     }
-  }, [isOpen, captureLocation]);
+  }, [isOpen, nextBarraNumber, captureLocation]);
 
   if (!isOpen) return null;
 
@@ -199,17 +215,49 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const handleFinalSubmit = async () => {
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
+    setSubmitting(true);
 
-    await onSubmit({
-      numero_barra: nextBarraNumber,
-      metros: Number(metros) || 3,
-      tem_caixa: temCaixa,
-      observacao: observacao.trim() || undefined,
-      foto_url: fotoUrl || undefined,
-      latitude: latitude || undefined,
-      longitude: longitude || undefined,
-      endereco: formattedAddress
-    });
+    try {
+      await onSubmit({
+        numero_barra: currentBarraNumber,
+        metros: Number(metros) || 3,
+        tem_caixa: temCaixa,
+        observacao: observacao.trim() || undefined,
+        foto_url: fotoUrl || undefined,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
+        endereco: formattedAddress
+      });
+
+      // Salva os dados para a Tela de Sucesso
+      setSavedSuccessData({
+        numero_barra: currentBarraNumber,
+        metros: Number(metros) || 3,
+        tem_caixa: temCaixa,
+        endereco: formattedAddress,
+        foto_url: fotoUrl || undefined
+      });
+
+      // Avança para a Tela de Sucesso (Passo 4)
+      setStep(4);
+    } catch (err) {
+      console.error('Erro ao enviar apontamento:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleStartNextRod = () => {
+    const nextNum = currentBarraNumber + 1;
+    setCurrentBarraNumber(nextNum);
+    setFotoUrl(null);
+    setRawPhotoBase64(null);
+    setMetros(3);
+    setTemCaixa(false);
+    setObservacao('');
+    setSavedSuccessData(null);
+    setStep(1);
+    captureLocation();
   };
 
   return createPortal(
@@ -274,7 +322,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-                Registrar Novo Registro #{nextBarraNumber}
+                Registrar Novo Registro #{currentBarraNumber}
               </h2>
               <button
                 onClick={onClose}
@@ -773,7 +821,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   fontFamily: 'var(--font-mono)'
                 }}
               >
-                REGISTRO #{nextBarraNumber} (+{metros}m)
+                REGISTRO #{currentBarraNumber} (+{metros}m)
               </div>
             </div>
 
@@ -870,7 +918,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Botão de Envio Final */}
             <button
               type="button"
-              disabled={loading}
+              disabled={submitting || loading}
               onClick={handleFinalSubmit}
               style={{
                 backgroundColor: 'var(--primary)',
@@ -880,20 +928,193 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 padding: '14px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: (submitting || loading) ? 'wait' : 'pointer',
                 boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '8px'
+                gap: '8px',
+                opacity: (submitting || loading) ? 0.8 : 1
               }}
             >
-              {loading ? (
-                <span>Enviando...</span>
+              {submitting || loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>Salvando Registro #{currentBarraNumber}...</span>
+                </>
               ) : (
-                <span>Enviar Registro #{nextBarraNumber}</span>
+                <span>Salvar Registro #{currentBarraNumber}</span>
               )}
             </button>
+
+          </div>
+        )}
+
+        {/* =========================================================================
+            PASSO 4: TELA DE REGISTRO CONCLUÍDO COM SUCESSO (FEEDBACK INSTANTÂNEO)
+           ========================================================================= */}
+        {step === 4 && savedSuccessData && (
+          <div 
+            className="fade-in"
+            style={{ 
+              padding: '28px 24px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              textAlign: 'center', 
+              gap: '20px',
+              overflowY: 'auto'
+            }}
+          >
+            {/* Animated Glowing Success Icon */}
+            <div 
+              style={{
+                width: '76px',
+                height: '76px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(39, 174, 96, 0.15)',
+                border: '2px solid var(--success)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--success)',
+                boxShadow: '0 0 24px rgba(39, 174, 96, 0.35)',
+                marginTop: '8px'
+              }}
+            >
+              <CheckCircle2 size={44} />
+            </div>
+
+            {/* Success Heading */}
+            <div>
+              <span 
+                style={{
+                  display: 'inline-block',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  color: 'var(--success)',
+                  backgroundColor: 'rgba(39, 174, 96, 0.12)',
+                  padding: '3px 10px',
+                  borderRadius: '12px',
+                  marginBottom: '8px'
+                }}
+              >
+                APONTAMENTO SALVO
+              </span>
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+                Registro #{savedSuccessData.numero_barra} Concluído!
+              </h2>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
+                Foto oficial carimbada e geolocalização registradas com sucesso.
+              </p>
+            </div>
+
+            {/* Summary Details Card */}
+            <div 
+              style={{
+                width: '100%',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-md)',
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                textAlign: 'left',
+                boxSizing: 'border-box'
+              }}
+            >
+              {/* Photo & Badge Row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {savedSuccessData.foto_url && (
+                  <div style={{ width: '64px', height: '54px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#000', flexShrink: 0 }}>
+                    <img src={savedSuccessData.foto_url} alt="Foto Carimbada" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700 }}>
+                    ESTRUTURA APONTADA:
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF' }}>
+                      +{savedSuccessData.metros}m
+                    </span>
+                    <span 
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: savedSuccessData.tem_caixa ? 'rgba(39, 174, 96, 0.18)' : 'rgba(240, 90, 34, 0.18)',
+                        color: savedSuccessData.tem_caixa ? 'var(--success)' : 'var(--primary)'
+                      }}
+                    >
+                      {savedSuccessData.tem_caixa ? 'COM CAIXA' : 'CANALIZAÇÃO'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Address Row */}
+              {savedSuccessData.endereco && (
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '8px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <MapPin size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: 600, lineHeight: '1.3' }}>
+                    {savedSuccessData.endereco}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={handleStartNextRod}
+                style={{
+                  backgroundColor: 'var(--primary)',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  padding: '14px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Plus size={18} />
+                <span>Apontar Próximo Registro (#{currentBarraNumber + 1})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-main)',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Layers size={16} />
+                <span>Ver Lista de Registros da Obra</span>
+              </button>
+            </div>
 
           </div>
         )}

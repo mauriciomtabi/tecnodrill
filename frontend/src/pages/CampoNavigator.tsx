@@ -137,8 +137,6 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
 
       const res = await ApiService.addBarra(selectedFuro.id, barraData);
       setBarras(prev => [...prev, res.barra]);
-      setShowAddBarraModal(false);
-      showToast(res.mensagem, 'success');
 
       const totalApos = res.barra.metros_acumulados;
       if (res.celebrarMeta || (totalApos >= metaMetros)) {
@@ -149,8 +147,10 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
         });
         setCelebrationOpen(true);
       }
+      return res;
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar apontamento.', 'error');
+      throw err;
     } finally {
       setSavingBarra(false);
     }
