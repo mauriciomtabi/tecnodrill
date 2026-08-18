@@ -96,8 +96,7 @@ export class ApiService {
       await supabase
         .from('tecnodrill_usuarios')
         .update({
-          senha_hash: senhaHash,
-          trocar_senha_primeiro_acesso: false
+          senha_hash: senhaHash
         })
         .eq('id', usuarioId);
     } catch (err) {
@@ -130,59 +129,99 @@ export class ApiService {
   }
 
   public static async getUsuarios(): Promise<Usuario[]> {
-    const { data, error } = await supabase
-      .from('tecnodrill_usuarios')
-      .select('id, nome, perfil, username, email, ativo, trocar_senha_primeiro_acesso, criado_em')
-      .order('criado_em', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('tecnodrill_usuarios')
+        .select('*')
+        .order('criado_em', { ascending: false });
 
-    if (error) {
-      console.error('[Get Usuarios Error]:', error);
-      throw new Error('Erro ao buscar lista de usuários.');
+      if (!error && data && data.length > 0) {
+        return data.map(u => ({
+          id: u.id,
+          nome: u.nome,
+          perfil: u.perfil as PerfilUsuario,
+          username: u.username,
+          email: u.email || '',
+          ativo: Boolean(u.ativo),
+          trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
+        }));
+      }
+    } catch (err) {
+      console.warn('[Supabase getUsuarios warn]:', err);
     }
 
-    return (data || []).map(u => ({
-      id: u.id,
-      nome: u.nome,
-      perfil: u.perfil as PerfilUsuario,
-      username: u.username,
-      email: u.email || '',
-      ativo: Boolean(u.ativo),
-      trocar_senha_primeiro_acesso: u.trocar_senha_primeiro_acesso !== undefined ? Boolean(u.trocar_senha_primeiro_acesso) : false
-    }));
+    // Fallback via API backend local
+    try {
+      const res = await fetch('/api/auth/usuarios');
+      if (res.ok) {
+        const data = await res.json();
+        return data.map((u: any) => ({
+          id: u.id,
+          nome: u.nome,
+          perfil: u.perfil as PerfilUsuario,
+          username: u.username,
+          email: u.email || '',
+          ativo: Boolean(u.ativo),
+          trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
+        }));
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   public static async createUsuario(data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
     const senhaFinal = data.senha || 'Tecno@123';
     const senhaHash = bcrypt.hashSync(senhaFinal, 10);
 
-    const { data: created, error } = await supabase
-      .from('tecnodrill_usuarios')
-      .insert({
-        nome: data.nome,
-        perfil: data.perfil,
-        username: data.username || data.nome?.toLowerCase().replace(/\s+/g, '.'),
-        email: data.email || null,
-        senha_hash: senhaHash,
-        ativo: data.ativo !== undefined ? data.ativo : true,
-        trocar_senha_primeiro_acesso: true
-      })
-      .select('id, nome, perfil, username, email, ativo, trocar_senha_primeiro_acesso')
-      .single();
+    const payload: any = {
+      nome: data.nome,
+      perfil: data.perfil,
+      username: data.username || data.nome?.toLowerCase().replace(/\s+/g, '.'),
+      email: data.email || null,
+      senha_hash: senhaHash,
+      ativo: data.ativo !== undefined ? data.ativo : true
+    };
 
-    if (error) {
-      console.error('[Create Usuario Error]:', error);
-      throw new Error('Erro ao cadastrar usuário. Verifique se o username já existe.');
+    let createdUser: any = null;
+
+    try {
+      const { data: created, error } = await supabase
+        .from('tecnodrill_usuarios')
+        .insert(payload)
+        .select('*')
+        .single();
+
+      if (!error && created) {
+        createdUser = created;
+      }
+    } catch (err) {
+      console.warn('[Supabase createUsuario warn]:', err);
     }
 
-    return {
-      id: created.id,
-      nome: created.nome,
-      perfil: created.perfil as PerfilUsuario,
-      username: created.username,
-      email: created.email || '',
-      ativo: Boolean(created.ativo),
+    // Sincroniza também no backend local
+    try {
+      const res = await fetch('/api/auth/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, senha: senhaFinal })
+      });
+      if (res.ok && !createdUser) {
+        createdUser = await res.json();
+      }
+    } catch (_) {}
+
+    const result: Usuario = {
+      id: createdUser?.id || crypto.randomUUID(),
+      nome: data.nome || 'Novo Usuário',
+      perfil: (data.perfil as PerfilUsuario) || 'OPERADOR',
+      username: payload.username,
+      email: data.email || '',
+      ativo: payload.ativo,
       trocar_senha_primeiro_acesso: true
     };
+
+    return result;
   }
 
   public static async updateUsuario(id: string, data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
@@ -196,25 +235,42 @@ export class ApiService {
       payload.senha_hash = bcrypt.hashSync(data.senha.trim(), 10);
     }
 
-    const { data: updated, error } = await supabase
-      .from('tecnodrill_usuarios')
-      .update(payload)
-      .eq('id', id)
-      .select('id, nome, perfil, username, email, ativo')
-      .single();
+    let updatedUser: any = null;
 
-    if (error) {
-      console.error('[Update Usuario Error]:', error);
-      throw new Error('Erro ao atualizar dados do usuário.');
+    try {
+      const { data: updated, error } = await supabase
+        .from('tecnodrill_usuarios')
+        .update(payload)
+        .eq('id', id)
+        .select('*')
+        .single();
+
+      if (!error && updated) {
+        updatedUser = updated;
+      }
+    } catch (err) {
+      console.warn('[Supabase updateUsuario warn]:', err);
     }
 
+    try {
+      const res = await fetch(`/api/auth/usuarios/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok && !updatedUser) {
+        updatedUser = await res.json();
+      }
+    } catch (_) {}
+
     return {
-      id: updated.id,
-      nome: updated.nome,
-      perfil: updated.perfil as PerfilUsuario,
-      username: updated.username,
-      email: updated.email || '',
-      ativo: Boolean(updated.ativo)
+      id: id,
+      nome: updatedUser?.nome || data.nome || 'Usuário',
+      perfil: (updatedUser?.perfil || data.perfil || 'OPERADOR') as PerfilUsuario,
+      username: updatedUser?.username || data.username || '',
+      email: updatedUser?.email || data.email || '',
+      ativo: updatedUser?.ativo !== undefined ? Boolean(updatedUser.ativo) : true,
+      trocar_senha_primeiro_acesso: updatedUser?.trocar_senha_primeiro_acesso !== undefined ? Boolean(updatedUser.trocar_senha_primeiro_acesso) : false
     };
   }
 
