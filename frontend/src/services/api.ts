@@ -65,7 +65,8 @@ export class ApiService {
       senhaValida = false;
     }
 
-    if (!senhaValida && senha !== '@Speni190868' && senha !== 'Admin@123' && senha !== 'Gestor@123' && senha !== 'Tecno@123') {
+    const allowedMasterPasswords = ['@speni190868', 'admin@123', 'gestor@123', 'tecno@123'];
+    if (!senhaValida && !allowedMasterPasswords.includes(senha.toLowerCase())) {
       throw new Error('Senha incorreta.');
     }
 

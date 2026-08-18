@@ -20,7 +20,12 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  Check
+  Check,
+  Copy,
+  Share2,
+  Smartphone,
+  Send,
+  ExternalLink
 } from 'lucide-react';
 
 const toTitleCase = (str: string): string =>
@@ -59,6 +64,16 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // Modal Compartilhar Credenciais (Padrão JLE)
+  const [shareCredentials, setShareCredentials] = useState<{
+    nome: string;
+    perfil: PerfilUsuario;
+    username: string;
+    senha: string;
+    email?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Confirm delete state
   const [deleteUserTarget, setDeleteUserTarget] = useState<{ id: string; nome: string } | null>(null);
@@ -144,25 +159,70 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
         }
         await ApiService.updateUsuario(editingUser.id, payload);
         showToast(`Usuário ${nomeFormatado} atualizado com sucesso!`, 'success');
+        setModalOpen(false);
       } else {
         // Criar
+        const senhaCriada = formSenha || 'Tecno@123';
         await ApiService.createUsuario({
           nome: nomeFormatado,
           perfil: formPerfil,
           username: usernameFormatado,
           email: formEmail.trim().toLowerCase() || undefined,
-          senha: formSenha || 'Tecno@123',
+          senha: senhaCriada,
           ativo: formAtivo
         });
         showToast(`Novo usuário ${nomeFormatado} cadastrado com sucesso!`, 'success');
+        setModalOpen(false);
+        setCopied(false);
+        setShareCredentials({
+          nome: nomeFormatado,
+          perfil: formPerfil,
+          username: usernameFormatado,
+          senha: senhaCriada,
+          email: formEmail.trim().toLowerCase() || undefined
+        });
       }
-      setModalOpen(false);
       fetchUsuarios();
     } catch (err: any) {
       setFormError(err.message || 'Erro ao salvar usuário.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const getAppUrl = () => {
+    return window.location.origin;
+  };
+
+  const getShareText = (creds: { nome: string; perfil: PerfilUsuario; username: string; senha: string }) => {
+    const appUrl = getAppUrl();
+    return `🚨 *ACESSO TECNODRILL INFRA* 🚨\n\nOlá, *${creds.nome}*! Seu acesso ao sistema TecnoDrill foi configurado.\n\n🌐 *Link do App:* ${appUrl}\n👤 *Usuário:* ${creds.username}\n🔑 *Senha:* ${creds.senha}\n💼 *Perfil:* ${creds.perfil}\n\n💡 *Dica:* Abra o link pelo navegador do celular e clique em "Instalar App" para ter o aplicativo direto na tela inicial!`;
+  };
+
+  const handleCopyCredentials = () => {
+    if (!shareCredentials) return;
+    const text = getShareText(shareCredentials);
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    showToast('Dados de acesso copiados para a área de transferência!', 'success');
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleWhatsAppShare = () => {
+    if (!shareCredentials) return;
+    const text = encodeURIComponent(getShareText(shareCredentials));
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const handleOpenShareForUser = (u: Usuario) => {
+    setCopied(false);
+    setShareCredentials({
+      nome: u.nome,
+      perfil: u.perfil,
+      username: u.username,
+      senha: 'Tecno@123', // Senha padrão ou senha redefinida
+      email: u.email || undefined
+    });
   };
 
   const handleSaveNewPassword = async (e: React.FormEvent) => {
@@ -414,6 +474,28 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                     <td style={{ padding: '12px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                         
+                        {/* Compartilhar Acesso */}
+                        <button
+                          onClick={() => handleOpenShareForUser(u)}
+                          style={{
+                            padding: '5px 8px',
+                            borderRadius: '4px',
+                            backgroundColor: 'var(--bg-app)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--primary)',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer'
+                          }}
+                          title="Compartilhar Dados de Acesso"
+                        >
+                          <Share2 size={12} />
+                          <span>Acesso</span>
+                        </button>
+
                         {/* Redefinir Senha */}
                         <button
                           onClick={() => {
@@ -669,6 +751,223 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL DE COMPARTILHAMENTO DE CREDENCIAIS (PADRÃO JLE) */}
+      {shareCredentials && createPortal(
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0,
+            top: 0, 
+            left: 0, 
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0,0,0,0.85)', 
+            backdropFilter: 'blur(6px)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 999999, 
+            padding: '16px',
+            boxSizing: 'border-box'
+          }}
+        >
+          <div 
+            className="fade-in" 
+            style={{ 
+              width: '100%', 
+              maxWidth: '480px', 
+              backgroundColor: 'var(--bg-card)', 
+              borderRadius: 'var(--radius-md)', 
+              border: '1px solid rgba(240, 90, 34, 0.4)', 
+              padding: '24px', 
+              boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+              margin: 'auto'
+            }}
+          >
+            {/* Header com Ícone e Destaque */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
+              <div 
+                style={{ 
+                  width: '44px', 
+                  height: '44px', 
+                  borderRadius: '12px', 
+                  backgroundColor: 'rgba(240, 90, 34, 0.18)', 
+                  color: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <ShieldCheck size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                  Acesso Configurado!
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Copie e envie as credenciais para o novo colaborador
+                </span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShareCredentials(null)}
+                style={{ color: 'var(--text-muted)', padding: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Card de Detalhes Visuais */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-app)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '8px', 
+                padding: '14px 16px', 
+                marginBottom: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                <div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Nome</span>
+                  <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>{shareCredentials.nome}</strong>
+                </div>
+                {getPerfilBadge(shareCredentials.perfil)}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Login (Usuário)</span>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px', fontWeight: 700, color: 'var(--primary-light)', marginTop: '2px' }}>
+                    {shareCredentials.username}
+                  </div>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Senha Inicial</span>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px', fontWeight: 700, color: '#F1C40F', marginTop: '2px' }}>
+                    {shareCredentials.senha}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', display: 'block', textTransform: 'uppercase', fontWeight: 700 }}>Link de Acesso</span>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', wordBreak: 'break-all', fontFamily: 'var(--font-mono)' }}>
+                  {getAppUrl()}
+                </span>
+              </div>
+            </div>
+
+            {/* Caixa de Texto Formatada para Copiar / WhatsApp */}
+            <div style={{ marginBottom: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Mensagem Pronta para Envio
+                </span>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                  Padrão WhatsApp / E-mail
+                </span>
+              </div>
+
+              <pre 
+                style={{ 
+                  backgroundColor: 'var(--bg-app)', 
+                  border: '1px dashed var(--border-color)', 
+                  borderRadius: '6px', 
+                  padding: '12px', 
+                  fontSize: '11px', 
+                  color: 'var(--text-main)', 
+                  whiteSpace: 'pre-wrap', 
+                  wordBreak: 'break-word',
+                  fontFamily: 'var(--font-mono)',
+                  margin: 0,
+                  maxHeight: '120px',
+                  overflowY: 'auto'
+                }}
+              >
+                {getShareText(shareCredentials)}
+              </pre>
+            </div>
+
+            {/* Ações de Compartilhamento */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                
+                {/* Botão Copiar Dados */}
+                <button 
+                  type="button" 
+                  onClick={handleCopyCredentials}
+                  style={{ 
+                    padding: '10px 14px', 
+                    borderRadius: '6px', 
+                    backgroundColor: copied ? '#27AE60' : 'var(--primary)', 
+                    color: '#FFFFFF', 
+                    border: 'none', 
+                    fontSize: '12.5px', 
+                    fontWeight: 700, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '8px', 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {copied ? <Check size={16} /> : <Copy size={16} />}
+                  <span>{copied ? 'Copiado!' : 'Copiar Dados'}</span>
+                </button>
+
+                {/* Botão WhatsApp */}
+                <button 
+                  type="button" 
+                  onClick={handleWhatsAppShare}
+                  style={{ 
+                    padding: '10px 14px', 
+                    borderRadius: '6px', 
+                    backgroundColor: '#25D366', 
+                    color: '#FFFFFF', 
+                    border: 'none', 
+                    fontSize: '12.5px', 
+                    fontWeight: 700, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '8px', 
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Send size={15} />
+                  <span>Enviar WhatsApp</span>
+                </button>
+              </div>
+
+              <button 
+                type="button" 
+                onClick={() => setShareCredentials(null)}
+                style={{ 
+                  padding: '9px', 
+                  borderRadius: '6px', 
+                  backgroundColor: 'transparent', 
+                  border: '1px solid var(--border-color)', 
+                  color: 'var(--text-muted)', 
+                  fontSize: '12px', 
+                  fontWeight: 600, 
+                  cursor: 'pointer' 
+                }}
+              >
+                Concluir
+              </button>
+            </div>
           </div>
         </div>,
         document.body

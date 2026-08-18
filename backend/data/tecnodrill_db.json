@@ -11,10 +11,10 @@
     },
     {
       "id": "11111111-1111-4111-a111-111111111111",
-      "nome": "Eduardo Gestor",
+      "nome": "Eduardo Costa",
       "perfil": "GESTOR",
-      "email": "eduardo@tecnodrill.com.br",
-      "username": "eduardo",
+      "email": "eduardo.costa@tecnodrill.com.br",
+      "username": "eduardo.costa",
       "senha_hash": "$2a$10$KQGRAgx4Du9/DocFvXcxjODVbVOwTmT5Rmlfv46uUipYSPFeFu7ZS",
       "ativo": true
     },
@@ -46,8 +46,62 @@
       "ativo": true
     }
   ],
-  "servicos": [],
-  "furos": [],
-  "barras": [],
+  "servicos": [
+    {
+      "id": "TD-OBRA-01",
+      "nome": "Canalização e Perfuração - Itapoá Centro",
+      "descricao": "Cruzamento com rede subterrânea e travessia urbana",
+      "cliente": "Vale do Ouro",
+      "projeto": "PRJ-ITAPOA-2026",
+      "obra": "OBRA-01-SP",
+      "centro_custo": "CC-3021",
+      "local": "Itapoá SP - Rua Sol Nascente",
+      "gestor_id": "11111111-1111-4111-a111-111111111111",
+      "status": "EM_ANDAMENTO",
+      "cenario_financeiro": "FATOR_DIAMETRO_METRO",
+      "valor_metro": 0,
+      "fator_financeiro": 2.85,
+      "diametro_furo_mm": 150,
+      "valor_total_fechado": 0,
+      "metragem_prevista_total": 54,
+      "tipo_meta": "DIARIA",
+      "meta_metros": 54,
+      "criado_em": "2026-08-18T10:00:00.000Z"
+    }
+  ],
+  "furos": [
+    {
+      "id": "55555555-5555-4555-a555-555555555555",
+      "servico_id": "TD-OBRA-01",
+      "data_furo": "2026-08-18",
+      "navegador_id": "33333333-3333-4333-a333-333333333333",
+      "operador_id": "44444444-4444-4444-a444-444444444444",
+      "navegador_nome": "Marcelo Navegador",
+      "operador_nome": "Antônio Operador",
+      "tubo_aplicado": "PEAD 150mm",
+      "diametro_furo": "150 MM",
+      "comprimento_furo": 54,
+      "tipo_perfuracao": ["Ruas/Av"],
+      "utilizacao_tubo": ["Esgoto"],
+      "hora_inicio_furo": "08:00",
+      "hora_fim_furo": "17:30",
+      "horimetro_inicio_furo": "1240.5",
+      "horimetro_fim_furo": "1249.0",
+      "hora_inicio_pux": "18:00",
+      "hora_fim_pux": "20:15",
+      "horimetro_inicio_pux": "1249.0",
+      "horimetro_fim_pux": "1251.2",
+      "status": "FINALIZADO",
+      "observacoes": "Perfuração concluída com sucesso conforme ficha técnica de campo"
+    }
+  ],
+  "barras": [
+    { "id": "b1", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 1, "metros": 3, "metros_acumulados": 3, "angulo_pitch": "+0,08", "profundidade_cm": 167, "tem_caixa": false, "observacao": "Ponto de entrada do furo", "latitude": -23.5505, "longitude": -46.6333 },
+    { "id": "b2", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 2, "metros": 3, "metros_acumulados": 6, "angulo_pitch": "+0,08", "profundidade_cm": 164, "tem_caixa": false, "observacao": "", "latitude": -23.5506, "longitude": -46.6334 },
+    { "id": "b3", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 3, "metros": 3, "metros_acumulados": 9, "angulo_pitch": "+0,08", "profundidade_cm": 164, "tem_caixa": false, "observacao": "", "latitude": -23.5507, "longitude": -46.6335 },
+    { "id": "b4", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 4, "metros": 3, "metros_acumulados": 12, "angulo_pitch": "+0,08", "profundidade_cm": 160, "tem_caixa": true, "observacao": "Caixa de passagem 01", "latitude": -23.5508, "longitude": -46.6336 },
+    { "id": "b5", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 5, "metros": 3, "metros_acumulados": 15, "angulo_pitch": "+0,09", "profundidade_cm": 161, "tem_caixa": false, "observacao": "", "latitude": -23.5509, "longitude": -46.6337 },
+    { "id": "b6", "furo_id": "55555555-5555-4555-a555-555555555555", "numero_barra": 6, "metros": 3, "metros_acumulados": 18, "angulo_pitch": "+0,08", "profundidade_cm": 155, "tem_caixa": false, "observacao": "", "latitude": -23.5510, "longitude": -46.6338 }
+  ],
   "logs": []
 }
