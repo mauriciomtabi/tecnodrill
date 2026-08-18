@@ -386,12 +386,11 @@ export class ApiService {
         try {
           const { data: barras } = await supabase
             .from('tecnodrill_barras')
-            .select('metros, metros_acumulados')
-            .in('furo_id', furoIds)
-            .order('numero_barra', { ascending: false });
+            .select('metros')
+            .in('furo_id', furoIds);
 
           if (barras && barras.length > 0) {
-            metrosExecutados = barras[0].metros_acumulados || 0;
+            metrosExecutados = barras.reduce((acc, b) => acc + (Number(b.metros) || 0), 0);
           }
         } catch (_) {}
       }

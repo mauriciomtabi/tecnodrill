@@ -108,24 +108,25 @@ export class FinanceiroService {
       for (const furo of furosDoServico) {
         const barras = barrasPorFuro[furo.id] || [];
         for (const b of barras) {
-          metrosServico += 3; // Cada haste são 3 metros
-          totalMetrosGeral += 3;
+          const m = Number(b.metros) || 3;
+          metrosServico += m;
+          totalMetrosGeral += m;
 
           const dataBarra = b.horario_registro ? b.horario_registro.split('T')[0] : hojeStr;
           const dataBarraObj = b.horario_registro ? new Date(b.horario_registro) : new Date();
 
           // Contagem do período de metas
           if (s.tipo_meta === 'DIARIA' && dataBarra === hojeStr) {
-            metrosPeriodoAtual += 3;
+            metrosPeriodoAtual += m;
           } else if (s.tipo_meta === 'SEMANAL' && dataBarraObj >= seteDiasAtras) {
-            metrosPeriodoAtual += 3;
+            metrosPeriodoAtual += m;
           }
 
           // Agrupamento diário
           if (!diarioMap[dataBarra]) {
             diarioMap[dataBarra] = { metros: 0, retorno: 0 };
           }
-          diarioMap[dataBarra].metros += 3;
+          diarioMap[dataBarra].metros += m;
         }
       }
 
