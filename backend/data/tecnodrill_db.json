@@ -81,6 +81,28 @@
   ],
   "servicos": [
     {
+      "id": "TD-02",
+      "nome": "TESTE",
+      "descricao": "TESTE NAVEGADOR",
+      "cliente": "TELEMON",
+      "projeto": "",
+      "obra": "",
+      "centro_custo": "",
+      "local": "Capivari - SP • ",
+      "gestor_id": null,
+      "status": "EM_ANDAMENTO",
+      "cenario_financeiro": "VALOR_METRO",
+      "valor_metro": 180,
+      "fator_financeiro": 2.85,
+      "diametro_furo_mm": 150,
+      "valor_total_fechado": 50000,
+      "metragem_prevista_total": 1000,
+      "tipo_meta": "DIARIA",
+      "meta_metros": 100,
+      "criado_em": "2026-08-18T13:33:34.981Z",
+      "atualizado_em": "2026-08-18T13:33:34.983Z"
+    },
+    {
       "id": "TD-OBRA-01",
       "nome": "Canalização e Perfuração - Itapoá Centro",
       "descricao": "Cruzamento com rede subterrânea e travessia urbana",
@@ -103,6 +125,34 @@
     }
   ],
   "furos": [
+    {
+      "id": "be7e2a7e-5880-487a-99cf-4da9b88f67d8",
+      "servico_id": "TD-02",
+      "data_furo": "2026-08-18",
+      "navegador_id": "00000000-0000-4000-a000-000000000001",
+      "operador_id": "628d0ff4-7ebf-4047-9cd4-c39a0568cf6a",
+      "navegador_nome": "Mauricio Maciel",
+      "operador_nome": "Operador Teste",
+      "tubo_aplicado": "",
+      "diametro_furo": "",
+      "comprimento_furo": 0,
+      "tipo_perfuracao": [],
+      "utilizacao_tubo": [],
+      "hora_inicio_furo": "",
+      "hora_fim_furo": "",
+      "horimetro_inicio_furo": "",
+      "horimetro_fim_furo": "",
+      "hora_inicio_pux": "",
+      "hora_fim_pux": "",
+      "horimetro_inicio_pux": "",
+      "horimetro_fim_pux": "",
+      "status": "EM_EXECUCAO",
+      "observacoes": "",
+      "assinatura_navegador": "",
+      "assinatura_fiscal": "",
+      "criado_em": "2026-08-18T13:33:35.214Z",
+      "atualizado_em": "2026-08-18T13:33:35.214Z"
+    },
     {
       "id": "55555555-5555-4555-a555-555555555555",
       "servico_id": "TD-OBRA-01",
@@ -212,5 +262,13 @@
       "longitude": -46.6338
     }
   ],
-  "logs": []
+  "logs": [
+    {
+      "id": "3cece9c1-39d6-4213-9e47-9025a3943791",
+      "usuario_id": "SISTEMA",
+      "acao": "CRIAR_SERVICO",
+      "detalhes": "Serviço TESTE criado com sucesso.",
+      "criado_em": "2026-08-18T13:33:35.273Z"
+    }
+  ]
 }

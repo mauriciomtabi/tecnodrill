@@ -134,6 +134,54 @@ input:focus, textarea:focus, select:focus {
   }
 }
 
+/* Mobile Top Header (Canto Superior Direito) */
+.mobile-top-header {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .mobile-top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: 12px;
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .mobile-top-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .mobile-logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(231, 76, 60, 0.14);
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    color: #FF6B6B;
+    padding: 7px 14px;
+    border-radius: var(--radius-sm, 6px);
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-logout-btn:hover, .mobile-logout-btn:active {
+    background-color: rgba(231, 76, 60, 0.28);
+    transform: scale(0.96);
+  }
+}
+
 /* Hide subtitles completely on mobile */
 @media (max-width: 768px) {
   .header-subtitle {

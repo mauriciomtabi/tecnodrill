@@ -14,9 +14,10 @@ import { PwaInstall } from './components/PwaInstall';
 import { PrimeiroAcessoModal } from './components/PrimeiroAcessoModal';
 import { ApiService } from './services/api';
 import { Servico, Furo, Barra } from './types';
+import { LogOut } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { user, token, isLoading, showToast } = useAuth();
+  const { user, token, isLoading, showToast, logout } = useAuth();
   
   const [currentPath, setCurrentPath] = useState('');
   const [selectedObraId, setSelectedObraId] = useState<string | null>(null);
@@ -261,6 +262,34 @@ export const App: React.FC = () => {
 
       {/* 2. RESPONSIVE MAIN CONTENT */}
       <main className={`main-content${sidebarCollapsed ? ' collapsed' : ''}`}>
+        {/* MOBILE TOP HEADER COM BOTÃO DE SAIR NO CANTO SUPERIOR DIREITO */}
+        <header className="mobile-top-header">
+          <div 
+            className="mobile-top-brand"
+            onClick={() => handleNavigate(user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN' ? '/app/obras' : '/tecnico/obras')}
+          >
+            <img src="/logo.png" alt="TecnoDrill" style={{ height: '26px', width: 'auto', objectFit: 'contain' }} />
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--text-main)', lineHeight: 1.1 }}>
+                Tecno<span style={{ color: 'var(--primary)' }}>Drill</span>
+              </span>
+              <span style={{ fontSize: '9px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                {user?.perfil} • {user?.nome?.split(' ')[0]}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={logout}
+            className="mobile-logout-btn"
+            title="Sair do sistema"
+          >
+            <LogOut size={14} />
+            <span>Sair</span>
+          </button>
+        </header>
+
         {renderActivePage()}
       </main>
 
