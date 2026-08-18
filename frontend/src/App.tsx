@@ -198,6 +198,10 @@ export const App: React.FC = () => {
     return <Login />;
   }
 
+  if (user.trocar_senha_primeiro_acesso) {
+    return <PrimeiroAcessoModal isOpen={true} />;
+  }
+
   const renderActivePage = () => {
     switch (currentPath) {
       case '/app/obras':
@@ -297,11 +301,6 @@ export const App: React.FC = () => {
 
       {/* 7. DETECÇÃO & INSTALAÇÃO DO PWA */}
       <PwaInstall />
-
-      {/* 8. MODAL OBRIGATÓRIO DE PRIMEIRO ACESSO (TROCA DE SENHA) */}
-      <PrimeiroAcessoModal
-        isOpen={Boolean(user?.trocar_senha_primeiro_acesso)}
-      />
     </div>
   );
 };

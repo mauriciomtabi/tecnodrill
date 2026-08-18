@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useAuth } from '../context/AuthContext';
 import { Lock, KeyRound, Eye, EyeOff, Check, AlertCircle, ShieldAlert, LogOut } from 'lucide-react';
 
@@ -8,7 +7,7 @@ interface PrimeiroAcessoModalProps {
 }
 
 export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen }) => {
-  const { user, trocarSenhaPrimeiroAcesso, logout, showToast } = useAuth();
+  const { user, trocarSenhaPrimeiroAcesso, logout } = useAuth();
   
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
@@ -36,8 +35,8 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
       return;
     }
 
-    if (senhaTrim === 'Tecno@123' || senhaTrim === 'Gestor@123') {
-      setErrorMsg('Por favor, escolha uma senha pessoal diferente da senha inicial padrão.');
+    if (senhaTrim === 'Tecno@123' || senhaTrim === 'Gestor@123' || senhaTrim === '123456') {
+      setErrorMsg('Por favor, escolha uma senha pessoal diferente da senha padrão inicial.');
       return;
     }
 
@@ -53,50 +52,83 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
 
   const isMinLength = novaSenha.trim().length >= 6;
   const isMatch = novaSenha.trim().length > 0 && novaSenha.trim() === confirmarSenha.trim();
-  const isDifferentFromDefault = novaSenha.trim() !== 'Tecno@123' && novaSenha.trim() !== 'Gestor@123';
+  const isDifferentFromDefault = novaSenha.trim() !== 'Tecno@123' && novaSenha.trim() !== 'Gestor@123' && novaSenha.trim() !== '123456';
 
-  return createPortal(
+  return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        top: 0,
-        left: 0,
+        minHeight: '100vh',
         width: '100vw',
-        height: '100vh',
-        backgroundColor: 'rgba(0, 0, 0, 0.88)',
-        backdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 9999999,
-        padding: '16px',
+        backgroundColor: 'var(--bg-app)',
+        padding: '20px',
+        position: 'relative',
+        overflow: 'hidden',
         boxSizing: 'border-box'
       }}
     >
+      {/* Background Decorative Gradients */}
+      <div 
+        style={{
+          position: 'absolute',
+          width: '500px',
+          height: '500px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(240, 90, 34, 0.15) 0%, transparent 70%)',
+          top: '-150px',
+          right: '-150px',
+          pointerEvents: 'none'
+        }} 
+      />
+      <div 
+        style={{
+          position: 'absolute',
+          width: '400px',
+          height: '400px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(39, 174, 96, 0.1) 0%, transparent 70%)',
+          bottom: '-100px',
+          left: '-100px',
+          pointerEvents: 'none'
+        }} 
+      />
+
       <div
         className="fade-in"
         style={{
           width: '100%',
-          maxWidth: '460px',
+          maxWidth: '440px',
           backgroundColor: 'var(--bg-card)',
           borderRadius: 'var(--radius-lg, 12px)',
-          border: '1px solid rgba(240, 90, 34, 0.4)',
-          padding: '30px 26px',
-          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.75)',
-          margin: 'auto',
+          border: '1px solid var(--border-color)',
+          padding: '34px 28px',
+          boxShadow: '0 25px 60px rgba(0, 0, 0, 0.65)',
+          position: 'relative',
+          zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
-          gap: '20px'
+          gap: '20px',
+          boxSizing: 'border-box'
         }}
       >
+        {/* Brand Header: Logo */}
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <img 
+            src="/logo.png" 
+            alt="TecnoDrill INFRA" 
+            style={{ height: '48px', maxWidth: '200px', width: 'auto', objectFit: 'contain' }} 
+          />
+        </div>
+
         {/* Header com Ícone e Destaque */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
           <div
             style={{
-              width: '46px',
-              height: '46px',
-              borderRadius: '12px',
+              width: '42px',
+              height: '42px',
+              borderRadius: '10px',
               backgroundColor: 'rgba(240, 90, 34, 0.18)',
               color: 'var(--primary)',
               display: 'flex',
@@ -105,10 +137,10 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
               flexShrink: 0
             }}
           >
-            <ShieldAlert size={26} />
+            <ShieldAlert size={22} />
           </div>
           <div>
-            <h2 style={{ fontSize: '17px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
               Troca de Senha Obrigatória
             </h2>
             <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
@@ -124,12 +156,12 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
             backgroundColor: 'rgba(240, 90, 34, 0.08)',
             border: '1px solid rgba(240, 90, 34, 0.2)',
             borderRadius: '8px',
-            fontSize: '12.5px',
+            fontSize: '12px',
             color: 'var(--text-main)',
             lineHeight: '1.45'
           }}
         >
-          🔒 Por motivos de segurança, você deve cadastrar uma nova senha pessoal para continuar navegando no sistema TecnoDrill.
+          🔒 Por motivos de segurança, você precisa cadastrar uma nova senha pessoal para ter acesso ao sistema TecnoDrill.
         </div>
 
         {errorMsg && (
@@ -152,7 +184,7 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
         )}
 
         {/* Formulário de Redefinição */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
               Nova Senha *
@@ -238,30 +270,30 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
           </div>
 
           {/* Checklist visual de requisitos */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: isMinLength ? 'var(--success, #27AE60)' : 'inherit' }}>
-              <Check size={13} style={{ opacity: isMinLength ? 1 : 0.4 }} />
+              <Check size={12} style={{ opacity: isMinLength ? 1 : 0.4 }} />
               <span>Mínimo de 6 caracteres</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: isMatch ? 'var(--success, #27AE60)' : 'inherit' }}>
-              <Check size={13} style={{ opacity: isMatch ? 1 : 0.4 }} />
+              <Check size={12} style={{ opacity: isMatch ? 1 : 0.4 }} />
               <span>As senhas coincidem</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: isDifferentFromDefault && isMinLength ? 'var(--success, #27AE60)' : 'inherit' }}>
-              <Check size={13} style={{ opacity: isDifferentFromDefault && isMinLength ? 1 : 0.4 }} />
+              <Check size={12} style={{ opacity: isDifferentFromDefault && isMinLength ? 1 : 0.4 }} />
               <span>Diferente da senha padrão</span>
             </div>
           </div>
 
           {/* Botões de Ação */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
             <button
               type="submit"
               disabled={loading || !isMinLength || !isMatch}
               className="btn-primary"
               style={{
                 height: '44px',
-                fontSize: '13.5px',
+                fontSize: '13px',
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
@@ -286,17 +318,16 @@ export const PrimeiroAcessoModal: React.FC<PrimeiroAcessoModalProps> = ({ isOpen
                 border: 'none',
                 color: 'var(--text-muted)',
                 fontSize: '12px',
-                padding: '8px',
+                padding: '6px',
                 cursor: 'pointer'
               }}
             >
-              <LogOut size={14} />
+              <LogOut size={13} />
               <span>Sair da Conta</span>
             </button>
           </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };

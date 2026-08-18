@@ -66,6 +66,17 @@
       "ativo": true,
       "trocar_senha_primeiro_acesso": true,
       "criado_em": "2026-08-18T12:50:49.454Z"
+    },
+    {
+      "id": "8b1ecc38-c251-4f54-a47e-723d4ed3addb",
+      "nome": "Navegador Teste",
+      "perfil": "NAVEGADOR",
+      "email": "",
+      "username": "navegador.teste",
+      "senha_hash": "$2a$10$JIZVuelnGIg/giawlKPfUeyubxdnwkzxW/2Tw62RBL3oADNhfC2wu",
+      "ativo": true,
+      "trocar_senha_primeiro_acesso": true,
+      "criado_em": "2026-08-18T13:09:29.151Z"
     }
   ],
   "servicos": [
