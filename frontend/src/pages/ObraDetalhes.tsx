@@ -101,7 +101,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     fetchDados();
   }, [servicoId]);
 
-  // Listener para atualização em tempo real se uma barra for adicionada de qualquer lugar (ex: BottomNav)
+  // Listener para atualização em tempo real se uma barra for adicionada ou excluída de qualquer lugar
   useEffect(() => {
     const handleRealtimeBarra = (e: any) => {
       const newBarra = e.detail?.barra;
@@ -117,8 +117,25 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       }
     };
 
+    const handleRealtimeBarraDeleted = (e: any) => {
+      const { furoId: delFuroId, remainingBarras } = e.detail || {};
+      if (furo && delFuroId === furo.id) {
+        if (remainingBarras) {
+          setBarras(remainingBarras);
+          const novoTotal = remainingBarras.reduce((acc: number, b: Barra) => acc + (Number(b.metros) || 3), 0);
+          setFuro(prev => prev ? ({ ...prev, comprimento_furo: novoTotal }) : null);
+        } else {
+          fetchDados();
+        }
+      }
+    };
+
     window.addEventListener('tecnodrill:barra_added', handleRealtimeBarra);
-    return () => window.removeEventListener('tecnodrill:barra_added', handleRealtimeBarra);
+    window.addEventListener('tecnodrill:barra_deleted', handleRealtimeBarraDeleted);
+    return () => {
+      window.removeEventListener('tecnodrill:barra_added', handleRealtimeBarra);
+      window.removeEventListener('tecnodrill:barra_deleted', handleRealtimeBarraDeleted);
+    };
   }, [furo]);
 
   const handleAddBarra = async (barraData: Partial<Barra>) => {
@@ -140,7 +157,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         setCelebrationData({
           metaMetros: meta,
           metrosAtingidos: total,
-          tipoMeta: 'DIARIA'
+          tipoMeta: servico?.tipo_meta || 'DIARIA'
         });
         setCelebrationOpen(true);
       }
@@ -157,10 +174,16 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const handleConfirmDeleteBarra = async () => {
     if (!confirmDeleteBarraId) return;
     try {
-      await ApiService.deleteBarra(confirmDeleteBarraId);
-      showToast('Registro de apontamento excluído.', 'info');
+      const res = await ApiService.deleteBarra(confirmDeleteBarraId);
+      showToast('Registro de apontamento excluído e sequência recalculada.', 'info');
       setConfirmDeleteBarraId(null);
-      await fetchDados();
+      if (res.remainingBarras) {
+        setBarras(res.remainingBarras);
+        const novoTotal = res.remainingBarras.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
+        setFuro(prev => prev ? ({ ...prev, comprimento_furo: novoTotal }) : null);
+      } else {
+        await fetchDados();
+      }
     } catch (err: any) {
       showToast(err.message || 'Erro ao excluir registro.', 'error');
     }

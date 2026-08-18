@@ -139,7 +139,7 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
       setBarras(prev => [...prev, res.barra]);
 
       const totalApos = res.barra.metros_acumulados;
-      if (res.celebrarMeta || (totalApos >= metaMetros)) {
+      if (res.celebrarMeta) {
         setCelebrationData({
           metaMetros,
           metrosAtingidos: totalApos,
@@ -159,9 +159,13 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
   const handleDeleteBarra = async (barraId: string) => {
     if (!confirm('Deseja realmente remover este registro?')) return;
     try {
-      await ApiService.deleteBarra(barraId);
-      setBarras(prev => prev.filter(b => b.id !== barraId));
-      showToast('Registro excluído com sucesso.', 'info');
+      const res = await ApiService.deleteBarra(barraId);
+      if (res.remainingBarras) {
+        setBarras(res.remainingBarras);
+      } else {
+        setBarras(prev => prev.filter(b => b.id !== barraId));
+      }
+      showToast('Registro excluído e sequência recalculada.', 'info');
     } catch (err: any) {
       showToast('Erro ao remover registro.', 'error');
     }

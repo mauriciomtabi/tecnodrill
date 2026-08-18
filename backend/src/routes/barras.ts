@@ -57,19 +57,23 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       registrado_por
     });
 
-    // Validar se atingiu ou superou a meta diária/semanal
+    // Validar se atingiu ou superou a meta diária/semanal NO MOMENTO DESTE REGISTRO
     let metaAtingidaAgora = false;
     let percentualAtingido = 0;
     let metaInfo: any = null;
 
-    if (servico) {
+    if (servico && Number(servico.meta_metros) > 0) {
       const dashboard = await FinanceiroService.getDashboardMetrics();
       const metric = dashboard.servicos.find(m => m.servicoId === servico.id);
       if (metric) {
         metaInfo = metric.meta;
         percentualAtingido = metric.meta.percentualMetaPeriodo;
-        // Se bateu a meta agora (100% ou mais)
-        if (metric.meta.metaAtingida) {
+        const metaValor = metric.meta.valorMetaMetros;
+        const metrosDepois = metric.meta.metrosPeriodoAtual;
+        const metrosAntes = metrosDepois - (Number(novaBarra.metros) || 3);
+
+        // Só celebra se ANTES não tinha batido a meta e AGORA bateu!
+        if (metaValor > 0 && metrosAntes < metaValor && metrosDepois >= metaValor) {
           metaAtingidaAgora = true;
         }
       }

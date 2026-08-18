@@ -519,24 +519,54 @@ export class DBManager {
   // --- BARRAS ---
   public static async getBarras(furoId: string): Promise<TecnodrillBarra[]> {
     try {
-      const { data, error } = await supabase.from('tecnodrill_barras').select('*').eq('furo_id', furoId).order('numero_barra', { ascending: true });
-      if (!error && data) return data;
+      const { data, error } = await supabase.from('tecnodrill_barras').select('*').eq('furo_id', furoId).order('horario_registro', { ascending: true });
+      if (!error && data) {
+        return data.sort((a, b) => (a.numero_barra || 0) - (b.numero_barra || 0));
+      }
     } catch (_) {}
     return this.localData.barras.filter(b => b.furo_id === furoId).sort((a, b) => a.numero_barra - b.numero_barra);
   }
 
+  public static async resequenceBarras(furoId: string): Promise<TecnodrillBarra[]> {
+    let currentBarras = await this.getBarras(furoId);
+    let runningTotal = 0;
+
+    for (let i = 0; i < currentBarras.length; i++) {
+      const b = currentBarras[i];
+      const newNum = i + 1;
+      const m = Number(b.metros) || 3;
+      runningTotal += m;
+
+      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal) {
+        b.numero_barra = newNum;
+        b.metros_acumulados = runningTotal;
+
+        try {
+          await supabase
+            .from('tecnodrill_barras')
+            .update({ numero_barra: newNum, metros_acumulados: runningTotal })
+            .eq('id', b.id);
+        } catch (_) {}
+
+        const localIdx = this.localData.barras.findIndex(lb => lb.id === b.id);
+        if (localIdx !== -1) {
+          this.localData.barras[localIdx].numero_barra = newNum;
+          this.localData.barras[localIdx].metros_acumulados = runningTotal;
+        }
+      }
+    }
+
+    await this.updateFuro(furoId, { comprimento_furo: runningTotal });
+    this.saveLocal();
+    return currentBarras;
+  }
+
   public static async addBarra(barra: Partial<TecnodrillBarra>): Promise<TecnodrillBarra> {
-    // Determine next number and accumulated meters
     const existing = await this.getBarras(barra.furo_id || '');
-    const maxNumber = existing.reduce((max, b) => Math.max(max, b.numero_barra), 0);
-    const nextNumber = barra.numero_barra || (maxNumber + 1);
-    
-    const lastBarra = existing[existing.length - 1];
-    const metrosAnteriores = lastBarra ? lastBarra.metros_acumulados : 0;
+    const nextNumber = existing.length + 1;
+    const metrosAnteriores = existing.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
     const metrosDesteLance = barra.metros !== undefined ? Number(barra.metros) : 3;
-    const metrosAcumulados = barra.metros_acumulados !== undefined 
-      ? Number(barra.metros_acumulados) 
-      : (metrosAnteriores + metrosDesteLance);
+    const metrosAcumulados = metrosAnteriores + metrosDesteLance;
 
     const newBarra: TecnodrillBarra = {
       id: barra.id || crypto.randomUUID(),
@@ -562,7 +592,7 @@ export class DBManager {
       await supabase.from('tecnodrill_barras').insert([newBarra]);
     } catch (_) {}
 
-    // Update length in furo if higher
+    // Update length in furo to match exact accumulated meters
     await this.updateFuro(newBarra.furo_id, { comprimento_furo: metrosAcumulados });
 
     this.localData.barras.push(newBarra);
@@ -571,12 +601,24 @@ export class DBManager {
   }
 
   public static async deleteBarra(id: string): Promise<boolean> {
+    let furoId = '';
     try {
+      const { data } = await supabase.from('tecnodrill_barras').select('furo_id').eq('id', id).single();
+      if (data) furoId = data.furo_id;
       await supabase.from('tecnodrill_barras').delete().eq('id', id);
     } catch (_) {}
 
+    const localItem = this.localData.barras.find(b => b.id === id);
+    if (localItem && !furoId) furoId = localItem.furo_id;
+
     this.localData.barras = this.localData.barras.filter(b => b.id !== id);
     this.saveLocal();
+
+    // Resequence remaining barras (1, 2, 3, 4, 5...) and update total meters
+    if (furoId) {
+      await this.resequenceBarras(furoId);
+    }
+
     return true;
   }
 

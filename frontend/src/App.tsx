@@ -150,11 +150,11 @@ export const App: React.FC = () => {
       const metaTotal = servico.meta_metros || 100;
       const totalMetros = res.barra.metros_acumulados;
 
-      if (res.celebrarMeta || totalMetros >= metaTotal) {
+      if (res.celebrarMeta) {
         setCelebrationData({
           metaMetros: metaTotal,
           metrosAtingidos: totalMetros,
-          tipoMeta: 'DIARIA',
+          tipoMeta: servico.tipo_meta || 'DIARIA',
           nomeServico: servico.nome
         });
         setCelebrationOpen(true);

@@ -846,20 +846,72 @@ export class ApiService {
     }));
   }
 
+  public static async resequenceBarras(furoId: string): Promise<Barra[]> {
+    const { data: existing, error } = await supabase
+      .from('tecnodrill_barras')
+      .select('*')
+      .eq('furo_id', furoId)
+      .order('horario_registro', { ascending: true });
+
+    if (error || !existing) return [];
+
+    let runningTotal = 0;
+    const updatedList: Barra[] = [];
+
+    for (let i = 0; i < existing.length; i++) {
+      const b = existing[i];
+      const newNum = i + 1;
+      const m = Number(b.metros) || 3;
+      runningTotal += m;
+
+      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal) {
+        b.numero_barra = newNum;
+        b.metros_acumulados = runningTotal;
+
+        await supabase
+          .from('tecnodrill_barras')
+          .update({ numero_barra: newNum, metros_acumulados: runningTotal })
+          .eq('id', b.id);
+      }
+
+      updatedList.push({
+        id: b.id,
+        furo_id: b.furo_id,
+        numero_barra: newNum,
+        metros: m,
+        metros_acumulados: runningTotal,
+        tem_caixa: Boolean(b.tem_caixa),
+        angulo_pitch: b.angulo_pitch || '',
+        profundidade_cm: Number(b.profundidade_cm) || 0,
+        foto_url: b.foto_url || '',
+        latitude: b.latitude ? Number(b.latitude) : undefined,
+        longitude: b.longitude ? Number(b.longitude) : undefined,
+        endereco: b.endereco || undefined,
+        observacao: b.observacao || '',
+        horario_registro: b.horario_registro
+      });
+    }
+
+    // Atualizar comprimento total do furo
+    await supabase.from('tecnodrill_furos').update({ comprimento_furo: runningTotal }).eq('id', furoId);
+
+    return updatedList;
+  }
+
   public static async addBarra(furoId: string, data: Partial<Barra>): Promise<{
     barra: Barra;
     celebrarMeta: boolean;
     mensagem: string;
   }> {
-    const { data: existing } = await supabase
+    const { data: existingList } = await supabase
       .from('tecnodrill_barras')
-      .select('numero_barra, metros_acumulados')
+      .select('id, metros, metros_acumulados, horario_registro')
       .eq('furo_id', furoId)
-      .order('numero_barra', { ascending: false })
-      .limit(1);
+      .order('horario_registro', { ascending: true });
 
-    const nextNum = existing && existing.length > 0 ? existing[0].numero_barra + 1 : 1;
-    const metrosAnteriores = existing && existing.length > 0 ? Number(existing[0].metros_acumulados) : 0;
+    const currentBarras = existingList || [];
+    const nextNum = currentBarras.length + 1;
+    const metrosAnteriores = currentBarras.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
     const metrosDesteRegistro = Number(data.metros) || 3;
     const metrosAcumulados = metrosAnteriores + metrosDesteRegistro;
 
@@ -886,7 +938,6 @@ export class ApiService {
       .single();
 
     if (res1.error) {
-      // If error might be because 'endereco' column does not exist yet in Supabase, retry without 'endereco'
       const { endereco, ...fallbackPayload } = payload;
       const res2 = await supabase
         .from('tecnodrill_barras')
@@ -902,6 +953,50 @@ export class ApiService {
     } else {
       created = res1.data;
     }
+
+    // Atualizar comprimento total do furo
+    await supabase.from('tecnodrill_furos').update({ comprimento_furo: metrosAcumulados }).eq('id', furoId);
+
+    // Validação estrita e precisa de Meta Diária / Semanal
+    let metaAtingidaAgora = false;
+    try {
+      const { data: furoData } = await supabase.from('tecnodrill_furos').select('servico_id').eq('id', furoId).single();
+      if (furoData) {
+        const { data: servicoData } = await supabase.from('tecnodrill_servicos').select('*').eq('id', furoData.servico_id).single();
+        if (servicoData && Number(servicoData.meta_metros) > 0) {
+          const metaValor = Number(servicoData.meta_metros);
+          const tipoMeta = servicoData.tipo_meta || 'DIARIA';
+          const hojeStr = new Date().toISOString().split('T')[0];
+          const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+          const { data: furosDoServico } = await supabase.from('tecnodrill_furos').select('id').eq('servico_id', servicoData.id);
+          const fIds = (furosDoServico || []).map(f => f.id);
+
+          let metrosPeriodoAntes = 0;
+          if (fIds.length > 0) {
+            const { data: todasBarras } = await supabase.from('tecnodrill_barras').select('id, metros, horario_registro').in('furo_id', fIds);
+            for (const b of (todasBarras || [])) {
+              if (b.id === created.id) continue; // Desconsiderar a barra que acabou de ser inserida para saber quanto tinha ANTES
+              const m = Number(b.metros) || 3;
+              const dtStr = b.horario_registro ? b.horario_registro.split('T')[0] : hojeStr;
+              const dtObj = b.horario_registro ? new Date(b.horario_registro) : new Date();
+
+              if (tipoMeta === 'DIARIA' && dtStr === hojeStr) {
+                metrosPeriodoAntes += m;
+              } else if (tipoMeta === 'SEMANAL' && dtObj >= seteDiasAtras) {
+                metrosPeriodoAntes += m;
+              }
+            }
+          }
+
+          const metrosPeriodoDepois = metrosPeriodoAntes + metrosDesteRegistro;
+          // Dispara celebração APENAS no momento exato em que a meta é atingida pela primeira vez
+          if (metrosPeriodoAntes < metaValor && metrosPeriodoDepois >= metaValor) {
+            metaAtingidaAgora = true;
+          }
+        }
+      }
+    } catch (_) {}
 
     const barra: Barra = {
       id: created.id,
@@ -929,15 +1024,33 @@ export class ApiService {
 
     return {
       barra,
-      celebrarMeta: false,
+      celebrarMeta: metaAtingidaAgora,
       mensagem: `Registro ${nextNum} apontado com sucesso (+${metrosDesteRegistro}m)!`
     };
   }
 
-  public static async deleteBarra(id: string): Promise<{ success: boolean }> {
+  public static async deleteBarra(id: string): Promise<{ success: boolean; furoId?: string; remainingBarras?: Barra[] }> {
+    let furoId = '';
+    try {
+      const { data } = await supabase.from('tecnodrill_barras').select('furo_id').eq('id', id).single();
+      if (data) furoId = data.furo_id;
+    } catch (_) {}
+
     const { error } = await supabase.from('tecnodrill_barras').delete().eq('id', id);
     if (error) throw new Error('Erro ao excluir registro.');
-    return { success: true };
+
+    let remainingBarras: Barra[] = [];
+    if (furoId) {
+      remainingBarras = await this.resequenceBarras(furoId);
+    }
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tecnodrill:barra_deleted', {
+        detail: { barraId: id, furoId, remainingBarras }
+      }));
+    }
+
+    return { success: true, furoId, remainingBarras };
   }
 
   // ============================================================================
