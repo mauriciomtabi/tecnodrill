@@ -70,6 +70,10 @@ export class ApiService {
       throw new Error('Senha incorreta.');
     }
 
+    const isFirstAccess = user.trocar_senha_primeiro_acesso === true || 
+      localStorage.getItem('tecnodrill_first_access_' + user.id) === 'true' || 
+      localStorage.getItem('tecnodrill_first_access_' + user.username?.toLowerCase()) === 'true';
+
     const usuario: Usuario = {
       id: user.id,
       nome: user.nome,
@@ -77,7 +81,7 @@ export class ApiService {
       username: user.username,
       email: user.email || '',
       ativo: Boolean(user.ativo),
-      trocar_senha_primeiro_acesso: user.trocar_senha_primeiro_acesso !== undefined ? Boolean(user.trocar_senha_primeiro_acesso) : false
+      trocar_senha_primeiro_acesso: isFirstAccess
     };
 
     const token = `td_token_${user.id}_${Date.now()}`;
@@ -91,6 +95,9 @@ export class ApiService {
       throw new Error('A nova senha deve possuir pelo menos 6 caracteres.');
     }
     const senhaHash = bcrypt.hashSync(novaSenha, 10);
+
+    // Limpa a flag de primeiro acesso em cache
+    localStorage.removeItem('tecnodrill_first_access_' + usuarioId);
 
     try {
       await supabase
@@ -112,6 +119,10 @@ export class ApiService {
     } catch (_) {}
 
     const usuarioAtual = this.getUsuarioAtual();
+    if (usuarioAtual) {
+      localStorage.removeItem('tecnodrill_first_access_' + usuarioAtual.username?.toLowerCase());
+    }
+
     const atualizado: Usuario = {
       ...(usuarioAtual || {
         id: usuarioId,
@@ -221,6 +232,9 @@ export class ApiService {
       trocar_senha_primeiro_acesso: true
     };
 
+    localStorage.setItem('tecnodrill_first_access_' + result.username.toLowerCase(), 'true');
+    localStorage.setItem('tecnodrill_first_access_' + result.id, 'true');
+
     return result;
   }
 
@@ -233,6 +247,10 @@ export class ApiService {
     if (data.ativo !== undefined) payload.ativo = data.ativo;
     if (data.senha && data.senha.trim()) {
       payload.senha_hash = bcrypt.hashSync(data.senha.trim(), 10);
+      localStorage.setItem('tecnodrill_first_access_' + id, 'true');
+      if (data.username) {
+        localStorage.setItem('tecnodrill_first_access_' + data.username.toLowerCase(), 'true');
+      }
     }
 
     let updatedUser: any = null;
