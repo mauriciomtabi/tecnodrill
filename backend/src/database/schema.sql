@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS tecnodrill_barras (
     foto_url TEXT,
     latitude DECIMAL(10,8),
     longitude DECIMAL(11,8),
+    endereco TEXT,
     observacao TEXT,
     horario_registro TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     registrado_por UUID REFERENCES tecnodrill_usuarios(id) ON DELETE SET NULL,

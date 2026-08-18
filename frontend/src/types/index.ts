@@ -23,6 +23,8 @@ export interface Servico {
   obra?: string;
   centro_custo?: string;
   local: string;
+  cidade?: string;
+  uf?: string;
   gestor_id?: string;
   navegador_id?: string;
   navegador_nome?: string;
@@ -85,6 +87,7 @@ export interface Barra {
   foto_url?: string;
   latitude?: number;
   longitude?: number;
+  endereco?: string;
   horario_registro?: string;
   registrado_por?: string;
   created_at?: string;

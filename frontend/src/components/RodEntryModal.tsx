@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra } from '../types';
 import { 
   applyTecnodrillWatermark, 
   reverseGeocode, 
   AddressDetails, 
-  decToDMSForWatermark 
+  decToDMSForWatermark,
+  formatFullAddress
 } from '../utils/watermark';
 import { 
   Camera, 
@@ -16,7 +17,8 @@ import {
   Check, 
   RefreshCw,
   Plus,
-  Minus
+  Minus,
+  Loader2
 } from 'lucide-react';
 
 interface RodEntryModalProps {
@@ -36,6 +38,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 }) => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [rawPhotoBase64, setRawPhotoBase64] = useState<string | null>(null);
   const [metros, setMetros] = useState<number>(3);
   const [temCaixa, setTemCaixa] = useState<boolean>(false);
   const [observacao, setObservacao] = useState<string>('');
@@ -47,47 +50,75 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [addressDetails, setAddressDetails] = useState<AddressDetails | null>(null);
   const [capturingGps, setCapturingGps] = useState<boolean>(false);
   const [processingWatermark, setProcessingWatermark] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const locationPromiseRef = useRef<Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> | null>(null);
 
-  const captureLocation = () => {
-    if ('geolocation' in navigator) {
-      setCapturingGps(true);
+  const captureLocation = useCallback((): Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> => {
+    if (!('geolocation' in navigator)) {
+      return Promise.resolve({ lat: null, lon: null, addr: null });
+    }
+
+    setCapturingGps(true);
+
+    const promise = new Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }>((resolve) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const lat = pos.coords.latitude;
           const lon = pos.coords.longitude;
+          const acc = Math.round(pos.coords.accuracy);
+
           setLatitude(lat);
           setLongitude(lon);
-          setPrecisao(Math.round(pos.coords.accuracy));
-          setCapturingGps(false);
+          setPrecisao(acc);
 
-          // Reverse geocoding para endereço legível
+          // Reverse geocoding para endereço completo
           const addr = await reverseGeocode(lat, lon);
           if (addr) {
             setAddressDetails(addr);
           }
+
+          setCapturingGps(false);
+          resolve({ lat, lon, addr });
         },
         () => {
           setCapturingGps(false);
+          resolve({ lat: null, lon: null, addr: null });
         },
-        { enableHighAccuracy: true, timeout: 8000 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
       );
+    });
+
+    locationPromiseRef.current = promise;
+    return promise;
+  }, []);
+
+  // Whenever location changes or is recaptured, update watermark on existing raw photo if present
+  useEffect(() => {
+    if (rawPhotoBase64 && latitude !== null && longitude !== null && addressDetails !== null) {
+      applyTecnodrillWatermark(rawPhotoBase64, latitude, longitude, addressDetails, new Date())
+        .then((watermarked) => {
+          setFotoUrl(watermarked);
+        })
+        .catch(() => {});
     }
-  };
+  }, [latitude, longitude, addressDetails, rawPhotoBase64]);
 
   useEffect(() => {
     if (isOpen) {
       setStep(1);
       setFotoUrl(null);
+      setRawPhotoBase64(null);
       setMetros(3);
       setTemCaixa(false);
       setObservacao('');
       setAddressDetails(null);
+      setStatusMessage('');
       captureLocation();
     }
-  }, [isOpen]);
+  }, [isOpen, captureLocation]);
 
   if (!isOpen) return null;
 
@@ -96,37 +127,79 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     if (!file) return;
 
     setProcessingWatermark(true);
+    setStatusMessage('Carregando foto...');
 
     const reader = new FileReader();
     reader.onload = async (event) => {
       const rawBase64 = event.target?.result as string;
       if (!rawBase64) {
         setProcessingWatermark(false);
+        setStatusMessage('');
         return;
       }
 
+      setRawPhotoBase64(rawBase64);
+
       try {
-        // Aplicar marca d'água oficial da TecnoDrill (mesmo padrão JLE: Logo superior direito, Data/Hora + DMS + Endereço inferior direito)
+        let curLat = latitude;
+        let curLon = longitude;
+        let curAddr = addressDetails;
+
+        // Se ainda não temos a localização e o endereço, aguardar o processo de captura
+        if (curLat === null || curLon === null || curAddr === null) {
+          setStatusMessage('Obtendo endereço e coordenadas GPS de alta precisão...');
+          if (locationPromiseRef.current) {
+            const locResult = await Promise.race([
+              locationPromiseRef.current,
+              new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 4500))
+            ]);
+            if (locResult.lat !== null) curLat = locResult.lat;
+            if (locResult.lon !== null) curLon = locResult.lon;
+            if (locResult.addr !== null) curAddr = locResult.addr;
+          } else {
+            const locResult = await captureLocation();
+            if (locResult.lat !== null) curLat = locResult.lat;
+            if (locResult.lon !== null) curLon = locResult.lon;
+            if (locResult.addr !== null) curAddr = locResult.addr;
+          }
+        }
+
+        // Se tivermos coordenadas mas faltar o endereço, tentar geocodificação rápida
+        if (curLat !== null && curLon !== null && !curAddr) {
+          setStatusMessage('Identificando logradouro e bairro...');
+          curAddr = await reverseGeocode(curLat, curLon);
+          if (curAddr) {
+            setAddressDetails(curAddr);
+          }
+        }
+
+        setStatusMessage('Aplicando carimbo oficial TecnoDrill...');
         const watermarked = await applyTecnodrillWatermark(
           rawBase64,
-          latitude,
-          longitude,
-          addressDetails,
+          curLat,
+          curLon,
+          curAddr,
           new Date()
         );
+
         setFotoUrl(watermarked);
         setStep(2); // Avança para o Passo 2
       } catch (err) {
+        console.error('[Watermark Error]:', err);
         setFotoUrl(rawBase64);
         setStep(2);
       } finally {
         setProcessingWatermark(false);
+        setStatusMessage('');
       }
     };
+
     reader.readAsDataURL(file);
   };
 
   const handleFinalSubmit = async () => {
+    const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
+
     await onSubmit({
       numero_barra: nextBarraNumber,
       metros: Number(metros) || 3,
@@ -134,7 +207,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       observacao: observacao.trim() || undefined,
       foto_url: fotoUrl || undefined,
       latitude: latitude || undefined,
-      longitude: longitude || undefined
+      longitude: longitude || undefined,
+      endereco: formattedAddress
     });
   };
 
@@ -192,7 +266,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         }}
       >
         {/* =========================================================================
-            PASSO 1: CAPTURA DE FOTO (IDÊNTICO AO APP JLE)
+            PASSO 1: CAPTURA DE FOTO (IDÊNTICO AO APP JLE COM MARCA D'ÁGUA ROBUSTA)
            ========================================================================= */}
         {step === 1 && (
           <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -200,7 +274,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-                Registrar Novo Registro
+                Registrar Novo Registro #{nextBarraNumber}
               </h2>
               <button
                 onClick={onClose}
@@ -217,7 +291,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
-                padding: '36px 20px',
+                padding: '32px 20px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -228,8 +302,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               {/* Dashed Camera Circle */}
               <div 
                 style={{
-                  width: '90px',
-                  height: '90px',
+                  width: '88px',
+                  height: '88px',
                   borderRadius: '50%',
                   border: '2px dashed #2A8ACC',
                   display: 'flex',
@@ -239,20 +313,56 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   backgroundColor: 'rgba(42, 138, 204, 0.08)'
                 }}
               >
-                <Camera size={40} />
+                {processingWatermark ? (
+                  <Loader2 size={38} className="animate-spin text-[#F05A22]" />
+                ) : (
+                  <Camera size={38} />
+                )}
               </div>
 
               <div>
                 <strong style={{ fontSize: '16px', color: '#FFFFFF', display: 'block', marginBottom: '6px' }}>
-                  Registrar Nova Estrutura
+                  {processingWatermark ? 'Processando Carimbo Oficial...' : 'Registrar Nova Estrutura'}
                 </strong>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
-                  Tire uma foto da estrutura ou escolha um arquivo da galeria.
+                  {statusMessage || 'Tire uma foto da estrutura ou escolha um arquivo da galeria com carimbo de coordenadas e endereço.'}
                 </p>
               </div>
 
+              {/* Status Pill Location */}
+              <div 
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '20px',
+                  backgroundColor: latitude ? 'rgba(39, 174, 96, 0.12)' : 'rgba(42, 138, 204, 0.12)',
+                  border: `1px solid ${latitude ? 'rgba(39, 174, 96, 0.3)' : 'rgba(42, 138, 204, 0.3)'}`,
+                  fontSize: '11px',
+                  color: latitude ? 'var(--success)' : '#2A8ACC'
+                }}
+              >
+                {capturingGps ? (
+                  <>
+                    <RefreshCw size={12} className="animate-spin" />
+                    <span>Obtendo GPS & Endereço...</span>
+                  </>
+                ) : latitude && addressDetails ? (
+                  <>
+                    <Check size={12} />
+                    <span>GPS & Endereço prontos para o carimbo</span>
+                  </>
+                ) : (
+                  <>
+                    <MapPin size={12} />
+                    <span>Aguardando geolocalização...</span>
+                  </>
+                )}
+              </div>
+
               {/* Action Buttons */}
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
                 <button
                   type="button"
                   disabled={processingWatermark}
@@ -269,8 +379,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(240, 90, 34, 0.4)'
+                    cursor: processingWatermark ? 'wait' : 'pointer',
+                    boxShadow: '0 4px 14px rgba(240, 90, 34, 0.4)',
+                    opacity: processingWatermark ? 0.7 : 1
                   }}
                 >
                   <Camera size={18} />
@@ -293,7 +404,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    cursor: 'pointer'
+                    cursor: processingWatermark ? 'wait' : 'pointer',
+                    opacity: processingWatermark ? 0.7 : 1
                   }}
                 >
                   <ImageIcon size={18} />
@@ -307,7 +419,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 style={{
                   fontSize: '12px',
                   color: 'var(--text-muted)',
-                  marginTop: '6px',
+                  marginTop: '4px',
                   background: 'none',
                   border: 'none',
                   cursor: 'pointer'
@@ -370,7 +482,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                     padding: '1px 0'
                   }}
                 >
-                  NOVO
+                  CARIMBADO
                 </span>
               </div>
 
@@ -590,7 +702,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         )}
 
         {/* =========================================================================
-            PASSO 3: CONFIRMAÇÃO, LOCALIZAÇÃO, OBSERVAÇÃO E ENVIO (IDÊNTICO AO APP JLE)
+            PASSO 3: CONFIRMAÇÃO, LOCALIZAÇÃO, OBSERVAÇÃO E ENVIO (COM ENDEREÇO COMPLETO)
            ========================================================================= */}
         {step === 3 && (
           <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
@@ -661,11 +773,11 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   fontFamily: 'var(--font-mono)'
                 }}
               >
-                PRÓXIMO: #{nextBarraNumber} (+{metros}m)
+                REGISTRO #{nextBarraNumber} (+{metros}m)
               </div>
             </div>
 
-            {/* Card Localização Capturada */}
+            {/* Card Localização Capturada com Endereço Completo */}
             <div 
               style={{
                 backgroundColor: 'var(--bg-card)',
@@ -674,14 +786,14 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 padding: '14px 16px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px'
+                gap: '10px'
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '13px' }}>📍</span>
+                  <MapPin size={15} style={{ color: 'var(--primary)' }} />
                   <strong style={{ fontSize: '12px', color: 'var(--success)' }}>
-                    Localização capturada
+                    Localização & Endereço Capturados
                   </strong>
                 </div>
 
@@ -706,19 +818,27 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                {/* DMS Coordinates */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Check size={13} style={{ color: 'var(--success)' }} />
-                  <span>
+                  <Check size={13} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                  <span style={{ color: '#FFFFFF', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                     {latitude && longitude 
                       ? `${decToDMSForWatermark(latitude, true)} ${decToDMSForWatermark(longitude, false)} · prec: ${precisao || 10}m` 
                       : 'GPS obtido pelo dispositivo'}
                   </span>
                 </div>
-                {addressDetails && addressDetails.road && (
-                  <span style={{ paddingLeft: '19px', color: 'var(--text-main)', fontWeight: 600 }}>
-                    {addressDetails.road}{addressDetails.houseNumber ? `, ${addressDetails.houseNumber}` : ''} - {addressDetails.city || ''} ({addressDetails.state || ''})
-                  </span>
+
+                {/* Full Address Display */}
+                {addressDetails && (
+                  <div style={{ paddingLeft: '19px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '12px' }}>
+                      {addressDetails.road}{addressDetails.houseNumber ? `, ${addressDetails.houseNumber}` : ''}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                      {[addressDetails.neighbourhood, addressDetails.city, addressDetails.state].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
                 )}
               </div>
             </div>

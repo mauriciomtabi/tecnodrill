@@ -32,28 +32,170 @@ export interface AddressDetails {
   neighbourhood?: string;
   city?: string;
   state?: string;
+  formattedAddress?: string;
 }
 
-// Reverse Geocode using Nominatim / OpenStreetMap
-export const reverseGeocode = async (lat: number, lon: number): Promise<AddressDetails | null> => {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`, {
-      headers: { 'Accept-Language': 'pt-BR' }
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const addr = data.address || {};
+// In-memory cache for reverse geocoding to prevent duplicate network calls
+const geocodeCache = new Map<string, AddressDetails>();
 
-    return {
-      road: addr.road || addr.street || addr.avenue || addr.pedestrian || '',
-      houseNumber: addr.house_number || '',
-      neighbourhood: addr.suburb || addr.neighbourhood || addr.city_district || '',
-      city: addr.city || addr.town || addr.municipality || addr.village || '',
-      state: addr.state || ''
-    };
-  } catch (err) {
+const getCacheKey = (lat: number, lon: number): string => {
+  // Round to ~4 decimals (approx 11m precision) for cache hits
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`;
+};
+
+/**
+ * Format full address into a clean single string for UI details and database storage
+ * Example: "Avenida Imperatriz Dona Leopoldina, 2262 - Pinheiros, São Leopoldo - RS"
+ */
+export const formatFullAddress = (addr?: AddressDetails | null): string => {
+  if (!addr) return '';
+
+  const parts: string[] = [];
+
+  // Street + number
+  if (addr.road) {
+    const street = addr.houseNumber && addr.houseNumber !== 'S/N'
+      ? `${addr.road}, ${addr.houseNumber}`
+      : addr.road;
+    parts.push(street);
+  }
+
+  // Neighbourhood
+  if (addr.neighbourhood && addr.neighbourhood !== addr.city && addr.neighbourhood !== addr.road) {
+    parts.push(addr.neighbourhood);
+  }
+
+  // City + State
+  if (addr.city && addr.state) {
+    parts.push(`${addr.city} - ${addr.state}`);
+  } else if (addr.city) {
+    parts.push(addr.city);
+  } else if (addr.state) {
+    parts.push(addr.state);
+  }
+
+  return parts.join(' - ');
+};
+
+/**
+ * Robust reverse geocoding with multi-provider fallback and caching
+ */
+export const reverseGeocode = async (lat: number, lon: number): Promise<AddressDetails | null> => {
+  if (typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) {
     return null;
   }
+
+  const cacheKey = getCacheKey(lat, lon);
+  if (geocodeCache.has(cacheKey)) {
+    return geocodeCache.get(cacheKey)!;
+  }
+
+  // Provider 1: Backend Geocode Proxy (uses official User-Agent, robust caching and zero CORS)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+    const res = await fetch(`/api/geocode/reverse?lat=${lat}&lon=${lon}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.road || data.city || data.state || data.neighbourhood) {
+        const details: AddressDetails = {
+          road: data.road || '',
+          houseNumber: data.houseNumber || '',
+          neighbourhood: data.neighbourhood || '',
+          city: data.city || '',
+          state: data.state || ''
+        };
+        details.formattedAddress = formatFullAddress(details);
+        geocodeCache.set(cacheKey, details);
+        return details;
+      }
+    }
+  } catch (err) {
+    // Try direct providers if backend route is unavailable or offline
+  }
+
+  // Provider 2: OpenStreetMap Nominatim Direct
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
+      {
+        headers: { 'Accept-Language': 'pt-BR' },
+        signal: controller.signal
+      }
+    );
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const addr = data.address || {};
+
+      const road = addr.road || addr.street || addr.avenue || addr.pedestrian || addr.footway || addr.highway || addr.residential || addr.path || '';
+      const houseNumber = addr.house_number || addr.street_number || '';
+      const neighbourhood = addr.suburb || addr.neighbourhood || addr.city_district || addr.quarter || addr.district || addr.borough || '';
+      const city = addr.city || addr.town || addr.municipality || addr.village || addr.county || addr.city_district || '';
+      const state = addr.state || addr.state_district || addr.province || '';
+
+      if (road || city || state || neighbourhood) {
+        const details: AddressDetails = {
+          road,
+          houseNumber,
+          neighbourhood,
+          city,
+          state
+        };
+        details.formattedAddress = formatFullAddress(details);
+        geocodeCache.set(cacheKey, details);
+        return details;
+      }
+    }
+  } catch (err) {
+    // Fail silently and try fallback provider
+  }
+
+  // Provider 3 Fallback: BigDataCloud Client Reverse Geocoding API (Fast, Free, CORS-friendly)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const data = await res.json();
+      const road = data.street || data.localityInfo?.administrative?.[3]?.name || '';
+      const neighbourhood = data.locality || data.localityInfo?.administrative?.[2]?.name || '';
+      const city = data.city || data.localityInfo?.administrative?.[1]?.name || '';
+      const state = data.principalSubdivision || '';
+
+      if (road || city || state || neighbourhood) {
+        const details: AddressDetails = {
+          road,
+          houseNumber: '',
+          neighbourhood,
+          city,
+          state
+        };
+        details.formattedAddress = formatFullAddress(details);
+        geocodeCache.set(cacheKey, details);
+        return details;
+      }
+    }
+  } catch (err) {
+    // Both failed
+  }
+
+  return null;
 };
 
 // Draw TecnoDrill official watermark on canvas (exact JLE style, no technician name)
@@ -122,17 +264,17 @@ export const applyTecnodrillWatermark = (
 
       const lines: string[] = [];
 
-      // Date & Time
+      // Line 1: Date & Time
       lines.push(dateStr);
 
-      // DMS GPS Coordinates
+      // Line 2: DMS GPS Coordinates
       if (lat != null && lon != null) {
         const latDMS = decToDMSForWatermark(lat, true);
         const lonDMS = decToDMSForWatermark(lon, false);
         lines.push(`${latDMS} ${lonDMS}`);
       }
 
-      // Address lines
+      // Address lines (Rua + Nº, Bairro, Cidade, Estado)
       if (addrDetails) {
         if (addrDetails.road) {
           const streetLine = addrDetails.houseNumber && addrDetails.houseNumber !== 'S/N'
@@ -140,7 +282,7 @@ export const applyTecnodrillWatermark = (
             : addrDetails.road;
           lines.push(streetLine);
         }
-        if (addrDetails.neighbourhood && addrDetails.neighbourhood !== addrDetails.city) {
+        if (addrDetails.neighbourhood && addrDetails.neighbourhood !== addrDetails.city && addrDetails.neighbourhood !== addrDetails.road) {
           lines.push(addrDetails.neighbourhood);
         }
         if (addrDetails.city) {
@@ -151,12 +293,14 @@ export const applyTecnodrillWatermark = (
         }
       }
 
-      // 3. Draw Bottom-Right Stacked Text (Right-aligned, white with black outline)
+      // 3. Draw Bottom-Right Stacked Text (Right-aligned, white with crisp black outline)
       ctx.fillStyle = '#FFFFFF';
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.20));
       ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round';
+      ctx.miterLimit = 2;
 
       let currentY = img.height - padding;
       const reversedLines = [...lines].reverse();
@@ -168,7 +312,7 @@ export const applyTecnodrillWatermark = (
       });
 
       // 4. Draw TecnoDrill Logo in Top-Right Corner
-      if (logoLoaded) {
+      if (logoLoaded && logo.width > 0 && logo.height > 0) {
         const logoHeight = Math.round(fontSize * 1.8);
         const logoWidth = Math.round(logo.width * (logoHeight / logo.height));
 

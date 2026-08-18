@@ -840,6 +840,7 @@ export class ApiService {
       foto_url: b.foto_url || '',
       latitude: b.latitude ? Number(b.latitude) : undefined,
       longitude: b.longitude ? Number(b.longitude) : undefined,
+      endereco: b.endereco || undefined,
       observacao: b.observacao || '',
       horario_registro: b.horario_registro
     }));
@@ -862,7 +863,7 @@ export class ApiService {
     const metrosDesteRegistro = Number(data.metros) || 3;
     const metrosAcumulados = metrosAnteriores + metrosDesteRegistro;
 
-    const payload = {
+    const payload: any = {
       furo_id: furoId,
       numero_barra: nextNum,
       metros: metrosDesteRegistro,
@@ -873,18 +874,33 @@ export class ApiService {
       foto_url: data.foto_url || null,
       latitude: data.latitude || null,
       longitude: data.longitude || null,
+      endereco: data.endereco || null,
       observacao: data.observacao || null
     };
 
-    const { data: created, error } = await supabase
+    let created: any = null;
+    const res1 = await supabase
       .from('tecnodrill_barras')
       .insert(payload)
       .select()
       .single();
 
-    if (error) {
-      console.error('[Add Barra Error]:', error);
-      throw new Error('Erro ao salvar apontamento.');
+    if (res1.error) {
+      // If error might be because 'endereco' column does not exist yet in Supabase, retry without 'endereco'
+      const { endereco, ...fallbackPayload } = payload;
+      const res2 = await supabase
+        .from('tecnodrill_barras')
+        .insert(fallbackPayload)
+        .select()
+        .single();
+
+      if (res2.error) {
+        console.error('[Add Barra Error]:', res2.error);
+        throw new Error('Erro ao salvar apontamento.');
+      }
+      created = res2.data;
+    } else {
+      created = res1.data;
     }
 
     const barra: Barra = {
@@ -899,6 +915,7 @@ export class ApiService {
       foto_url: created.foto_url,
       latitude: created.latitude ? Number(created.latitude) : undefined,
       longitude: created.longitude ? Number(created.longitude) : undefined,
+      endereco: created.endereco || data.endereco || undefined,
       observacao: created.observacao,
       horario_registro: created.horario_registro
     };

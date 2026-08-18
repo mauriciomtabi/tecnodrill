@@ -6,6 +6,7 @@ import servicosRoutes from './routes/servicos';
 import furosRoutes from './routes/furos';
 import barrasRoutes from './routes/barras';
 import relatoriosRoutes from './routes/relatorios';
+import geocodeRoutes from './routes/geocode';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -42,6 +43,7 @@ app.use('/api/servicos', servicosRoutes);
 app.use('/api/furos', furosRoutes);
 app.use('/api', barrasRoutes);
 app.use('/api/relatorios', relatoriosRoutes);
+app.use('/api/geocode', geocodeRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

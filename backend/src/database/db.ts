@@ -49,7 +49,13 @@ export interface TecnodrillServico {
   obra?: string;
   centro_custo?: string;
   local: string;
+  cidade?: string;
+  uf?: string;
   gestor_id?: string;
+  navegador_id?: string;
+  navegador_nome?: string;
+  operador_id?: string;
+  operador_nome?: string;
   status: 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
   cenario_financeiro: 'VALOR_METRO' | 'FATOR_DIAMETRO_METRO' | 'VALOR_FECHADO';
   valor_metro: number;
@@ -107,6 +113,7 @@ export interface TecnodrillBarra {
   foto_url?: string;
   latitude?: number;
   longitude?: number;
+  endereco?: string;
   horario_registro?: string;
   registrado_por?: string;
 }
@@ -546,6 +553,7 @@ export class DBManager {
       foto_url: barra.foto_url || '',
       latitude: barra.latitude,
       longitude: barra.longitude,
+      endereco: barra.endereco,
       horario_registro: new Date().toISOString(),
       registrado_por: barra.registrado_por
     };

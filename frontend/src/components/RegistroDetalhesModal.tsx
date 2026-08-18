@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
-import { decToDMSForWatermark } from '../utils/watermark';
+import { decToDMSForWatermark, reverseGeocode, formatFullAddress, AddressDetails } from '../utils/watermark';
 import { 
   X, 
   ArrowLeft, 
@@ -16,7 +16,8 @@ import {
   MapPin, 
   Camera, 
   Trash2,
-  Minimize2
+  Minimize2,
+  Building2
 } from 'lucide-react';
 
 interface RegistroDetalhesModalProps {
@@ -39,6 +40,44 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isPhotoFullscreen, setIsPhotoFullscreen] = useState(false);
+  const [dynamicAddress, setDynamicAddress] = useState<string | null>(null);
+  const [loadingAddress, setLoadingAddress] = useState<boolean>(false);
+
+  // Dynamic reverse geocoding for existing records that don't have endereco pre-saved
+  useEffect(() => {
+    if (!isOpen || !barra) {
+      setDynamicAddress(null);
+      setLoadingAddress(false);
+      return;
+    }
+
+    if (barra.endereco) {
+      setDynamicAddress(barra.endereco);
+      setLoadingAddress(false);
+      return;
+    }
+
+    if (barra.latitude && barra.longitude) {
+      setLoadingAddress(true);
+      reverseGeocode(barra.latitude, barra.longitude)
+        .then((addr: AddressDetails | null) => {
+          if (addr) {
+            setDynamicAddress(formatFullAddress(addr));
+          } else {
+            setDynamicAddress(null);
+          }
+        })
+        .catch(() => {
+          setDynamicAddress(null);
+        })
+        .finally(() => {
+          setLoadingAddress(false);
+        });
+    } else {
+      setDynamicAddress(null);
+      setLoadingAddress(false);
+    }
+  }, [isOpen, barra]);
 
   if (!isOpen || !barra) return null;
 
@@ -239,7 +278,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
         </div>
 
         {/* =========================================================================
-            PARTE 2: PAINEL DE DETALHES TÉCNICOS (IDÊNTICO AO APP JLE)
+            PARTE 2: PAINEL DE DETALHES TÉCNICOS (COM ENDEREÇO COMPLETO E COORDENADAS)
            ========================================================================= */}
         {!isPhotoFullscreen && (
           <div 
@@ -306,12 +345,12 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                 </div>
               </div>
 
-              {/* Localização GPS */}
+              {/* Localização GPS (Coordenadas DMS) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                 <Navigation size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                 <div>
                   <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>LOCALIZAÇÃO GPS</span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600, fontFamily: 'var(--font-mono)', fontSize: '11.5px' }}>
                     {barra.latitude && barra.longitude 
                       ? `${decToDMSForWatermark(barra.latitude, true)} ${decToDMSForWatermark(barra.longitude, false)}`
                       : 'Não disponível'}
@@ -319,13 +358,34 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                 </div>
               </div>
 
-              {/* Endereço Aproximado */}
+              {/* Endereço Completo do Ponto de Registro */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
+                <MapPin size={16} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ flex: 1 }}>
+                  <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--primary)' }}>
+                    ENDEREÇO COMPLETO
+                  </span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '12px', lineHeight: '1.4', display: 'block' }}>
+                    {dynamicAddress ? (
+                      dynamicAddress
+                    ) : loadingAddress ? (
+                      <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px' }}>
+                        Identificando endereço do registro...
+                      </span>
+                    ) : (
+                      'Endereço não disponível'
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              {/* Cidade / Localidade da Obra */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
-                <MapPin size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <Building2 size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                 <div>
-                  <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>CIDADE / LOCALIDADE</span>
+                  <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>CIDADE / LOCALIDADE DA OBRA</span>
                   <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
-                    {servico?.local || 'Localidade da Obra'}
+                    {servico?.local || servico?.cidade || servico?.nome || 'Localidade da Obra'}
                   </span>
                 </div>
               </div>

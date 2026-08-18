@@ -27,9 +27,10 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       foto_url, 
       angulo_pitch, 
       profundidade_cm, 
-      distancia_pista_cm, 
+      distancia_pista_cm,
       latitude, 
       longitude, 
+      endereco,
       registrado_por 
     } = req.body;
 
@@ -52,6 +53,7 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       distancia_pista_cm: distancia_pista_cm !== undefined ? Number(distancia_pista_cm) : undefined,
       latitude: latitude ? Number(latitude) : undefined,
       longitude: longitude ? Number(longitude) : undefined,
+      endereco: endereco || undefined,
       registrado_por
     });
 
