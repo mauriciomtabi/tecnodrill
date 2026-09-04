@@ -412,6 +412,8 @@ export class DBManager {
       obra: servico.obra || '',
       centro_custo: servico.centro_custo || '',
       local: servico.local || '',
+      cidade: servico.cidade || undefined,
+      uf: servico.uf || undefined,
       gestor_id: servico.gestor_id,
       tipo_servico: servico.tipo_servico || 'TELECOM',
       min_fotos_registro: Number(servico.min_fotos_registro) || 2,

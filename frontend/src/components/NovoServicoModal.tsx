@@ -101,7 +101,38 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setTipoServico(initialData.tipo_servico || 'TELECOM');
         setMinFotosRegistro(String(initialData.min_fotos_registro || 2));
         setDescricao(initialData.descricao || '');
-        setLocalizacao(initialData.local || '');
+
+        // Recuperar UF e Cidade do initialData ou analisar o campo local ("Cidade - UF • Detalhes")
+        let initUf = (initialData.uf || '').trim().toUpperCase();
+        let initCidade = (initialData.cidade || '').trim();
+        let initLocal = (initialData.local || '').trim();
+
+        if (!initUf || !initCidade) {
+          const matchHifen = initLocal.match(/^([^-•]+?)\s*-\s*([A-Za-z]{2})(?:\s*[•-]\s*(.*))?$/);
+          if (matchHifen) {
+            if (!initCidade) initCidade = matchHifen[1].trim();
+            if (!initUf) initUf = matchHifen[2].trim().toUpperCase();
+            if (matchHifen[3]) initLocal = matchHifen[3].trim();
+          } else {
+            const matchEspaco = /^(.+?)\s+([A-Za-z]{2})\s*-\s*(.*)$/;
+            const match2 = initLocal.match(matchEspaco);
+            if (match2) {
+              if (!initCidade) initCidade = match2[1].trim();
+              if (!initUf) initUf = match2[2].trim().toUpperCase();
+              if (match2[3]) initLocal = match2[3].trim();
+            }
+          }
+        }
+
+        const finalUf = initUf || 'SP';
+        const finalCidade = initCidade || '';
+
+        setUf(finalUf);
+        setUfSearch(finalUf);
+        setCidade(finalCidade);
+        setCidadeSearch(finalCidade);
+        setLocalizacao(initLocal);
+
         setNavegadorId(initialData.navegador_id || '');
         setOperadorId(initialData.operador_id || '');
         setMetragemPrevista(String(initialData.metragem_prevista_total || 1000));
@@ -116,6 +147,10 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setCliente('');
         setTipoServico('TELECOM');
         setMinFotosRegistro('2');
+        setUf('SP');
+        setUfSearch('SP');
+        setCidade('');
+        setCidadeSearch('');
         setLocalizacao('');
         setDescricao('');
         setMetragemPrevista('1000');
@@ -135,24 +170,27 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   useEffect(() => {
     if (!uf) return;
     setLoadingCidades(true);
+    let isMounted = true;
     fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios`)
       .then(res => res.json())
       .then(data => {
+        if (!isMounted) return;
         if (Array.isArray(data)) {
           const names = data.map((c: any) => c.nome).sort((a: string, b: string) => a.localeCompare(b));
           setCidadesList(names);
-          if (names.length > 0) {
-            if (!cidade || !names.includes(cidade)) {
-              setCidade(names[0]);
-              setCidadeSearch(names[0]);
-            }
-          }
+          // Jamais sobrescrever a cidade existente se ela já tiver sido informada
+          setCidade(current => (current && current.trim() !== '' ? current : ''));
+          setCidadeSearch(current => (current && current.trim() !== '' ? current : ''));
         }
       })
       .catch(() => {
-        setCidadesList(['São Paulo', 'Santos', 'Campinas', 'Guarulhos', 'São Bernardo do Campo']);
+        if (isMounted) setCidadesList(['São Paulo', 'Santos', 'Campinas', 'Guarulhos', 'São Bernardo do Campo']);
       })
-      .finally(() => setLoadingCidades(false));
+      .finally(() => {
+        if (isMounted) setLoadingCidades(false);
+      });
+
+    return () => { isMounted = false; };
   }, [uf]);
 
   // Fechar dropdowns ao clicar fora
@@ -172,8 +210,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   if (!isOpen) return null;
 
   const handleSelectUf = (selectedUf: string) => {
-    setUf(selectedUf);
-    setUfSearch(selectedUf);
+    if (selectedUf !== uf) {
+      setUf(selectedUf);
+      setUfSearch(selectedUf);
+      setCidade('');
+      setCidadeSearch('');
+    }
     setUfDropdownOpen(false);
   };
 
@@ -218,13 +260,15 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
     try {
       const localCompleto = cidade 
-        ? `${cidade} - ${uf} • ${localizacao.trim()}`
+        ? `${cidade} - ${uf}${localizacao.trim() ? ` • ${localizacao.trim()}` : ''}`
         : localizacao.trim() || 'Brasil';
 
       await onSave({
         nome: nome.toUpperCase().trim(),
         cliente: cliente.trim(),
         local: localCompleto,
+        cidade: (cidade || cidadeSearch).trim() || undefined,
+        uf: (uf || 'SP').trim().toUpperCase(),
         descricao: descricao.trim() || undefined,
         tipo_servico: tipoServico,
         min_fotos_registro: Math.max(1, Number(minFotosRegistro) || 2),
@@ -533,6 +577,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                       type="text"
                       value={cidadeSearch}
                       onChange={(e) => {
+                        setCidade(e.target.value);
                         setCidadeSearch(e.target.value);
                         setCidadeDropdownOpen(true);
                       }}

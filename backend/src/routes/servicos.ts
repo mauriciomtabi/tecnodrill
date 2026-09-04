@@ -82,6 +82,8 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
       obra,
       centro_custo,
       local,
+      cidade: req.body.cidade || null,
+      uf: req.body.uf || null,
       gestor_id,
       navegador_id: req.body.navegador_id || null,
       navegador_nome: req.body.navegador_nome || null,
