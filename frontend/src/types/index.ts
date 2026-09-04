@@ -13,6 +13,8 @@ export interface Usuario {
 export type CenarioFinanceiro = 'VALOR_METRO' | 'FATOR_DIAMETRO_METRO' | 'VALOR_FECHADO';
 export type TipoMeta = 'DIARIA' | 'SEMANAL';
 export type StatusServico = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
+export type TipoServico = 'SANEAMENTO' | 'RODOVIA' | 'TELECOM';
+export type TipoRegistroBarra = 'CANALIZACAO' | 'CAIXA';
 
 export interface Servico {
   id: string;
@@ -31,6 +33,8 @@ export interface Servico {
   operador_id?: string;
   operador_nome?: string;
   status: StatusServico;
+  tipo_servico?: TipoServico;
+  min_fotos_registro?: number;
   cenario_financeiro: CenarioFinanceiro;
   valor_metro: number;
   fator_financeiro: number;
@@ -76,8 +80,11 @@ export interface Barra {
   id: string;
   furo_id: string;
   numero_barra: number;
+  tipo_registro?: TipoRegistroBarra;
   metros?: number;
   metros_acumulados: number;
+  diametro?: string;
+  numero_os?: string;
   tem_caixa?: boolean;
   tipo_caixa?: string;
   observacao?: string;
@@ -85,6 +92,7 @@ export interface Barra {
   profundidade_cm?: number;
   distancia_pista_cm?: number;
   foto_url?: string;
+  fotos?: string[];
   latitude?: number;
   longitude?: number;
   endereco?: string;

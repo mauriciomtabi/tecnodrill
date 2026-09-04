@@ -466,21 +466,34 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           }}
         >
           <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
-            Progresso do Serviço
+            {isGestor ? 'Progresso do Serviço' : 'Progresso da Produção'}
           </span>
-          <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', display: 'block', margin: '4px 0' }}>
-            {percentualConcluido}%
-          </strong>
-          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
-            <div 
-              style={{ 
-                width: `${percentualConcluido}%`, 
-                height: '100%', 
-                backgroundColor: 'var(--primary)', 
-                transition: 'width 0.4s ease' 
-              }} 
-            />
-          </div>
+          {isGestor ? (
+            <>
+              <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)', display: 'block', margin: '4px 0' }}>
+                {percentualConcluido}%
+              </strong>
+              <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
+                <div 
+                  style={{ 
+                    width: `${percentualConcluido}%`, 
+                    height: '100%', 
+                    backgroundColor: 'var(--primary)', 
+                    transition: 'width 0.4s ease' 
+                  }} 
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--primary)', display: 'block', margin: '4px 0' }}>
+                {metrosExecutadosTotal}m
+              </strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Metros produzidos no campo
+              </span>
+            </>
+          )}
         </div>
 
         {/* Card 2: Metros Realizados */}
@@ -494,15 +507,17 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           }}
         >
           <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block' }}>
-            Metros Realizados
+            {isGestor ? 'Metros Realizados' : 'Total Executado'}
           </span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', margin: '4px 0' }}>
             <strong style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)' }}>
-              {metrosExecutadosTotal}
+              {metrosExecutadosTotal}m
             </strong>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              / {metrosTotalPrevisto}m
-            </span>
+            {isGestor && (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                / {metrosTotalPrevisto}m
+              </span>
+            )}
           </div>
           <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             {barras.length} registros apontados
@@ -860,6 +875,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         nextBarraNumber={barras.length + 1}
+        servico={servico}
         onSubmit={handleAddBarra}
         loading={savingBarra}
       />

@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS tecnodrill_servicos (
     metragem_prevista_total DECIMAL(10,2) DEFAULT 1000,
     tipo_meta VARCHAR(20) NOT NULL DEFAULT 'DIARIA' CHECK (tipo_meta IN ('DIARIA', 'SEMANAL')),
     meta_metros DECIMAL(10,2) NOT NULL DEFAULT 100,
+    tipo_servico VARCHAR(50) DEFAULT 'SANEAMENTO',
+    min_fotos_registro INTEGER DEFAULT 2,
     criado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -82,10 +84,14 @@ CREATE TABLE IF NOT EXISTS tecnodrill_barras (
     metros DECIMAL(10,2) DEFAULT 3,
     metros_acumulados DECIMAL(10,2) NOT NULL,
     tem_caixa BOOLEAN DEFAULT FALSE,
+    tipo_registro VARCHAR(50) DEFAULT 'CANALIZACAO',
+    diametro VARCHAR(100),
+    numero_os VARCHAR(100),
     angulo_pitch VARCHAR(50),
     profundidade_cm DECIMAL(10,2),
     distancia_pista_cm DECIMAL(10,2),
     foto_url TEXT,
+    fotos JSONB DEFAULT '[]'::jsonb,
     latitude DECIMAL(10,8),
     longitude DECIMAL(11,8),
     endereco TEXT,

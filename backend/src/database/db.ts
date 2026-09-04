@@ -56,6 +56,8 @@ export interface TecnodrillServico {
   navegador_nome?: string;
   operador_id?: string;
   operador_nome?: string;
+  tipo_servico?: 'SANEAMENTO' | 'RODOVIA' | 'TELECOM';
+  min_fotos_registro?: number;
   status: 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
   cenario_financeiro: 'VALOR_METRO' | 'FATOR_DIAMETRO_METRO' | 'VALOR_FECHADO';
   valor_metro: number;
@@ -102,8 +104,11 @@ export interface TecnodrillBarra {
   id: string;
   furo_id: string;
   numero_barra: number;
+  tipo_registro?: 'CANALIZACAO' | 'CAIXA';
   metros?: number;
   metros_acumulados: number;
+  diametro?: string;
+  numero_os?: string;
   tem_caixa?: boolean;
   tipo_caixa?: string;
   observacao?: string;
@@ -111,6 +116,7 @@ export interface TecnodrillBarra {
   profundidade_cm?: number;
   distancia_pista_cm?: number;
   foto_url?: string;
+  fotos?: string[];
   latitude?: number;
   longitude?: number;
   endereco?: string;
@@ -407,6 +413,8 @@ export class DBManager {
       centro_custo: servico.centro_custo || '',
       local: servico.local || '',
       gestor_id: servico.gestor_id,
+      tipo_servico: servico.tipo_servico || 'TELECOM',
+      min_fotos_registro: Number(servico.min_fotos_registro) || 2,
       status: servico.status || 'EM_ANDAMENTO',
       cenario_financeiro: servico.cenario_financeiro || 'VALOR_METRO',
       valor_metro: Number(servico.valor_metro) || 0,
@@ -572,15 +580,19 @@ export class DBManager {
       id: barra.id || crypto.randomUUID(),
       furo_id: barra.furo_id || '',
       numero_barra: nextNumber,
+      tipo_registro: barra.tipo_registro || 'CANALIZACAO',
       metros: metrosDesteLance,
       metros_acumulados: metrosAcumulados,
+      diametro: barra.diametro || '',
+      numero_os: barra.numero_os || '',
       tem_caixa: barra.tem_caixa !== undefined ? Boolean(barra.tem_caixa) : false,
       tipo_caixa: barra.tipo_caixa || '',
       observacao: barra.observacao || '',
       angulo_pitch: barra.angulo_pitch || '+0.00',
       profundidade_cm: Number(barra.profundidade_cm) || 0,
       distancia_pista_cm: Number(barra.distancia_pista_cm) || 0,
-      foto_url: barra.foto_url || '',
+      foto_url: barra.foto_url || (barra.fotos && barra.fotos.length > 0 ? barra.fotos[0] : ''),
+      fotos: barra.fotos || (barra.foto_url ? [barra.foto_url] : []),
       latitude: barra.latitude,
       longitude: barra.longitude,
       endereco: barra.endereco,

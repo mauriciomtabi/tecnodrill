@@ -71,19 +71,25 @@ export const ObrasList: React.FC<ObrasListProps> = ({
       <div style={{ marginTop: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
           <span>Progresso</span>
-          <span>{metrosExec} de {metrosTotal} metros ({percent}%)</span>
+          {isGestor ? (
+            <span>{metrosExec} de {metrosTotal} metros ({percent}%)</span>
+          ) : (
+            <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>{metrosExec} metros executados</span>
+          )}
         </div>
-        <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-          <div 
-            style={{
-              width: `${percent}%`,
-              height: '100%',
-              backgroundColor: barColor,
-              borderRadius: '4px',
-              transition: 'width 0.5s ease-out'
-            }}
-          />
-        </div>
+        {isGestor && (
+          <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            <div 
+              style={{
+                width: `${percent}%`,
+                height: '100%',
+                backgroundColor: barColor,
+                borderRadius: '4px',
+                transition: 'width 0.5s ease-out'
+              }}
+            />
+          </div>
+        )}
       </div>
     );
   };

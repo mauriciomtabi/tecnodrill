@@ -87,6 +87,8 @@ router.post('/', async (req: Request, res: Response): Promise<any> => {
       navegador_nome: req.body.navegador_nome || null,
       operador_id: req.body.operador_id || null,
       operador_nome: req.body.operador_nome || null,
+      tipo_servico: req.body.tipo_servico || 'TELECOM',
+      min_fotos_registro: Number(req.body.min_fotos_registro) || 2,
       cenario_financeiro: cenario_financeiro || 'VALOR_METRO',
       valor_metro: Number(valor_metro) || 0,
       fator_financeiro: Number(fator_financeiro) || 0,

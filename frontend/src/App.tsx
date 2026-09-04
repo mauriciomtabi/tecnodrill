@@ -34,6 +34,7 @@ export const App: React.FC = () => {
   // Modal Novo Registro Direto (Câmera / Botão Central)
   const [showDirectRodModal, setShowDirectRodModal] = useState(false);
   const [activeFuro, setActiveFuro] = useState<Furo | null>(null);
+  const [activeServico, setActiveServico] = useState<Servico | null>(null);
   const [activeBarraCount, setActiveBarraCount] = useState<number>(1);
   const [savingDirectRod, setSavingDirectRod] = useState(false);
 
@@ -117,6 +118,8 @@ export const App: React.FC = () => {
 
       // Escolher o serviço atualmente selecionado ou o primeiro disponível
       const targetServicoId = selectedObraId || servicos[0].id;
+      const targetServico = servicos.find(s => s.id === targetServicoId) || servicos[0];
+      setActiveServico(targetServico);
       const furos = await ApiService.getFuros(targetServicoId);
 
       let furoToUse: Furo;
@@ -315,6 +318,7 @@ export const App: React.FC = () => {
       <RodEntryModal
         isOpen={showDirectRodModal}
         onClose={() => setShowDirectRodModal(false)}
+        servico={activeServico || undefined}
         nextBarraNumber={activeBarraCount}
         onSubmit={handleSubmitDirectRod}
         loading={savingDirectRod}

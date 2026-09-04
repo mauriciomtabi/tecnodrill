@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Barra } from '../types';
+import { Barra, Servico } from '../types';
 import { 
   applyTecnodrillWatermark, 
   reverseGeocode, 
   AddressDetails, 
-  decToDMSForWatermark,
   formatFullAddress
 } from '../utils/watermark';
 import { 
@@ -21,6 +20,9 @@ import {
   Loader2,
   CheckCircle2,
   Layers,
+  Box,
+  Wrench,
+  Trash2,
   ArrowRight
 } from 'lucide-react';
 
@@ -28,21 +30,38 @@ interface RodEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
   nextBarraNumber: number;
+  servico?: Servico | null;
   onSubmit: (barraData: Partial<Barra>) => Promise<any>;
   loading?: boolean;
 }
+
+const COMMON_DIAMETERS = ['63mm', '90mm', '110mm', '160mm', '200mm'];
 
 export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   isOpen,
   onClose,
   nextBarraNumber,
+  servico = null,
   onSubmit,
   loading = false
 }) => {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Step 0: Escolha Tipo (Canalização vs Caixa)
+  // Step 1: Captura de Fotos (mínimo obrigatório + adicionais)
+  // Step 2: Dados Técnicos (Canalização: diâmetro, metros, caixa, OS se saneamento)
+  // Step 3: Confirmação Geral
+  // Step 4: Tela de Sucesso
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const [currentBarraNumber, setCurrentBarraNumber] = useState<number>(nextBarraNumber);
-  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [tipoRegistro, setTipoRegistro] = useState<'CANALIZACAO' | 'CAIXA'>('CANALIZACAO');
+
+  // Fotos
+  const [fotosList, setFotosList] = useState<string[]>([]);
   const [rawPhotoBase64, setRawPhotoBase64] = useState<string | null>(null);
+
+  // Dados Técnicos
+  const [diametro, setDiametro] = useState<string>('110mm');
+  const [customDiametro, setCustomDiametro] = useState<string>('');
+  const [numeroOs, setNumeroOs] = useState<string>('');
   const [metros, setMetros] = useState<number>(3);
   const [temCaixa, setTemCaixa] = useState<boolean>(false);
   const [observacao, setObservacao] = useState<string>('');
@@ -60,15 +79,21 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   // Saved result for Step 4 Success screen
   const [savedSuccessData, setSavedSuccessData] = useState<{
     numero_barra: number;
+    tipo_registro: 'CANALIZACAO' | 'CAIXA';
     metros: number;
+    diametro?: string;
+    numero_os?: string;
     tem_caixa: boolean;
     endereco?: string;
-    foto_url?: string;
+    fotos: string[];
   } | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const locationPromiseRef = useRef<Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> | null>(null);
+
+  const minFotos = servico?.min_fotos_registro ? Math.max(1, servico.min_fotos_registro) : 2;
+  const isSaneamento = servico?.tipo_servico === 'SANEAMENTO';
 
   const captureLocation = useCallback((): Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> => {
     if (!('geolocation' in navigator)) {
@@ -88,7 +113,6 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           setLongitude(lon);
           setPrecisao(acc);
 
-          // Reverse geocoding para endereço completo
           const addr = await reverseGeocode(lat, lon);
           if (addr) {
             setAddressDetails(addr);
@@ -109,23 +133,16 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     return promise;
   }, []);
 
-  // Whenever location changes or is recaptured, update watermark on existing raw photo if present
-  useEffect(() => {
-    if (rawPhotoBase64 && latitude !== null && longitude !== null && addressDetails !== null) {
-      applyTecnodrillWatermark(rawPhotoBase64, latitude, longitude, addressDetails, new Date())
-        .then((watermarked) => {
-          setFotoUrl(watermarked);
-        })
-        .catch(() => {});
-    }
-  }, [latitude, longitude, addressDetails, rawPhotoBase64]);
-
   useEffect(() => {
     if (isOpen) {
-      setStep(1);
+      setStep(0);
       setCurrentBarraNumber(nextBarraNumber);
-      setFotoUrl(null);
+      setTipoRegistro('CANALIZACAO');
+      setFotosList([]);
       setRawPhotoBase64(null);
+      setDiametro('110mm');
+      setCustomDiametro('');
+      setNumeroOs('');
       setMetros(3);
       setTemCaixa(false);
       setObservacao('');
@@ -142,8 +159,11 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Reset input so same photo can be reselected if needed
+    e.target.value = '';
+
     setProcessingWatermark(true);
-    setStatusMessage('Carregando foto...');
+    setStatusMessage('Carregando foto e aplicando carimbo oficial...');
 
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -161,9 +181,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         let curLon = longitude;
         let curAddr = addressDetails;
 
-        // Se ainda não temos a localização e o endereço, aguardar o processo de captura
         if (curLat === null || curLon === null || curAddr === null) {
-          setStatusMessage('Obtendo endereço e coordenadas GPS de alta precisão...');
+          setStatusMessage('Obtendo coordenadas GPS de alta precisão...');
           if (locationPromiseRef.current) {
             const locResult = await Promise.race([
               locationPromiseRef.current,
@@ -180,16 +199,15 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           }
         }
 
-        // Se tivermos coordenadas mas faltar o endereço, tentar geocodificação rápida
         if (curLat !== null && curLon !== null && !curAddr) {
-          setStatusMessage('Identificando logradouro e bairro...');
+          setStatusMessage('Identificando endereço oficial...');
           curAddr = await reverseGeocode(curLat, curLon);
           if (curAddr) {
             setAddressDetails(curAddr);
           }
         }
 
-        setStatusMessage('Aplicando carimbo oficial TecnoDrill...');
+        setStatusMessage('Estampando carimbo TecnoDrill...');
         const watermarked = await applyTecnodrillWatermark(
           rawBase64,
           curLat,
@@ -198,12 +216,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           new Date()
         );
 
-        setFotoUrl(watermarked);
-        setStep(2); // Avança para o Passo 2
+        setFotosList(prev => [...prev, watermarked]);
       } catch (err) {
         console.error('[Watermark Error]:', err);
-        setFotoUrl(rawBase64);
-        setStep(2);
+        setFotosList(prev => [...prev, rawBase64]);
       } finally {
         setProcessingWatermark(false);
         setStatusMessage('');
@@ -213,32 +229,93 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleFinalSubmit = async () => {
+  const handleRemovePhoto = (index: number) => {
+    setFotosList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getEffectiveDiametro = () => {
+    if (diametro === 'OUTRO') return customDiametro.trim() || 'Customizado';
+    return diametro;
+  };
+
+  const handleSaveCaixaDireto = async () => {
+    if (fotosList.length < minFotos) return;
+    if (isSaneamento && !numeroOs.trim()) return;
+
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     setSubmitting(true);
 
     try {
-      await onSubmit({
+      const payload: Partial<Barra> = {
         numero_barra: currentBarraNumber,
-        metros: Number(metros) || 3,
-        tem_caixa: temCaixa,
+        tipo_registro: 'CAIXA',
+        metros: 0,
+        tem_caixa: true,
+        tipo_caixa: 'Caixa de Passagem',
+        numero_os: numeroOs.trim() || undefined,
         observacao: observacao.trim() || undefined,
-        foto_url: fotoUrl || undefined,
+        foto_url: fotosList[0] || undefined,
+        fotos: fotosList,
         latitude: latitude || undefined,
         longitude: longitude || undefined,
         endereco: formattedAddress
-      });
+      };
 
-      // Salva os dados para a Tela de Sucesso
+      await onSubmit(payload);
+
       setSavedSuccessData({
         numero_barra: currentBarraNumber,
-        metros: Number(metros) || 3,
-        tem_caixa: temCaixa,
+        tipo_registro: 'CAIXA',
+        metros: 0,
+        numero_os: numeroOs.trim() || undefined,
+        tem_caixa: true,
         endereco: formattedAddress,
-        foto_url: fotoUrl || undefined
+        fotos: fotosList
       });
 
-      // Avança para a Tela de Sucesso (Passo 4)
+      setStep(4);
+    } catch (err) {
+      console.error('Erro ao enviar instalação de caixa:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFinalSubmit = async () => {
+    const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
+    const finalDiametro = getEffectiveDiametro();
+    setSubmitting(true);
+
+    try {
+      const payload: Partial<Barra> = {
+        numero_barra: currentBarraNumber,
+        tipo_registro: 'CANALIZACAO',
+        metros: Number(metros) || 3,
+        diametro: finalDiametro,
+        numero_os: isSaneamento ? (numeroOs.trim() || undefined) : undefined,
+        tem_caixa: temCaixa,
+        tipo_caixa: temCaixa ? 'Caixa de Passagem' : undefined,
+        observacao: observacao.trim() || undefined,
+        foto_url: fotosList[0] || undefined,
+        fotos: fotosList,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
+        endereco: formattedAddress
+      };
+
+      await onSubmit(payload);
+
+      setSavedSuccessData({
+        numero_barra: currentBarraNumber,
+        tipo_registro: 'CANALIZACAO',
+        metros: Number(metros) || 3,
+        diametro: finalDiametro,
+        numero_os: isSaneamento ? (numeroOs.trim() || undefined) : undefined,
+        tem_caixa: temCaixa,
+        endereco: formattedAddress,
+        fotos: fotosList
+      });
+
       setStep(4);
     } catch (err) {
       console.error('Erro ao enviar apontamento:', err);
@@ -250,13 +327,14 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const handleStartNextRod = () => {
     const nextNum = currentBarraNumber + 1;
     setCurrentBarraNumber(nextNum);
-    setFotoUrl(null);
+    setTipoRegistro('CANALIZACAO');
+    setFotosList([]);
     setRawPhotoBase64(null);
     setMetros(3);
     setTemCaixa(false);
     setObservacao('');
     setSavedSuccessData(null);
-    setStep(1);
+    setStep(0);
     captureLocation();
   };
 
@@ -314,16 +392,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         }}
       >
         {/* =========================================================================
-            PASSO 1: CAPTURA DE FOTO (IDÊNTICO AO APP JLE COM MARCA D'ÁGUA ROBUSTA)
+            PASSO 0: ESCOLHA DO TIPO (CANALIZAÇÃO VS INSTALAÇÃO DE CAIXA)
            ========================================================================= */}
-        {step === 1 && (
+        {step === 0 && (
           <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-                Registrar Novo Registro #{currentBarraNumber}
-              </h2>
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase' }}>
+                  Registro #{currentBarraNumber}
+                </span>
+                <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#FFFFFF', margin: '2px 0 0 0' }}>
+                  Selecione o Tipo de Atividade
+                </h2>
+              </div>
               <button
                 onClick={onClose}
                 style={{ color: 'var(--danger)', padding: '6px', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -333,159 +414,399 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </button>
             </div>
 
-            {/* Inner Step Card */}
+            <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>
+              Escolha a estrutura que está sendo executada no campo antes de tirar as fotos:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Opção 1: Canalização */}
+              <div
+                onClick={() => {
+                  setTipoRegistro('CANALIZACAO');
+                  setStep(1);
+                }}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1.5px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '18px 16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--primary)';
+                  e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                }}
+              >
+                <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(240, 90, 34, 0.15)', color: 'var(--primary)' }}>
+                  <Wrench size={26} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ fontSize: '15px', color: '#FFFFFF', display: 'block', marginBottom: '4px' }}>
+                    Canalização
+                  </strong>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.3', display: 'block' }}>
+                    Perfuração/passagem de tubulação. Exige fotos, diâmetro e metragem.
+                  </span>
+                </div>
+                <ArrowRight size={18} style={{ color: 'var(--primary-light)' }} />
+              </div>
+
+              {/* Opção 2: Instalação de Caixa */}
+              <div
+                onClick={() => {
+                  setTipoRegistro('CAIXA');
+                  setTemCaixa(true);
+                  setMetros(0);
+                  setStep(1);
+                }}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  border: '1.5px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '18px 16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--success)';
+                  e.currentTarget.style.backgroundColor = 'rgba(39, 174, 96, 0.08)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                }}
+              >
+                <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(39, 174, 96, 0.15)', color: 'var(--success)' }}>
+                  <Box size={26} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ fontSize: '15px', color: '#FFFFFF', display: 'block', marginBottom: '4px' }}>
+                    Instalação de Caixa
+                  </strong>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.3', display: 'block' }}>
+                    Registro ágil de caixa de passagem. Apenas fotos e confirmação imediata.
+                  </span>
+                </div>
+                <ArrowRight size={18} style={{ color: 'var(--success)' }} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            PASSO 1: CAPTURA DE FOTOS COM VALIDAÇÃO DE MÍNIMO
+           ========================================================================= */}
+        {step === 1 && (
+          <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+            {/* Top Navigation */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                onClick={() => setStep(0)}
+                style={{ color: 'var(--text-muted)', background: 'none', border: 'none', padding: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+              >
+                <ArrowLeft size={16} />
+                <span>Alterar Tipo</span>
+              </button>
+
+              <span style={{ 
+                fontSize: '11px', 
+                fontWeight: 800, 
+                padding: '3px 8px', 
+                borderRadius: '4px',
+                backgroundColor: tipoRegistro === 'CAIXA' ? 'rgba(39, 174, 96, 0.15)' : 'rgba(240, 90, 34, 0.15)',
+                color: tipoRegistro === 'CAIXA' ? 'var(--success)' : 'var(--primary)'
+              }}>
+                {tipoRegistro === 'CAIXA' ? '📦 INSTALAÇÃO DE CAIXA' : '🛠️ CANALIZAÇÃO'}
+              </span>
+
+              <button
+                onClick={onClose}
+                style={{ color: 'var(--danger)', padding: '4px', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Status Pill & Requirement Counter */}
             <div 
               style={{
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
-                padding: '32px 20px',
+                padding: '14px',
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                textAlign: 'center',
-                gap: '16px'
+                gap: '10px'
               }}
             >
-              {/* Dashed Camera Circle */}
-              <div 
-                style={{
-                  width: '88px',
-                  height: '88px',
-                  borderRadius: '50%',
-                  border: '2px dashed #2A8ACC',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#2A8ACC',
-                  backgroundColor: 'rgba(42, 138, 204, 0.08)'
-                }}
-              >
-                {processingWatermark ? (
-                  <Loader2 size={38} className="animate-spin text-[#F05A22]" />
-                ) : (
-                  <Camera size={38} />
-                )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#FFFFFF' }}>
+                  Fotos Obrigatórias do Registro:
+                </span>
+                <span style={{ 
+                  fontSize: '12px', 
+                  fontWeight: 800, 
+                  color: fotosList.length >= minFotos ? 'var(--success)' : '#F1C40F' 
+                }}>
+                  {fotosList.length} de {minFotos} {fotosList.length >= minFotos ? '✓ Mínimo atingido' : 'mínimas'}
+                </span>
               </div>
 
-              <div>
-                <strong style={{ fontSize: '16px', color: '#FFFFFF', display: 'block', marginBottom: '6px' }}>
-                  {processingWatermark ? 'Processando Carimbo Oficial...' : 'Registrar Nova Estrutura'}
-                </strong>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
-                  {statusMessage || 'Tire uma foto da estrutura ou escolha um arquivo da galeria com carimbo de coordenadas e endereço.'}
-                </p>
+              {/* Progress bar of photos */}
+              <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden' }}>
+                <div 
+                  style={{
+                    width: `${Math.min(100, (fotosList.length / minFotos) * 100)}%`,
+                    height: '100%',
+                    backgroundColor: fotosList.length >= minFotos ? 'var(--success)' : '#F1C40F',
+                    transition: 'width 0.3s ease'
+                  }}
+                />
               </div>
 
-              {/* Status Pill Location */}
-              <div 
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  borderRadius: '20px',
-                  backgroundColor: latitude ? 'rgba(39, 174, 96, 0.12)' : 'rgba(42, 138, 204, 0.12)',
-                  border: `1px solid ${latitude ? 'rgba(39, 174, 96, 0.3)' : 'rgba(42, 138, 204, 0.3)'}`,
-                  fontSize: '11px',
-                  color: latitude ? 'var(--success)' : '#2A8ACC'
-                }}
-              >
+              {/* GPS Status */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: latitude ? 'var(--success)' : '#2A8ACC' }}>
                 {capturingGps ? (
                   <>
                     <RefreshCw size={12} className="animate-spin" />
-                    <span>Obtendo GPS & Endereço...</span>
+                    <span>Obtendo localização GPS...</span>
                   </>
                 ) : latitude && addressDetails ? (
                   <>
                     <Check size={12} />
-                    <span>GPS & Endereço prontos para o carimbo</span>
+                    <span>GPS e Endereço prontos para o carimbo</span>
                   </>
                 ) : (
                   <>
                     <MapPin size={12} />
-                    <span>Aguardando geolocalização...</span>
+                    <span>GPS ativo</span>
                   </>
                 )}
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
-                <button
-                  type="button"
-                  disabled={processingWatermark}
-                  onClick={() => cameraInputRef.current?.click()}
-                  style={{
-                    backgroundColor: 'var(--primary)',
-                    color: '#FFFFFF',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                    padding: '13px 20px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    cursor: processingWatermark ? 'wait' : 'pointer',
-                    boxShadow: '0 4px 14px rgba(240, 90, 34, 0.4)',
-                    opacity: processingWatermark ? 0.7 : 1
-                  }}
-                >
-                  <Camera size={18} />
-                  <span>{processingWatermark ? 'Processando Carimbo...' : 'Tirar Foto (Câmera)'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={processingWatermark}
-                  onClick={() => galleryInputRef.current?.click()}
-                  style={{
-                    backgroundColor: 'rgba(42, 138, 204, 0.15)',
-                    color: '#2A8ACC',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    padding: '12px 20px',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(42, 138, 204, 0.4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    cursor: processingWatermark ? 'wait' : 'pointer',
-                    opacity: processingWatermark ? 0.7 : 1
-                  }}
-                >
-                  <ImageIcon size={18} />
-                  <span>{processingWatermark ? 'Processando...' : 'Escolher da Galeria'}</span>
-                </button>
+            {/* Thumbnails of Captured Photos */}
+            {fotosList.length > 0 && (
+              <div>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                  Fotos Capturadas ({fotosList.length}):
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                  {fotosList.map((photo, idx) => (
+                    <div 
+                      key={idx}
+                      style={{
+                        position: 'relative',
+                        height: '75px',
+                        borderRadius: '6px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: '#000'
+                      }}
+                    >
+                      <img src={photo} alt={`Foto ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <span style={{ position: 'absolute', top: 3, left: 3, backgroundColor: 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '9px', fontWeight: 800, padding: '1px 4px', borderRadius: '3px' }}>
+                        #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePhoto(idx)}
+                        style={{
+                          position: 'absolute',
+                          top: 3,
+                          right: 3,
+                          backgroundColor: 'rgba(231, 76, 60, 0.85)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '3px',
+                          padding: '3px',
+                          cursor: 'pointer'
+                        }}
+                        title="Remover foto"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Photo Capture Buttons */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={processingWatermark}
+                onClick={() => cameraInputRef.current?.click()}
+                style={{
+                  backgroundColor: 'var(--primary)',
+                  color: '#FFFFFF',
+                  fontWeight: 700,
+                  fontSize: '13.5px',
+                  padding: '12px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: processingWatermark ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(240, 90, 34, 0.35)'
+                }}
+              >
+                {processingWatermark ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Processando carimbo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera size={18} />
+                    <span>{fotosList.length === 0 ? 'Tirar Foto (Câmera)' : '+ Tirar Outra Foto'}</span>
+                  </>
+                )}
+              </button>
 
               <button
                 type="button"
-                onClick={onClose}
+                disabled={processingWatermark}
+                onClick={() => galleryInputRef.current?.click()}
                 style={{
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  marginTop: '4px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer'
+                  backgroundColor: 'rgba(42, 138, 204, 0.15)',
+                  color: '#2A8ACC',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(42, 138, 204, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: processingWatermark ? 'wait' : 'pointer'
                 }}
               >
-                Voltar para o Serviço
+                <ImageIcon size={16} />
+                <span>Escolher da Galeria</span>
               </button>
             </div>
+
+            {/* Fluxo Especial para INSTALAÇÃO DE CAIXA: só tira fotos e salva */}
+            {tipoRegistro === 'CAIXA' && (
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {isSaneamento && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
+                      NÚMERO DA OS (SANEAMENTO) *
+                    </label>
+                    <input
+                      type="text"
+                      value={numeroOs}
+                      onChange={(e) => setNumeroOs(e.target.value)}
+                      placeholder="ex: OS-2026-9821"
+                      required
+                      style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    OBSERVAÇÃO DA CAIXA (OPCIONAL)
+                  </label>
+                  <input
+                    type="text"
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    placeholder="ex: Caixa de concreto 60x60 na calçada"
+                    style={{ fontSize: '12.5px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  disabled={fotosList.length < minFotos || (isSaneamento && !numeroOs.trim()) || submitting}
+                  onClick={handleSaveCaixaDireto}
+                  style={{
+                    backgroundColor: (fotosList.length >= minFotos && (!isSaneamento || numeroOs.trim())) ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)',
+                    color: '#FFFFFF',
+                    fontWeight: 800,
+                    fontSize: '13.5px',
+                    padding: '13px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: (fotosList.length >= minFotos && (!isSaneamento || numeroOs.trim())) ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: fotosList.length >= minFotos ? '0 4px 14px rgba(39, 174, 96, 0.4)' : 'none'
+                  }}
+                >
+                  {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  <span>
+                    {fotosList.length < minFotos 
+                      ? `Faltam ${minFotos - fotosList.length} foto(s) para salvar`
+                      : 'Salvar Instalação de Caixa'}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* Fluxo Normal para CANALIZAÇÃO: avança para dados técnicos */}
+            {tipoRegistro === 'CANALIZACAO' && (
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+                <button
+                  type="button"
+                  disabled={fotosList.length < minFotos}
+                  onClick={() => setStep(2)}
+                  style={{
+                    width: '100%',
+                    backgroundColor: fotosList.length >= minFotos ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)',
+                    color: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '13.5px',
+                    padding: '13px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: fotosList.length >= minFotos ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: fotosList.length >= minFotos ? '0 4px 14px rgba(240, 90, 34, 0.4)' : 'none'
+                  }}
+                >
+                  <span>
+                    {fotosList.length < minFotos 
+                      ? `Tire mais ${minFotos - fotosList.length} foto(s) para avançar` 
+                      : 'Avançar para Dados Técnicos'}
+                  </span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
 
           </div>
         )}
 
         {/* =========================================================================
-            PASSO 2: METRAGEM E SE TEM CAIXA (IDÊNTICO AO APP JLE)
+            PASSO 2: DADOS TÉCNICOS DA CANALIZAÇÃO (DIÂMETRO, OS, METROS, CAIXA)
            ========================================================================= */}
         {step === 2 && (
           <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-            
             {/* Top Navigation */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
@@ -496,229 +817,189 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 <ArrowLeft size={18} />
               </button>
               <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                PASSO 2 DE 3 — ESTRUTURA DO REGISTRO
+                DADOS TÉCNICOS DA CANALIZAÇÃO
               </span>
             </div>
 
-            {/* Photo Thumbnail & Replace Buttons */}
-            <div 
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px'
-              }}
-            >
-              <div style={{ position: 'relative', width: '80px', height: '65px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#000', flexShrink: 0 }}>
-                {fotoUrl && (
-                  <img src={fotoUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                )}
-                <span 
+            {/* CAMPO DIÂMETRO (OBRIGATÓRIO) */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Diâmetro da Tubulação *
+              </label>
+
+              {/* Quick Chips */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                {COMMON_DIAMETERS.map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setDiametro(d);
+                      setCustomDiametro('');
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      border: `1px solid ${diametro === d ? 'var(--primary)' : 'var(--border-color)'}`,
+                      backgroundColor: diametro === d ? 'var(--primary)' : 'var(--bg-app)',
+                      color: diametro === d ? '#FFFFFF' : 'var(--text-main)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {d}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setDiametro('OUTRO')}
                   style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    backgroundColor: 'var(--success)',
-                    color: '#FFFFFF',
-                    fontSize: '9px',
-                    fontWeight: 800,
-                    textAlign: 'center',
-                    padding: '1px 0'
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    border: `1px solid ${diametro === 'OUTRO' ? 'var(--primary)' : 'var(--border-color)'}`,
+                    backgroundColor: diametro === 'OUTRO' ? 'var(--primary)' : 'var(--bg-app)',
+                    color: diametro === 'OUTRO' ? '#FFFFFF' : 'var(--text-main)',
+                    cursor: 'pointer'
                   }}
                 >
-                  CARIMBADO
-                </span>
+                  Outro
+                </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>Substituir imagem atual:</span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    style={{
-                      padding: '5px 10px',
-                      borderRadius: '4px',
-                      backgroundColor: 'rgba(42, 138, 204, 0.15)',
-                      border: '1px solid #2A8ACC',
-                      color: '#2A8ACC',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Camera size={13} />
-                    <span>Câmera</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => galleryInputRef.current?.click()}
-                    style={{
-                      padding: '5px 10px',
-                      borderRadius: '4px',
-                      backgroundColor: 'rgba(42, 138, 204, 0.15)',
-                      border: '1px solid #2A8ACC',
-                      color: '#2A8ACC',
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <ImageIcon size={13} />
-                    <span>Galeria</span>
-                  </button>
-                </div>
-              </div>
+              {diametro === 'OUTRO' && (
+                <input
+                  type="text"
+                  value={customDiametro}
+                  onChange={(e) => setCustomDiametro(e.target.value)}
+                  placeholder="Digite o diâmetro (ex: 250mm, 2 pol)"
+                  required
+                  style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+                />
+              )}
             </div>
 
-            {/* Seletor de Metragem Apontada */}
+            {/* CAMPO NÚMERO DA OS (CASO SANEAMENTO) */}
+            {isSaneamento && (
+              <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(42, 138, 204, 0.4)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#2A8ACC', textTransform: 'uppercase', marginBottom: '6px' }}>
+                  Número da OS (Saneamento) *
+                </label>
+                <input
+                  type="text"
+                  value={numeroOs}
+                  onChange={(e) => setNumeroOs(e.target.value)}
+                  placeholder="ex: OS-2026-9821"
+                  required
+                  style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
+
+            {/* Metragem Apontada */}
             <div 
               style={{
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
-                padding: '16px',
+                padding: '14px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '10px'
               }}
             >
               <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Metragem Apontada (Metros)
               </span>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => Math.max(1, (Number(prev) || 3) - 3))}
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--bg-app)',
-                    border: '1px solid var(--border-color)',
-                    color: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    flexShrink: 0
-                  }}
+                  onClick={() => setMetros(prev => Math.max(0.5, prev - 1))}
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
                   <Minus size={18} />
                 </button>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    value={metros}
-                    onChange={(e) => setMetros(e.target.value === '' ? '' as any : Number(e.target.value))}
-                    style={{
-                      fontSize: '28px',
-                      fontWeight: 800,
-                      color: 'var(--primary)',
-                      fontFamily: 'var(--font-mono)',
-                      width: '100px',
-                      textAlign: 'center',
-                      backgroundColor: 'var(--bg-app)',
-                      border: '1.5px solid var(--primary)',
-                      borderRadius: '8px',
-                      padding: '4px 8px',
-                      outline: 'none'
-                    }}
-                  />
-                  <span style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 700 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
+                  <span style={{ fontSize: '32px', fontWeight: 900, color: 'var(--primary)' }}>
+                    {metros}
+                  </span>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-muted)' }}>
                     m
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => (Number(prev) || 0) + 3)}
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--bg-app)',
-                    border: '1px solid var(--border-color)',
-                    color: '#FFFFFF',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    flexShrink: 0
-                  }}
+                  onClick={() => setMetros(prev => prev + 1)}
+                  style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
                   <Plus size={18} />
                 </button>
               </div>
+
+              {/* Botões Rápidos */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {[1, 3, 6, 9].map(mVal => (
+                  <button
+                    key={mVal}
+                    type="button"
+                    onClick={() => setMetros(mVal)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor: metros === mVal ? 'var(--primary)' : 'var(--bg-app)',
+                      color: metros === mVal ? '#FFFFFF' : 'var(--text-muted)',
+                      border: '1px solid var(--border-color)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    +{mVal}m
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Toggle Possui Caixa / Sem Caixa */}
-            <div 
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '16px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '12px'
-              }}
-            >
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                Instalação de Caixa
+            {/* Caixa de Passagem na Haste */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                Possui Caixa de Passagem nesta extensão?
               </span>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <button
                   type="button"
                   onClick={() => setTemCaixa(false)}
                   style={{
-                    padding: '12px',
-                    borderRadius: '8px',
+                    padding: '10px',
+                    borderRadius: '6px',
                     fontSize: '12px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     backgroundColor: !temCaixa ? 'var(--primary)' : 'var(--bg-app)',
                     color: !temCaixa ? '#FFFFFF' : 'var(--text-muted)',
-                    border: `1px solid ${!temCaixa ? 'var(--primary)' : 'var(--border-color)'}`,
-                    boxShadow: !temCaixa ? '0 4px 12px rgba(240, 90, 34, 0.35)' : 'none'
+                    border: `1px solid ${!temCaixa ? 'var(--primary)' : 'var(--border-color)'}`
                   }}
                 >
                   Sem Caixa
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setTemCaixa(true)}
                   style={{
-                    padding: '12px',
-                    borderRadius: '8px',
+                    padding: '10px',
+                    borderRadius: '6px',
                     fontSize: '12px',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
+                    fontWeight: 700,
                     cursor: 'pointer',
                     backgroundColor: temCaixa ? 'var(--primary)' : 'var(--bg-app)',
                     color: temCaixa ? '#FFFFFF' : 'var(--text-muted)',
-                    border: `1px solid ${temCaixa ? 'var(--primary)' : 'var(--border-color)'}`,
-                    boxShadow: temCaixa ? '0 4px 12px rgba(240, 90, 34, 0.35)' : 'none'
+                    border: `1px solid ${temCaixa ? 'var(--primary)' : 'var(--border-color)'}`
                   }}
                 >
                   Com Caixa
@@ -726,35 +1007,47 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </div>
             </div>
 
-            {/* Avançar para Passo 3 */}
+            {/* Observação */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                OBSERVAÇÃO TÉCNICA (OPCIONAL)
+              </label>
+              <input
+                type="text"
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="ex: Travessia sob calçada, solo arenoso..."
+                style={{ fontSize: '12.5px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            {/* Avançar para Confirmação */}
             <button
               type="button"
+              disabled={isSaneamento && !numeroOs.trim()}
               onClick={() => setStep(3)}
               style={{
-                backgroundColor: 'var(--primary)',
+                backgroundColor: (isSaneamento && !numeroOs.trim()) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
                 color: '#FFFFFF',
                 fontWeight: 700,
-                fontSize: '14px',
-                padding: '14px',
+                fontSize: '13.5px',
+                padding: '13px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: 'pointer',
-                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)',
-                marginTop: '4px'
+                cursor: (isSaneamento && !numeroOs.trim()) ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)'
               }}
             >
               Avançar para Confirmação
             </button>
-
           </div>
         )}
 
         {/* =========================================================================
-            PASSO 3: CONFIRMAÇÃO, LOCALIZAÇÃO, OBSERVAÇÃO E ENVIO (COM ENDEREÇO COMPLETO)
+            PASSO 3: CONFIRMAÇÃO E ENVIO
            ========================================================================= */}
         {step === 3 && (
           <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
-            
             {/* Top Navigation */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <button
@@ -765,311 +1058,155 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 <ArrowLeft size={18} />
               </button>
               <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                PASSO 3 DE 3 — CONFIRMAÇÃO
+                CONFIRMAÇÃO DO REGISTRO
               </span>
             </div>
 
-            {/* Big Photo Preview with Watermark Stamp */}
-            <div 
-              style={{
-                position: 'relative',
-                width: '100%',
-                height: '190px',
-                borderRadius: 'var(--radius-md)',
-                overflow: 'hidden',
-                backgroundColor: '#000',
-                border: '1px solid var(--border-color)'
-              }}
-            >
-              {fotoUrl && (
-                <img src={fotoUrl} alt="Registro" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* Photo Preview Carousel/Thumbnails */}
+            {fotosList.length > 0 && (
+              <div style={{ position: 'relative', width: '100%', height: '170px', borderRadius: 'var(--radius-md)', overflow: 'hidden', backgroundColor: '#000', border: '1px solid var(--border-color)' }}>
+                <img src={fotosList[0]} alt="Principal" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.7)', padding: '3px 8px', borderRadius: '4px', fontSize: '10.5px', color: '#fff', fontWeight: 700 }}>
+                  {fotosList.length} foto(s) carimbada(s)
+                </div>
+              </div>
+            )}
+
+            {/* Summary Details */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Atividade:</span>
+                <strong style={{ color: '#FFFFFF' }}>{tipoRegistro === 'CAIXA' ? 'Instalação de Caixa' : 'Canalização'}</strong>
+              </div>
+
+              {tipoRegistro === 'CANALIZACAO' && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Diâmetro:</span>
+                    <strong style={{ color: 'var(--primary)' }}>{getEffectiveDiametro()}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Metros Apontados:</span>
+                    <strong style={{ color: '#FFFFFF' }}>+{metros} metros</strong>
+                  </div>
+                </>
               )}
 
-              {/* Tag Top Left: REGISTRO */}
-              <div 
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  left: '10px',
-                  backgroundColor: 'rgba(0,0,0,0.75)',
-                  color: '#FFFFFF',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10.5px',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <Camera size={13} />
-                <span>{temCaixa ? 'CAIXA' : 'CANALIZAÇÃO'}</span>
-              </div>
-
-              {/* Tag Bottom Right: PRÓXIMO # */}
-              <div 
-                style={{
-                  position: 'absolute',
-                  bottom: '10px',
-                  right: '10px',
-                  backgroundColor: 'rgba(0,0,0,0.85)',
-                  color: '#FFFFFF',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  fontFamily: 'var(--font-mono)'
-                }}
-              >
-                REGISTRO #{currentBarraNumber} (+{metros}m)
-              </div>
-            </div>
-
-            {/* Card Localização Capturada com Endereço Completo */}
-            <div 
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <MapPin size={15} style={{ color: 'var(--primary)' }} />
-                  <strong style={{ fontSize: '12px', color: 'var(--success)' }}>
-                    Localização & Endereço Capturados
-                  </strong>
+              {isSaneamento && numeroOs && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Ordem de Serviço (OS):</span>
+                  <strong style={{ color: '#2A8ACC' }}>{numeroOs}</strong>
                 </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={captureLocation}
-                  disabled={capturingGps}
-                  style={{
-                    color: '#2A8ACC',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <RefreshCw size={11} className={capturingGps ? 'animate-spin' : ''} />
-                  <span>{capturingGps ? 'Obtendo...' : 'Recapturar'}</span>
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Caixa de Passagem:</span>
+                <strong style={{ color: temCaixa ? 'var(--success)' : 'var(--text-muted)' }}>
+                  {temCaixa ? 'Sim (Com Caixa)' : 'Não'}
+                </strong>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                {/* DMS Coordinates */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Check size={13} style={{ color: 'var(--success)', flexShrink: 0 }} />
-                  <span style={{ color: '#FFFFFF', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                    {latitude && longitude 
-                      ? `${decToDMSForWatermark(latitude, true)} ${decToDMSForWatermark(longitude, false)} · prec: ${precisao || 10}m` 
-                      : 'GPS obtido pelo dispositivo'}
+              {addressDetails && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', paddingTop: '4px' }}>
+                  <MapPin size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px', lineHeight: '1.3' }}>
+                    {formatFullAddress(addressDetails)}
                   </span>
                 </div>
-
-                {/* Full Address Display */}
-                {addressDetails && (
-                  <div style={{ paddingLeft: '19px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '12px' }}>
-                      {addressDetails.road}{addressDetails.houseNumber ? `, ${addressDetails.houseNumber}` : ''}
-                    </span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
-                      {[addressDetails.neighbourhood, addressDetails.city, addressDetails.state].filter(Boolean).join(' · ')}
-                    </span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
-            {/* Observação (Opcional - Máx 500 caract.) */}
-            <div>
-              <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
-                OBSERVAÇÃO (OPCIONAL — MÁX 500 CARACT.)
-              </label>
-              <textarea
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                maxLength={500}
-                placeholder="Observações sobre o solo, interferências, condições do local..."
-                rows={3}
-                style={{
-                  width: '100%',
-                  fontSize: '12.5px',
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  resize: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            {/* Botão de Envio Final */}
+            {/* Confirm and Submit Button */}
             <button
               type="button"
-              disabled={submitting || loading}
+              disabled={submitting}
               onClick={handleFinalSubmit}
               style={{
                 backgroundColor: 'var(--primary)',
                 color: '#FFFFFF',
-                fontWeight: 700,
+                fontWeight: 800,
                 fontSize: '14px',
                 padding: '14px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: (submitting || loading) ? 'wait' : 'pointer',
-                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)',
+                cursor: submitting ? 'wait' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                opacity: (submitting || loading) ? 0.8 : 1
+                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)'
               }}
             >
-              {submitting || loading ? (
+              {submitting ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  <span>Salvando Registro #{currentBarraNumber}...</span>
+                  <span>Transmitindo Registro...</span>
                 </>
               ) : (
-                <span>Salvar Registro #{currentBarraNumber}</span>
+                <>
+                  <CheckCircle2 size={18} />
+                  <span>Confirmar e Transmitir Registro</span>
+                </>
               )}
             </button>
-
           </div>
         )}
 
         {/* =========================================================================
-            PASSO 4: TELA DE REGISTRO CONCLUÍDO COM SUCESSO (FEEDBACK INSTANTÂNEO)
+            PASSO 4: TELA DE SUCESSO
            ========================================================================= */}
         {step === 4 && savedSuccessData && (
-          <div 
-            className="fade-in"
-            style={{ 
-              padding: '28px 24px', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              textAlign: 'center', 
-              gap: '20px',
-              overflowY: 'auto'
-            }}
-          >
-            {/* Animated Glowing Success Icon */}
-            <div 
-              style={{
-                width: '76px',
-                height: '76px',
-                borderRadius: '50%',
-                backgroundColor: 'rgba(39, 174, 96, 0.15)',
-                border: '2px solid var(--success)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--success)',
-                boxShadow: '0 0 24px rgba(39, 174, 96, 0.35)',
-                marginTop: '8px'
-              }}
-            >
-              <CheckCircle2 size={44} />
+          <div style={{ padding: '28px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '20px' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(39, 174, 96, 0.15)', border: '2px solid var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--success)' }}>
+              <CheckCircle2 size={36} />
             </div>
 
-            {/* Success Heading */}
             <div>
-              <span 
-                style={{
-                  display: 'inline-block',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
-                  color: 'var(--success)',
-                  backgroundColor: 'rgba(39, 174, 96, 0.12)',
-                  padding: '3px 10px',
-                  borderRadius: '12px',
-                  marginBottom: '8px'
-                }}
-              >
-                APONTAMENTO SALVO
+              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--success)', textTransform: 'uppercase', display: 'inline-block', padding: '3px 8px', backgroundColor: 'rgba(39, 174, 96, 0.15)', borderRadius: '12px', marginBottom: '8px' }}>
+                APONTAMENTO SALVO COM SUCESSO
               </span>
               <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', margin: '0 0 6px 0' }}>
                 Registro #{savedSuccessData.numero_barra} Concluído!
               </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
-                Foto oficial carimbada e geolocalização registradas com sucesso.
+              <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.4' }}>
+                Fotos oficiais carimbadas e geolocalização salvas com sucesso.
               </p>
             </div>
 
-            {/* Summary Details Card */}
-            <div 
-              style={{
-                width: '100%',
-                backgroundColor: 'var(--bg-card)',
-                border: '1px solid var(--border-color)',
-                borderRadius: 'var(--radius-md)',
-                padding: '14px 16px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px',
-                textAlign: 'left',
-                boxSizing: 'border-box'
-              }}
-            >
-              {/* Photo & Badge Row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {savedSuccessData.foto_url && (
-                  <div style={{ width: '64px', height: '54px', borderRadius: '6px', overflow: 'hidden', backgroundColor: '#000', flexShrink: 0 }}>
-                    <img src={savedSuccessData.foto_url} alt="Foto Carimbada" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700 }}>
-                    ESTRUTURA APONTADA:
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF' }}>
-                      +{savedSuccessData.metros}m
-                    </span>
-                    <span 
-                      style={{
-                        fontSize: '10px',
-                        fontWeight: 800,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        backgroundColor: savedSuccessData.tem_caixa ? 'rgba(39, 174, 96, 0.18)' : 'rgba(240, 90, 34, 0.18)',
-                        color: savedSuccessData.tem_caixa ? 'var(--success)' : 'var(--primary)'
-                      }}
-                    >
-                      {savedSuccessData.tem_caixa ? 'COM CAIXA' : 'CANALIZAÇÃO'}
-                    </span>
-                  </div>
-                </div>
+            <div style={{ width: '100%', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Tipo:</span>
+                <strong style={{ color: '#FFFFFF' }}>{savedSuccessData.tipo_registro === 'CAIXA' ? 'Instalação de Caixa' : 'Canalização'}</strong>
               </div>
 
-              {/* Address Row */}
+              {savedSuccessData.diametro && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Diâmetro:</span>
+                  <strong style={{ color: 'var(--primary)' }}>{savedSuccessData.diametro}</strong>
+                </div>
+              )}
+
+              {savedSuccessData.numero_os && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Ordem de Serviço (OS):</span>
+                  <strong style={{ color: '#2A8ACC' }}>{savedSuccessData.numero_os}</strong>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Metros:</span>
+                <strong style={{ color: '#FFFFFF' }}>+{savedSuccessData.metros}m</strong>
+              </div>
+
               {savedSuccessData.endereco && (
-                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '8px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  <MapPin size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-main)', fontWeight: 600, lineHeight: '1.3' }}>
-                    {savedSuccessData.endereco}
-                  </span>
+                <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                  <MapPin size={12} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{savedSuccessData.endereco}</span>
                 </div>
               )}
             </div>
 
-            {/* Action Buttons */}
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 type="button"
                 onClick={handleStartNextRod}
@@ -1077,19 +1214,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   backgroundColor: 'var(--primary)',
                   color: '#FFFFFF',
                   fontWeight: 800,
-                  fontSize: '14px',
-                  padding: '14px',
+                  fontSize: '13.5px',
+                  padding: '13px',
                   borderRadius: '8px',
                   border: 'none',
                   cursor: 'pointer',
-                  boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '8px'
+                  gap: '8px',
+                  boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)'
                 }}
               >
-                <Plus size={18} />
+                <Plus size={16} />
                 <span>Apontar Próximo Registro (#{currentBarraNumber + 1})</span>
               </button>
 
@@ -1101,24 +1238,17 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   color: 'var(--text-main)',
                   fontWeight: 700,
                   fontSize: '13px',
-                  padding: '12px',
+                  padding: '11px',
                   borderRadius: '8px',
                   border: '1px solid var(--border-color)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
+                  cursor: 'pointer'
                 }}
               >
-                <Layers size={16} />
-                <span>Ver Lista de Registros da Obra</span>
+                Concluir e Voltar ao Serviço
               </button>
             </div>
-
           </div>
         )}
-
       </div>
     </div>,
     document.body

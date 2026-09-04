@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Servico, CenarioFinanceiro, Usuario } from '../types';
+import { Servico, CenarioFinanceiro, Usuario, TipoServico } from '../types';
 import { ApiService } from '../services/api';
 import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat } from 'lucide-react';
 
@@ -58,6 +58,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [metragemPrevista, setMetragemPrevista] = useState('1000');
   const [metaDiaria, setMetaDiaria] = useState('100');
   const [cenario, setCenario] = useState<CenarioFinanceiro>('VALOR_METRO');
+  const [tipoServico, setTipoServico] = useState<TipoServico>('TELECOM');
+  const [minFotosRegistro, setMinFotosRegistro] = useState('2');
 
   // Valores de cada modelo
   const [valorMetro, setValorMetro] = useState('180');
@@ -96,6 +98,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       if (initialData) {
         setNome(initialData.nome || '');
         setCliente(initialData.cliente || '');
+        setTipoServico(initialData.tipo_servico || 'TELECOM');
+        setMinFotosRegistro(String(initialData.min_fotos_registro || 2));
         setDescricao(initialData.descricao || '');
         setLocalizacao(initialData.local || '');
         setNavegadorId(initialData.navegador_id || '');
@@ -110,6 +114,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       } else {
         setNome('');
         setCliente('');
+        setTipoServico('TELECOM');
+        setMinFotosRegistro('2');
         setLocalizacao('');
         setDescricao('');
         setMetragemPrevista('1000');
@@ -220,6 +226,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         cliente: cliente.trim(),
         local: localCompleto,
         descricao: descricao.trim() || undefined,
+        tipo_servico: tipoServico,
+        min_fotos_registro: Math.max(1, Number(minFotosRegistro) || 2),
         navegador_id: navIdFinal,
         navegador_nome: navNomeFinal,
         operador_id: opIdFinal,
@@ -227,7 +235,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         cenario_financeiro: cenario,
         valor_metro: Number(valorMetro) || 0,
         fator_financeiro: Number(fator) || 0,
-        diametro_furo_mm: Number(diametroMm) || 0,
+        diametro_furo_mm: 0,
         valor_total_fechado: Number(valorFechado) || 0,
         metragem_prevista_total: mTotal,
         tipo_meta: 'DIARIA',
@@ -378,6 +386,41 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   required
                   style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
                 />
+              </div>
+
+              {/* TIPO DE SERVIÇO E MÍNIMO DE FOTOS */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Tipo de Serviço *
+                  </label>
+                  <select
+                    value={tipoServico}
+                    onChange={(e) => setTipoServico(e.target.value as TipoServico)}
+                    style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
+                    required
+                  >
+                    <option value="SANEAMENTO">💧 Saneamento</option>
+                    <option value="RODOVIA">🛣️ Rodovia</option>
+                    <option value="TELECOM">📡 Telecom</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Mínimo Fotos / Registro *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={minFotosRegistro}
+                    onChange={(e) => setMinFotosRegistro(e.target.value)}
+                    placeholder="2"
+                    required
+                    style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '10px' }}
+                  />
+                </div>
               </div>
 
               {/* SELEÇÃO DE EQUIPE (NAVEGADOR E OPERADOR) */}
@@ -755,35 +798,22 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 )}
 
                 {cenario === 'FATOR_DIAMETRO_METRO' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-                        FATOR FINANCEIRO *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={fator}
-                        onChange={(e) => setFator(e.target.value)}
-                        placeholder="2.85"
-                        required
-                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-                        DIÂMETRO DO FURO (MM) *
-                      </label>
-                      <input
-                        type="number"
-                        value={diametroMm}
-                        onChange={(e) => setDiametroMm(e.target.value)}
-                        placeholder="150"
-                        required
-                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
-                      />
-                    </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
+                      FATOR FINANCEIRO *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={fator}
+                      onChange={(e) => setFator(e.target.value)}
+                      placeholder="2.85"
+                      required
+                      style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
+                    />
+                    <span style={{ display: 'block', marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                      💡 O diâmetro do furo/tubulação será informado pelo técnico em cada registro de campo.
+                    </span>
                   </div>
                 )}
 

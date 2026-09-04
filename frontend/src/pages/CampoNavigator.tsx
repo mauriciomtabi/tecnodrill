@@ -399,13 +399,29 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
                   )}
 
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
                         Registro #{b.numero_barra}
                       </strong>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', backgroundColor: 'rgba(240, 90, 34, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
-                        +{b.metros || 3}m (Total: {b.metros_acumulados}m)
-                      </span>
+                      {b.tipo_registro === 'CAIXA' ? (
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--success)', backgroundColor: 'rgba(39, 174, 96, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                          📦 CAIXA
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', backgroundColor: 'rgba(240, 90, 34, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                          +{b.metros || 3}m (Total: {b.metros_acumulados}m)
+                        </span>
+                      )}
+                      {b.diametro && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--primary-light)', backgroundColor: 'rgba(41, 128, 168, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                          ⌀ {b.diametro}
+                        </span>
+                      )}
+                      {b.numero_os && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#2A8ACC', backgroundColor: 'rgba(42, 138, 204, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                          OS: {b.numero_os}
+                        </span>
+                      )}
                     </div>
 
                     {b.observacao && (
@@ -453,6 +469,7 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
         isOpen={showAddBarraModal}
         onClose={() => setShowAddBarraModal(false)}
         nextBarraNumber={barras.length + 1}
+        servico={currentServico}
         onSubmit={handleSaveBarra}
         loading={savingBarra}
       />
