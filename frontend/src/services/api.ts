@@ -1,6 +1,54 @@
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabaseClient';
-import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario } from '../types';
+import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra } from '../types';
+
+export interface ServicoMetaTag {
+  tipo_servico?: TipoServico;
+  min_fotos_registro?: number;
+}
+
+export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
+  if (!raw) return { descricao: '', meta: {} };
+  const match = raw.match(/<!--TD_META:(.*?)-->/);
+  if (match) {
+    try {
+      const meta = JSON.parse(match[1]);
+      const descricao = raw.replace(/<!--TD_META:.*?-->\n?/, '').trim();
+      return { descricao, meta };
+    } catch (_) {}
+  }
+  return { descricao: raw, meta: {} };
+}
+
+export function buildServicoDescricao(cleanDescricao: string, meta: ServicoMetaTag): string {
+  const metaStr = `<!--TD_META:${JSON.stringify(meta)}-->`;
+  return cleanDescricao ? `${metaStr}\n${cleanDescricao}` : metaStr;
+}
+
+export interface BarraMetaTag {
+  tipo_registro?: TipoRegistroBarra;
+  diametro?: string;
+  numero_os?: string;
+  fotos?: string[];
+}
+
+export function parseBarraObservacao(raw?: string | null): { observacao: string; meta: BarraMetaTag } {
+  if (!raw) return { observacao: '', meta: {} };
+  const match = raw.match(/<!--BARRA_META:(.*?)-->/);
+  if (match) {
+    try {
+      const meta = JSON.parse(match[1]);
+      const observacao = raw.replace(/<!--BARRA_META:.*?-->\n?/, '').trim();
+      return { observacao, meta };
+    } catch (_) {}
+  }
+  return { observacao: raw, meta: {} };
+}
+
+export function buildBarraObservacao(cleanObs: string, meta: BarraMetaTag): string {
+  const metaStr = `<!--BARRA_META:${JSON.stringify(meta)}-->`;
+  return cleanObs ? `${metaStr}\n${cleanObs}` : metaStr;
+}
 
 export class ApiService {
   private static getToken(): string | null {
@@ -429,10 +477,14 @@ export class ApiService {
         }
       };
 
+      const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
+      const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
+      const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
+
       result.push({
         id: s.id,
         nome: s.nome,
-        descricao: s.descricao || '',
+        descricao: cleanDesc,
         cliente: s.cliente || '',
         projeto: s.projeto || '',
         obra: s.obra || '',
@@ -452,8 +504,8 @@ export class ApiService {
         diametro_furo_mm: Number(s.diametro_furo_mm) || 0,
         valor_total_fechado: Number(s.valor_total_fechado) || 0,
         metragem_prevista_total: totalPrevisto,
-        tipo_servico: s.tipo_servico || 'TELECOM',
-        min_fotos_registro: Number(s.min_fotos_registro) || 2,
+        tipo_servico: tipoServicoFinal,
+        min_fotos_registro: minFotosFinal,
         tipo_meta: s.tipo_meta || 'DIARIA',
         meta_metros: Number(s.meta_metros) || 100,
         criado_em: s.criado_em,
@@ -496,12 +548,20 @@ export class ApiService {
       furosData = data || [];
     } catch (_) {}
 
+    const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
+    const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
+    const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
+    const navId = furosData.length > 0 ? furosData[0].navegador_id : s.navegador_id;
+    const navNome = furosData.length > 0 ? furosData[0].navegador_nome : s.navegador_nome;
+    const opId = furosData.length > 0 ? furosData[0].operador_id : s.operador_id;
+    const opNome = furosData.length > 0 ? furosData[0].operador_nome : s.operador_nome;
+
     const furos: Furo[] = furosData.map(f => ({
       id: f.id,
       servico_id: f.servico_id,
       data_furo: f.data_furo,
-      navegador_nome: f.navegador_nome || s.navegador_nome || '',
-      operador_nome: f.operador_nome || s.operador_nome || '',
+      navegador_nome: f.navegador_nome || navNome || '',
+      operador_nome: f.operador_nome || opNome || '',
       tubo_aplicado: f.tubo_aplicado || '',
       diametro_furo: f.diametro_furo || '',
       comprimento_furo: Number(f.comprimento_furo) || 0,
@@ -516,7 +576,7 @@ export class ApiService {
     return {
       id: s.id,
       nome: s.nome,
-      descricao: s.descricao || '',
+      descricao: cleanDesc,
       cliente: s.cliente || '',
       projeto: s.projeto || '',
       obra: s.obra || '',
@@ -525,10 +585,10 @@ export class ApiService {
       cidade: s.cidade || undefined,
       uf: s.uf || undefined,
       gestor_id: s.gestor_id,
-      navegador_id: s.navegador_id,
-      navegador_nome: s.navegador_nome,
-      operador_id: s.operador_id,
-      operador_nome: s.operador_nome,
+      navegador_id: navId,
+      navegador_nome: navNome,
+      operador_id: opId,
+      operador_nome: opNome,
       status: s.status,
       cenario_financeiro: s.cenario_financeiro,
       valor_metro: Number(s.valor_metro) || 0,
@@ -536,8 +596,8 @@ export class ApiService {
       diametro_furo_mm: Number(s.diametro_furo_mm) || 0,
       valor_total_fechado: Number(s.valor_total_fechado) || 0,
       metragem_prevista_total: Number(s.metragem_prevista_total) || 1000,
-      tipo_servico: s.tipo_servico || 'TELECOM',
-      min_fotos_registro: Number(s.min_fotos_registro) || 2,
+      tipo_servico: tipoServicoFinal,
+      min_fotos_registro: minFotosFinal,
       tipo_meta: s.tipo_meta || 'DIARIA',
       meta_metros: Number(s.meta_metros) || 100,
       criado_em: s.criado_em,
@@ -565,10 +625,16 @@ export class ApiService {
 
     const servicoId = data.id || `TD-${String(nextNum).padStart(2, '0')}`;
 
-    const fullPayload: any = {
+    const { descricao: cleanDesc } = parseServicoDescricao(data.descricao || '');
+    const encodedDesc = buildServicoDescricao(cleanDesc, {
+      tipo_servico: data.tipo_servico || 'TELECOM',
+      min_fotos_registro: Number(data.min_fotos_registro) || 2
+    });
+
+    const supabasePayload: any = {
       id: servicoId,
       nome: data.nome?.toUpperCase().trim(),
-      descricao: data.descricao || null,
+      descricao: encodedDesc,
       cliente: data.cliente || '',
       projeto: data.projeto || null,
       obra: data.obra || null,
@@ -577,10 +643,6 @@ export class ApiService {
       cidade: data.cidade || null,
       uf: data.uf || null,
       gestor_id: data.gestor_id || null,
-      navegador_id: data.navegador_id || null,
-      navegador_nome: data.navegador_nome || null,
-      operador_id: data.operador_id || null,
-      operador_nome: data.operador_nome || null,
       status: data.status || 'EM_ANDAMENTO',
       cenario_financeiro: data.cenario_financeiro || 'VALOR_METRO',
       valor_metro: Number(data.valor_metro) || 0,
@@ -588,38 +650,35 @@ export class ApiService {
       diametro_furo_mm: Number(data.diametro_furo_mm) || 0,
       valor_total_fechado: Number(data.valor_total_fechado) || 0,
       metragem_prevista_total: Number(data.metragem_prevista_total) || 1000,
-      tipo_servico: data.tipo_servico || 'TELECOM',
-      min_fotos_registro: Number(data.min_fotos_registro) || 2,
       tipo_meta: data.tipo_meta || 'DIARIA',
       meta_metros: Number(data.meta_metros) || 100
     };
 
     let createdServico: any = null;
 
-    // Tenta inserir com o payload completo
     try {
       const { data: created, error } = await supabase
         .from('tecnodrill_servicos')
-        .insert(fullPayload)
+        .insert(supabasePayload)
         .select()
         .single();
       
       if (!error && created) {
-        createdServico = created;
+        createdServico = {
+          ...created,
+          descricao: cleanDesc,
+          tipo_servico: data.tipo_servico || 'TELECOM',
+          min_fotos_registro: Number(data.min_fotos_registro) || 2,
+          navegador_id: data.navegador_id,
+          navegador_nome: data.navegador_nome,
+          operador_id: data.operador_id,
+          operador_nome: data.operador_nome
+        };
       } else if (error) {
-        console.warn('[Supabase createServico fallback, trying base columns]:', error);
-        const { navegador_id, navegador_nome, operador_id, operador_nome, ...basePayload } = fullPayload;
-        const { data: baseCreated, error: baseErr } = await supabase
-          .from('tecnodrill_servicos')
-          .insert(basePayload)
-          .select()
-          .single();
-        if (!baseErr && baseCreated) {
-          createdServico = { ...baseCreated, navegador_id, navegador_nome, operador_id, operador_nome };
-        }
+        console.warn('[Supabase createServico error]:', error);
       }
     } catch (err) {
-      console.warn('[Supabase createServico error]:', err);
+      console.warn('[Supabase createServico catch]:', err);
     }
 
     // Sincroniza também no backend local
@@ -627,7 +686,15 @@ export class ApiService {
       const res = await fetch('/api/servicos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fullPayload)
+        body: JSON.stringify({
+          ...supabasePayload,
+          navegador_id: data.navegador_id,
+          navegador_nome: data.navegador_nome,
+          operador_id: data.operador_id,
+          operador_nome: data.operador_nome,
+          tipo_servico: data.tipo_servico || 'TELECOM',
+          min_fotos_registro: Number(data.min_fotos_registro) || 2
+        })
       });
       if (res.ok && !createdServico) {
         createdServico = await res.json();
@@ -636,7 +703,14 @@ export class ApiService {
 
     if (!createdServico) {
       createdServico = {
-        ...fullPayload,
+        ...supabasePayload,
+        descricao: cleanDesc,
+        tipo_servico: data.tipo_servico || 'TELECOM',
+        min_fotos_registro: Number(data.min_fotos_registro) || 2,
+        navegador_id: data.navegador_id,
+        navegador_nome: data.navegador_nome,
+        operador_id: data.operador_id,
+        operador_nome: data.operador_nome,
         criado_em: new Date().toISOString()
       };
     }
@@ -659,39 +733,61 @@ export class ApiService {
   }
 
   public static async updateServico(id: string, data: Partial<Servico>): Promise<Servico> {
-    const payload: any = { ...data };
-    delete payload.id;
-    delete payload.metricas;
-    delete payload.furos;
+    const supabasePayload: any = {};
+    if (data.nome !== undefined) supabasePayload.nome = data.nome.toUpperCase().trim();
+    if (data.cliente !== undefined) supabasePayload.cliente = data.cliente.trim();
+    if (data.local !== undefined) supabasePayload.local = data.local;
+    if (data.cidade !== undefined) supabasePayload.cidade = data.cidade || null;
+    if (data.uf !== undefined) supabasePayload.uf = data.uf || null;
+    if (data.projeto !== undefined) supabasePayload.projeto = data.projeto || null;
+    if (data.obra !== undefined) supabasePayload.obra = data.obra || null;
+    if (data.centro_custo !== undefined) supabasePayload.centro_custo = data.centro_custo || null;
+    if (data.gestor_id !== undefined) supabasePayload.gestor_id = data.gestor_id || null;
+    if (data.status !== undefined) supabasePayload.status = data.status;
+    if (data.cenario_financeiro !== undefined) supabasePayload.cenario_financeiro = data.cenario_financeiro;
+    if (data.valor_metro !== undefined) supabasePayload.valor_metro = Number(data.valor_metro) || 0;
+    if (data.fator_financeiro !== undefined) supabasePayload.fator_financeiro = Number(data.fator_financeiro) || 0;
+    if (data.diametro_furo_mm !== undefined) supabasePayload.diametro_furo_mm = Number(data.diametro_furo_mm) || 0;
+    if (data.valor_total_fechado !== undefined) supabasePayload.valor_total_fechado = Number(data.valor_total_fechado) || 0;
+    if (data.metragem_prevista_total !== undefined) supabasePayload.metragem_prevista_total = Number(data.metragem_prevista_total) || 1000;
+    if (data.tipo_meta !== undefined) supabasePayload.tipo_meta = data.tipo_meta || 'DIARIA';
+    if (data.meta_metros !== undefined) supabasePayload.meta_metros = Number(data.meta_metros) || 100;
+    supabasePayload.atualizado_em = new Date().toISOString();
+
+    const { descricao: cleanDesc, meta: existingMeta } = parseServicoDescricao(data.descricao !== undefined ? data.descricao : '');
+    const metaToSave: ServicoMetaTag = {
+      tipo_servico: data.tipo_servico || existingMeta.tipo_servico || 'TELECOM',
+      min_fotos_registro: data.min_fotos_registro ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2)
+    };
+    supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
     let updatedServico: any = null;
 
-    // 1. Tenta atualizar tecnodrill_servicos com payload completo
+    // 1. Atualiza tecnodrill_servicos com colunas que existem no schema
     try {
       const { data: updated, error } = await supabase
         .from('tecnodrill_servicos')
-        .update(payload)
+        .update(supabasePayload)
         .eq('id', id)
         .select()
         .single();
 
       if (!error && updated) {
-        updatedServico = updated;
-      } else {
-        // Fallback caso a tabela tecnodrill_servicos não tenha colunas de equipe
-        const { navegador_id, navegador_nome, operador_id, operador_nome, ...basePayload } = payload;
-        const { data: baseUpdated, error: baseErr } = await supabase
-          .from('tecnodrill_servicos')
-          .update(basePayload)
-          .eq('id', id)
-          .select()
-          .single();
-        if (!baseErr && baseUpdated) {
-          updatedServico = { ...baseUpdated, navegador_id, navegador_nome, operador_id, operador_nome };
-        }
+        updatedServico = {
+          ...updated,
+          descricao: cleanDesc,
+          tipo_servico: metaToSave.tipo_servico,
+          min_fotos_registro: metaToSave.min_fotos_registro,
+          navegador_id: data.navegador_id,
+          navegador_nome: data.navegador_nome,
+          operador_id: data.operador_id,
+          operador_nome: data.operador_nome
+        };
+      } else if (error) {
+        console.error('[Supabase updateServico error]:', error);
       }
     } catch (err) {
-      console.warn('[Supabase updateServico fallback]:', err);
+      console.warn('[Supabase updateServico catch]:', err);
     }
 
     // 2. Atualizar todos os furos associados para manter a equipe sincronizada
@@ -840,26 +936,33 @@ export class ApiService {
       .order('numero_barra', { ascending: true });
 
     if (error) return [];
-    return (data || []).map(b => ({
-      id: b.id,
-      furo_id: b.furo_id,
-      numero_barra: b.numero_barra,
-      tipo_registro: b.tipo_registro || 'CANALIZACAO',
-      metros: Number(b.metros) || 3,
-      metros_acumulados: Number(b.metros_acumulados) || 0,
-      diametro: b.diametro || '',
-      numero_os: b.numero_os || '',
-      tem_caixa: Boolean(b.tem_caixa),
-      angulo_pitch: b.angulo_pitch || '',
-      profundidade_cm: Number(b.profundidade_cm) || 0,
-      foto_url: b.foto_url || '',
-      fotos: b.fotos || (b.foto_url ? [b.foto_url] : []),
-      latitude: b.latitude ? Number(b.latitude) : undefined,
-      longitude: b.longitude ? Number(b.longitude) : undefined,
-      endereco: b.endereco || undefined,
-      observacao: b.observacao || '',
-      horario_registro: b.horario_registro
-    }));
+    return (data || []).map(b => {
+      const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
+      const allFotos = (b.fotos && b.fotos.length > 0)
+        ? b.fotos
+        : (meta.fotos && meta.fotos.length > 0 ? meta.fotos : (b.foto_url ? [b.foto_url] : []));
+      return {
+        id: b.id,
+        furo_id: b.furo_id,
+        numero_barra: b.numero_barra,
+        tipo_registro: b.tipo_registro || meta.tipo_registro || (b.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
+        metros: Number(b.metros) || 3,
+        metros_acumulados: Number(b.metros_acumulados) || 0,
+        diametro: b.diametro || meta.diametro || '',
+        numero_os: b.numero_os || meta.numero_os || '',
+        tem_caixa: Boolean(b.tem_caixa),
+        angulo_pitch: b.angulo_pitch || '',
+        profundidade_cm: Number(b.profundidade_cm) || 0,
+        distancia_pista_cm: Number(b.distancia_pista_cm) || 0,
+        foto_url: b.foto_url || (allFotos.length > 0 ? allFotos[0] : ''),
+        fotos: allFotos,
+        latitude: b.latitude ? Number(b.latitude) : undefined,
+        longitude: b.longitude ? Number(b.longitude) : undefined,
+        endereco: b.endereco || undefined,
+        observacao: cleanObs,
+        horario_registro: b.horario_registro
+      };
+    });
   }
 
   public static async resequenceBarras(furoId: string): Promise<Barra[]> {
@@ -890,20 +993,30 @@ export class ApiService {
           .eq('id', b.id);
       }
 
+      const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
+      const allFotos = (b.fotos && b.fotos.length > 0)
+        ? b.fotos
+        : (meta.fotos && meta.fotos.length > 0 ? meta.fotos : (b.foto_url ? [b.foto_url] : []));
+
       updatedList.push({
         id: b.id,
         furo_id: b.furo_id,
         numero_barra: newNum,
+        tipo_registro: b.tipo_registro || meta.tipo_registro || (b.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
         metros: m,
         metros_acumulados: runningTotal,
+        diametro: b.diametro || meta.diametro || '',
+        numero_os: b.numero_os || meta.numero_os || '',
         tem_caixa: Boolean(b.tem_caixa),
         angulo_pitch: b.angulo_pitch || '',
         profundidade_cm: Number(b.profundidade_cm) || 0,
-        foto_url: b.foto_url || '',
+        distancia_pista_cm: Number(b.distancia_pista_cm) || 0,
+        foto_url: b.foto_url || (allFotos.length > 0 ? allFotos[0] : ''),
+        fotos: allFotos,
         latitude: b.latitude ? Number(b.latitude) : undefined,
         longitude: b.longitude ? Number(b.longitude) : undefined,
         endereco: b.endereco || undefined,
-        observacao: b.observacao || '',
+        observacao: cleanObs,
         horario_registro: b.horario_registro
       });
     }
@@ -931,34 +1044,43 @@ export class ApiService {
     const metrosDesteRegistro = Number(data.metros) || 3;
     const metrosAcumulados = metrosAnteriores + metrosDesteRegistro;
 
-    const payload: any = {
+    const allFotos = Array.isArray(data.fotos) && data.fotos.length > 0
+      ? data.fotos
+      : (data.foto_url ? [data.foto_url] : []);
+
+    const { observacao: cleanObs } = parseBarraObservacao(data.observacao || '');
+    const encodedObs = buildBarraObservacao(cleanObs, {
+      tipo_registro: data.tipo_registro || (data.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
+      diametro: data.diametro || '',
+      numero_os: data.numero_os || '',
+      fotos: allFotos
+    });
+
+    const supabaseBarraPayload: any = {
       furo_id: furoId,
       numero_barra: nextNum,
-      tipo_registro: data.tipo_registro || 'CANALIZACAO',
       metros: metrosDesteRegistro,
       metros_acumulados: metrosAcumulados,
-      diametro: data.diametro || null,
-      numero_os: data.numero_os || null,
-      tem_caixa: Boolean(data.tem_caixa),
+      tem_caixa: Boolean(data.tem_caixa || data.tipo_registro === 'CAIXA'),
       angulo_pitch: data.angulo_pitch || '',
       profundidade_cm: Number(data.profundidade_cm) || 0,
-      foto_url: data.foto_url || (Array.isArray(data.fotos) && data.fotos.length > 0 ? data.fotos[0] : null),
-      fotos: data.fotos || (data.foto_url ? [data.foto_url] : null),
+      distancia_pista_cm: Number(data.distancia_pista_cm) || 0,
+      foto_url: data.foto_url || (allFotos.length > 0 ? allFotos[0] : null),
       latitude: data.latitude || null,
       longitude: data.longitude || null,
       endereco: data.endereco || null,
-      observacao: data.observacao || null
+      observacao: encodedObs
     };
 
     let created: any = null;
     const res1 = await supabase
       .from('tecnodrill_barras')
-      .insert(payload)
+      .insert(supabaseBarraPayload)
       .select()
       .single();
 
     if (res1.error) {
-      const { endereco, ...fallbackPayload } = payload;
+      const { endereco, ...fallbackPayload } = supabaseBarraPayload;
       const res2 = await supabase
         .from('tecnodrill_barras')
         .insert(fallbackPayload)

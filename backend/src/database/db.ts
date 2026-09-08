@@ -431,7 +431,8 @@ export class DBManager {
     };
 
     try {
-      await supabase.from('tecnodrill_servicos').insert([newServico]);
+      const { tipo_servico, min_fotos_registro, ...cleanInsert } = newServico;
+      await supabase.from('tecnodrill_servicos').insert([cleanInsert]);
     } catch (_) {}
 
     this.localData.servicos.unshift(newServico);
@@ -441,7 +442,8 @@ export class DBManager {
 
   public static async updateServico(id: string, updates: Partial<TecnodrillServico>): Promise<TecnodrillServico | null> {
     try {
-      await supabase.from('tecnodrill_servicos').update({ ...updates, atualizado_em: new Date().toISOString() }).eq('id', id);
+      const { tipo_servico, min_fotos_registro, ...cleanUpdates } = updates;
+      await supabase.from('tecnodrill_servicos').update({ ...cleanUpdates, atualizado_em: new Date().toISOString() }).eq('id', id);
     } catch (_) {}
 
     const index = this.localData.servicos.findIndex(s => s.id === id);
@@ -603,7 +605,8 @@ export class DBManager {
     };
 
     try {
-      await supabase.from('tecnodrill_barras').insert([newBarra]);
+      const { tipo_registro, diametro, numero_os, fotos, ...cleanBarra } = newBarra;
+      await supabase.from('tecnodrill_barras').insert([cleanBarra]);
     } catch (_) {}
 
     // Update length in furo to match exact accumulated meters

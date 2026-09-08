@@ -98,7 +98,15 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       if (initialData) {
         setNome(initialData.nome || '');
         setCliente(initialData.cliente || '');
-        setTipoServico(initialData.tipo_servico || 'TELECOM');
+        
+        let defaultTipo: TipoServico = 'TELECOM';
+        if (initialData.nome && initialData.nome.toUpperCase().includes('SANEAMENTO')) {
+          defaultTipo = 'SANEAMENTO';
+        } else if (initialData.nome && initialData.nome.toUpperCase().includes('RODOVIA')) {
+          defaultTipo = 'RODOVIA';
+        }
+        setTipoServico(initialData.tipo_servico || defaultTipo);
+
         setMinFotosRegistro(String(initialData.min_fotos_registro || 2));
         setDescricao(initialData.descricao || '');
 
@@ -108,19 +116,13 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         let initLocal = (initialData.local || '').trim();
 
         if (!initUf || !initCidade) {
-          const matchHifen = initLocal.match(/^([^-•]+?)\s*-\s*([A-Za-z]{2})(?:\s*[•-]\s*(.*))?$/);
-          if (matchHifen) {
-            if (!initCidade) initCidade = matchHifen[1].trim();
-            if (!initUf) initUf = matchHifen[2].trim().toUpperCase();
-            if (matchHifen[3]) initLocal = matchHifen[3].trim();
-          } else {
-            const matchEspaco = /^(.+?)\s+([A-Za-z]{2})\s*-\s*(.*)$/;
-            const match2 = initLocal.match(matchEspaco);
-            if (match2) {
-              if (!initCidade) initCidade = match2[1].trim();
-              if (!initUf) initUf = match2[2].trim().toUpperCase();
-              if (match2[3]) initLocal = match2[3].trim();
-            }
+          // Extrair todas as ocorrências de "Cidade - UF" no texto local
+          const matches = Array.from(initLocal.matchAll(/([^-•\n]+?)\s*-\s*([A-Za-z]{2})/g));
+          if (matches.length > 0) {
+            // Se houver mais de uma (ex: acúmulo de Adamantina - SP anterior), pega a última ocorrência legítima
+            const last = matches[matches.length - 1];
+            if (!initCidade) initCidade = last[1].trim();
+            if (!initUf) initUf = last[2].trim().toUpperCase();
           }
         }
 
