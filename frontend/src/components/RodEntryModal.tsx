@@ -1282,10 +1282,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Metros:</span>
-                <strong style={{ color: '#FFFFFF' }}>+{savedSuccessData.metros}m</strong>
-              </div>
+              {savedSuccessData.tipo_registro !== 'CAIXA' && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Metros:</span>
+                  <strong style={{ color: '#FFFFFF' }}>+{savedSuccessData.metros}m</strong>
+                </div>
+              )}
 
               {savedSuccessData.endereco && (
                 <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>

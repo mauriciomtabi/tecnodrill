@@ -72,9 +72,12 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({ setHeaderInfo 
   }
 
   // Cálculos de Produção
-  const totalMetros = barras.reduce((acc, b) => acc + (b.metros || 3), 0);
+  const totalMetros = barras.reduce((acc, b) => {
+    if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+    return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+  }, 0);
   const totalRegistros = barras.length;
-  const totalCaixas = barras.filter(b => b.tem_caixa).length;
+  const totalCaixas = barras.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length;
   const totalCanalizacao = totalRegistros - totalCaixas;
 
   // Filtrar produção de Hoje
@@ -83,7 +86,10 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({ setHeaderInfo 
     const d = b.created_at || b.data_registro || b.horario_registro;
     return d && d.startsWith(todayStr);
   });
-  const metrosHoje = barrasHoje.reduce((acc, b) => acc + (b.metros || 3), 0);
+  const metrosHoje = barrasHoje.reduce((acc, b) => {
+    if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+    return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+  }, 0);
 
   // Meta diária consolidada das obras ativas (ou padrão 100m)
   const metaDiariaConsolidada = servicos.reduce((acc, s) => acc + (s.meta_metros || 100), 0) || 100;

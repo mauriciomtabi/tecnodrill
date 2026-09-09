@@ -122,7 +122,10 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       if (furo && delFuroId === furo.id) {
         if (remainingBarras) {
           setBarras(remainingBarras);
-          const novoTotal = remainingBarras.reduce((acc: number, b: Barra) => acc + (Number(b.metros) || 3), 0);
+          const novoTotal = remainingBarras.reduce((acc: number, b: Barra) => {
+            if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+            return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+          }, 0);
           setFuro(prev => prev ? ({ ...prev, comprimento_furo: novoTotal }) : null);
         } else {
           fetchDados();
@@ -179,7 +182,10 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       setConfirmDeleteBarraId(null);
       if (res.remainingBarras) {
         setBarras(res.remainingBarras);
-        const novoTotal = res.remainingBarras.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
+        const novoTotal = res.remainingBarras.reduce((acc, b) => {
+          if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+          return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+        }, 0);
         setFuro(prev => prev ? ({ ...prev, comprimento_furo: novoTotal }) : null);
       } else {
         await fetchDados();
@@ -252,7 +258,12 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   }
 
   // Cálculos Oficiais
-  const metrosExecutadosTotal = furo?.comprimento_furo || barras.reduce((acc, b) => acc + (b.metros || 3), 0);
+  const metrosExecutadosTotal = furo?.comprimento_furo !== undefined
+    ? furo.comprimento_furo
+    : barras.reduce((acc, b) => {
+        if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+        return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+      }, 0);
   const metrosTotalPrevisto = servico.metragem_prevista_total || 54;
   const percentualConcluido = Math.min(100, Math.round((metrosExecutadosTotal / (metrosTotalPrevisto || 1)) * 100));
   const totalComCaixa = barras.filter(b => b.tem_caixa).length;
@@ -769,23 +780,41 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                         </div>
                       )}
 
-                      {/* Tag Superior Direita Metros */}
-                      <div 
-                        style={{
-                          position: 'absolute',
-                          top: '6px',
-                          right: '6px',
-                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                          color: '#FFFFFF',
-                          padding: '2px 6px',
-                          borderRadius: '4px',
-                          fontSize: '10px',
-                          fontWeight: 800,
-                          fontFamily: 'var(--font-mono)'
-                        }}
-                      >
-                        +{b.metros || 3}m
-                      </div>
+                      {/* Tag Superior Direita Metros / Caixa */}
+                      {(!b.tem_caixa && b.tipo_registro !== 'CAIXA') ? (
+                        <div 
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            right: '6px',
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            color: '#FFFFFF',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            fontFamily: 'var(--font-mono)'
+                          }}
+                        >
+                          +{b.metros || 3}m
+                        </div>
+                      ) : (
+                        <div 
+                          style={{
+                            position: 'absolute',
+                            top: '6px',
+                            right: '6px',
+                            backgroundColor: 'rgba(39, 174, 96, 0.9)',
+                            color: '#FFFFFF',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: 800
+                          }}
+                        >
+                          📦 CAIXA
+                        </div>
+                      )}
                     </div>
 
                     {/* Card Footer Info (Idêntico ao App JLE) */}
@@ -801,14 +830,14 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                         style={{
                           fontSize: '10px',
                           fontWeight: 700,
-                          color: b.tem_caixa ? 'var(--success)' : '#2A8ACC',
+                          color: (b.tem_caixa || b.tipo_registro === 'CAIXA') ? 'var(--success)' : '#2A8ACC',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '3px'
                         }}
                       >
                         <Camera size={10} />
-                        <span>{b.tem_caixa ? 'CAIXA' : 'CANALIZAÇÃO'}</span>
+                        <span>{(b.tem_caixa || b.tipo_registro === 'CAIXA') ? 'CAIXA' : 'CANALIZAÇÃO'}</span>
                       </span>
 
                       {/* Date Timestamp */}
@@ -820,19 +849,21 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
 
                       {/* Badges Footer Row */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
-                        <span 
-                          style={{
-                            fontSize: '9px',
-                            fontWeight: 800,
-                            padding: '2px 6px',
-                            borderRadius: '3px',
-                            backgroundColor: 'rgba(240, 90, 34, 0.15)',
-                            color: 'var(--primary)',
-                            fontFamily: 'var(--font-mono)'
-                          }}
-                        >
-                          {b.metros || 3}m
-                        </span>
+                        {(!b.tem_caixa && b.tipo_registro !== 'CAIXA') && (
+                          <span 
+                            style={{
+                              fontSize: '9px',
+                              fontWeight: 800,
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              backgroundColor: 'rgba(240, 90, 34, 0.15)',
+                              color: 'var(--primary)',
+                              fontFamily: 'var(--font-mono)'
+                            }}
+                          >
+                            {b.metros || 3}m
+                          </span>
+                        )}
 
                         <span 
                           style={{
@@ -840,12 +871,12 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                             fontWeight: 800,
                             padding: '2px 6px',
                             borderRadius: '3px',
-                            backgroundColor: b.tem_caixa ? 'rgba(39, 174, 96, 0.15)' : 'rgba(231, 76, 60, 0.15)',
-                            color: b.tem_caixa ? 'var(--success)' : 'var(--danger)',
+                            backgroundColor: (b.tem_caixa || b.tipo_registro === 'CAIXA') ? 'rgba(39, 174, 96, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                            color: (b.tem_caixa || b.tipo_registro === 'CAIXA') ? 'var(--success)' : 'var(--danger)',
                             textTransform: 'uppercase'
                           }}
                         >
-                          {b.tem_caixa ? 'COM CAIXA' : 'SEM CAIXA'}
+                          {(b.tem_caixa || b.tipo_registro === 'CAIXA') ? '📦 CAIXA' : 'SEM CAIXA'}
                         </span>
                       </div>
 

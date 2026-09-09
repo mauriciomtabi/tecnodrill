@@ -11,6 +11,11 @@ export class ExportService {
 
     const servico = await DBManager.getServicoById(furo.servico_id);
     const barras = await DBManager.getBarras(furoId);
+    const totalMetrosPerfurados = barras.reduce((acc, b) => {
+      const isCaixa = b.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro);
+      if (isCaixa) return acc;
+      return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+    }, 0);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'TecnoDrill INFRA - Sistema de Perfuração MND';
@@ -39,7 +44,7 @@ export class ExportService {
       ['Data:', furo.data_furo, 'Cliente:', servico?.cliente || 'Não informado', 'Projeto:', servico?.projeto || 'N/A'],
       ['Obra:', servico?.obra || servico?.nome || 'N/A', 'C/C:', servico?.centro_custo || 'N/A', 'Local:', servico?.local || 'N/A'],
       ['Navegador:', furo.navegador_nome || 'N/A', 'Operador:', furo.operador_nome || 'N/A', 'Status:', furo.status],
-      ['Tubo Aplicado:', furo.tubo_aplicado || 'N/A', 'Diâmetro do Furo:', furo.diametro_furo || `${servico?.diametro_furo_mm || ''} mm`, 'Comprimento Total:', `${furo.comprimento_furo || (barras.length * 3)} MTS`],
+      ['Tubo Aplicado:', furo.tubo_aplicado || 'N/A', 'Diâmetro do Furo:', furo.diametro_furo || `${servico?.diametro_furo_mm || ''} mm`, 'Comprimento Total:', `${furo.comprimento_furo || totalMetrosPerfurados} MTS`],
       ['Hora Início Furo:', furo.hora_inicio_furo || '-', 'Hora Fim Furo:', furo.hora_fim_furo || '-', 'Horímetro Furo:', `${furo.horimetro_inicio_furo || '-'} até ${furo.horimetro_fim_furo || '-'}`],
       ['Hora Início Puxada:', furo.hora_inicio_pux || '-', 'Hora Fim Puxada:', furo.hora_fim_pux || '-', 'Horímetro Puxada:', `${furo.horimetro_inicio_pux || '-'} até ${furo.horimetro_fim_pux || '-'}`]
     ];
@@ -56,16 +61,16 @@ export class ExportService {
         const cell = sheet.getCell(`${col}${currentRow}`);
         cell.font = { name: 'Arial', size: 10 };
       });
+      sheet.getRow(currentRow).height = 20;
       currentRow++;
     });
 
     currentRow += 1;
 
-    // 3. Tabela de Barras (2 Colunas Paralelas como na ficha física)
-    // Tabela 1: Barras 1 a 35 (Esq) | Tabela 2: Barras 36 a 70 (Dir)
-    sheet.mergeCells(`A${currentRow}:D${currentRow}`);
+    // 3. Tabela de Barras
+    sheet.mergeCells(`A${currentRow}:F${currentRow}`);
     const tableHeader1 = sheet.getCell(`A${currentRow}`);
-    tableHeader1.value = 'APONTAMENTO DE HASTES / SONDAGEM (CADA HASTE = 3 METROS)';
+    tableHeader1.value = 'REGISTRO DE BARRAS PERFURADAS E PONTOS DE CAIXA';
     tableHeader1.font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
     tableHeader1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: TECNO_ORANGE } };
     tableHeader1.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -84,9 +89,10 @@ export class ExportService {
     const totalSlots = Math.max(barras.length, 35);
     for (let i = 1; i <= totalSlots; i++) {
       const barra = barras.find(b => b.numero_barra === i);
+      const isCaixa = barra && (barra.tipo_registro === 'CAIXA' || Boolean(barra.tem_caixa && !barra.diametro));
       const rowData = [
         i,
-        `${i * 3} m`,
+        isCaixa ? 'PONTO DE CAIXA' : (barra ? `${barra.metros_acumulados} m` : '-'),
         barra?.angulo_pitch || '-',
         barra?.profundidade_cm ? `${barra.profundidade_cm} cm` : '-',
         barra?.distancia_pista_cm ? `${barra.distancia_pista_cm} cm` : '-',
@@ -105,7 +111,7 @@ export class ExportService {
 
     // 4. Rodapé e Assinaturas
     currentRow += 1;
-    sheet.getCell(`A${currentRow}`).value = `Total de Metros Perfurados: ${barras.length * 3} MTS (${barras.length} barras)`;
+    sheet.getCell(`A${currentRow}`).value = `Total de Metros Perfurados: ${totalMetrosPerfurados} MTS (${barras.length} registros)`;
     sheet.getCell(`A${currentRow}`).font = { name: 'Arial', size: 11, bold: true, color: { argb: TECNO_ORANGE } };
     currentRow += 2;
 

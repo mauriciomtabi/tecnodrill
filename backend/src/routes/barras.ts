@@ -43,15 +43,18 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
 
     const servico = await DBManager.getServicoById(furo.servico_id);
 
+    const isCaixa = tipo_registro === 'CAIXA' || Boolean(tem_caixa && !diametro);
+    const metrosNumerico = isCaixa ? 0 : (metros !== undefined ? Number(metros) : 3);
+
     // Adiciona o novo registro de campo
     const novaBarra = await DBManager.addBarra({
       furo_id: furoId,
       numero_barra: numero_barra ? Number(numero_barra) : undefined,
-      tipo_registro: tipo_registro || 'CANALIZACAO',
-      metros: metros !== undefined ? Number(metros) : 3,
-      diametro: diametro || '',
+      tipo_registro: isCaixa ? 'CAIXA' : (tipo_registro || 'CANALIZACAO'),
+      metros: metrosNumerico,
+      diametro: isCaixa ? '' : (diametro || ''),
       numero_os: numero_os || '',
-      tem_caixa: tem_caixa !== undefined ? Boolean(tem_caixa) : false,
+      tem_caixa: Boolean(tem_caixa || isCaixa),
       tipo_caixa: tipo_caixa || '',
       observacao: observacao || '',
       foto_url: foto_url || (Array.isArray(fotos) && fotos.length > 0 ? fotos[0] : ''),
@@ -70,7 +73,7 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
     let percentualAtingido = 0;
     let metaInfo: any = null;
 
-    if (servico && Number(servico.meta_metros) > 0) {
+    if (servico && Number(servico.meta_metros) > 0 && !isCaixa) {
       const dashboard = await FinanceiroService.getDashboardMetrics();
       const metric = dashboard.servicos.find(m => m.servicoId === servico.id);
       if (metric) {
@@ -78,7 +81,7 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
         percentualAtingido = metric.meta.percentualMetaPeriodo;
         const metaValor = metric.meta.valorMetaMetros;
         const metrosDepois = metric.meta.metrosPeriodoAtual;
-        const metrosAntes = metrosDepois - (Number(novaBarra.metros) || 3);
+        const metrosAntes = metrosDepois - (Number(novaBarra.metros) || 0);
 
         // Só celebra se ANTES não tinha batido a meta e AGORA bateu!
         if (metaValor > 0 && metrosAntes < metaValor && metrosDepois >= metaValor) {
@@ -91,9 +94,11 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       barra: novaBarra,
       celebrarMeta: metaAtingidaAgora,
       metaInfo,
-      mensagem: metaAtingidaAgora
-        ? `🎉 PARABÉNS EQUIPE! Meta ${servico?.tipo_meta.toLowerCase() || 'diária'} de ${servico?.meta_metros}m atingida com sucesso!`
-        : `Barra Nº ${novaBarra.numero_barra} (${novaBarra.metros_acumulados}m) registrada com sucesso.`
+      mensagem: isCaixa
+        ? `Instalação de Caixa #${novaBarra.numero_barra} registrada com sucesso.`
+        : (metaAtingidaAgora
+            ? `🎉 PARABÉNS EQUIPE! Meta ${servico?.tipo_meta.toLowerCase() || 'diária'} de ${servico?.meta_metros}m atingida com sucesso!`
+            : `Registro Nº ${novaBarra.numero_barra} (+${novaBarra.metros}m) registrado com sucesso.`)
     });
   } catch (err: any) {
     console.error('[Barras POST] Erro:', err);

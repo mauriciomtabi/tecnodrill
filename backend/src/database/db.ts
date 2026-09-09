@@ -546,23 +546,26 @@ export class DBManager {
     for (let i = 0; i < currentBarras.length; i++) {
       const b = currentBarras[i];
       const newNum = i + 1;
-      const m = Number(b.metros) || 3;
+      const isCaixa = b.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro);
+      const m = isCaixa ? 0 : (b.metros !== undefined && b.metros !== null && !isNaN(Number(b.metros)) ? Number(b.metros) : 3);
       runningTotal += m;
 
-      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal) {
+      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal || Number(b.metros) !== m) {
         b.numero_barra = newNum;
+        b.metros = m;
         b.metros_acumulados = runningTotal;
 
         try {
           await supabase
             .from('tecnodrill_barras')
-            .update({ numero_barra: newNum, metros_acumulados: runningTotal })
+            .update({ numero_barra: newNum, metros: m, metros_acumulados: runningTotal })
             .eq('id', b.id);
         } catch (_) {}
 
         const localIdx = this.localData.barras.findIndex(lb => lb.id === b.id);
         if (localIdx !== -1) {
           this.localData.barras[localIdx].numero_barra = newNum;
+          this.localData.barras[localIdx].metros = m;
           this.localData.barras[localIdx].metros_acumulados = runningTotal;
         }
       }
@@ -576,20 +579,25 @@ export class DBManager {
   public static async addBarra(barra: Partial<TecnodrillBarra>): Promise<TecnodrillBarra> {
     const existing = await this.getBarras(barra.furo_id || '');
     const nextNumber = existing.length + 1;
-    const metrosAnteriores = existing.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
-    const metrosDesteLance = barra.metros !== undefined ? Number(barra.metros) : 3;
+    const isCaixaRegistro = barra.tipo_registro === 'CAIXA' || Boolean(barra.tem_caixa && !barra.diametro);
+    const metrosAnteriores = existing.reduce((acc, b) => {
+      const isCaixa = b.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro);
+      if (isCaixa) return acc;
+      return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+    }, 0);
+    const metrosDesteLance = isCaixaRegistro ? 0 : (barra.metros !== undefined && barra.metros !== null ? Number(barra.metros) : 3);
     const metrosAcumulados = metrosAnteriores + metrosDesteLance;
 
     const newBarra: TecnodrillBarra = {
       id: barra.id || crypto.randomUUID(),
       furo_id: barra.furo_id || '',
       numero_barra: nextNumber,
-      tipo_registro: barra.tipo_registro || 'CANALIZACAO',
+      tipo_registro: isCaixaRegistro ? 'CAIXA' : (barra.tipo_registro || 'CANALIZACAO'),
       metros: metrosDesteLance,
       metros_acumulados: metrosAcumulados,
-      diametro: barra.diametro || '',
+      diametro: isCaixaRegistro ? '' : (barra.diametro || ''),
       numero_os: barra.numero_os || '',
-      tem_caixa: barra.tem_caixa !== undefined ? Boolean(barra.tem_caixa) : false,
+      tem_caixa: Boolean(barra.tem_caixa || isCaixaRegistro),
       tipo_caixa: barra.tipo_caixa || '',
       observacao: barra.observacao || '',
       angulo_pitch: barra.angulo_pitch || '+0.00',

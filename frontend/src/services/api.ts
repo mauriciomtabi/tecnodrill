@@ -986,21 +986,39 @@ export class ApiService {
       .order('numero_barra', { ascending: true });
 
     if (error) return [];
-    return (data || []).map(b => {
+
+    const rawBarras = data || [];
+    let needsRecalculation = false;
+    for (const b of rawBarras) {
+      const { meta } = parseBarraObservacao(b.observacao);
+      const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
+      if (isCaixa && (Number(b.metros) > 0 || b.metros === null || b.metros === undefined)) {
+        needsRecalculation = true;
+        break;
+      }
+    }
+
+    if (needsRecalculation) {
+      return await this.resequenceBarras(furoId);
+    }
+
+    return rawBarras.map(b => {
       const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
       const allFotos = (b.fotos && b.fotos.length > 0)
         ? b.fotos
         : (meta.fotos && meta.fotos.length > 0 ? meta.fotos : (b.foto_url ? [b.foto_url] : []));
+      const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
+      const metrosValor = isCaixa ? 0 : (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
       return {
         id: b.id,
         furo_id: b.furo_id,
         numero_barra: b.numero_barra,
-        tipo_registro: b.tipo_registro || meta.tipo_registro || (b.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
-        metros: Number(b.metros) || 3,
+        tipo_registro: isCaixa ? 'CAIXA' : (b.tipo_registro || meta.tipo_registro || 'CANALIZACAO'),
+        metros: metrosValor,
         metros_acumulados: Number(b.metros_acumulados) || 0,
-        diametro: b.diametro || meta.diametro || '',
+        diametro: isCaixa ? '' : (b.diametro || meta.diametro || ''),
         numero_os: b.numero_os || meta.numero_os || '',
-        tem_caixa: Boolean(b.tem_caixa),
+        tem_caixa: isCaixa || Boolean(b.tem_caixa),
         angulo_pitch: b.angulo_pitch || '',
         profundidade_cm: Number(b.profundidade_cm) || 0,
         distancia_pista_cm: Number(b.distancia_pista_cm) || 0,
@@ -1030,20 +1048,22 @@ export class ApiService {
     for (let i = 0; i < existing.length; i++) {
       const b = existing[i];
       const newNum = i + 1;
-      const m = Number(b.metros) || 3;
+      const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
+      const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
+      const m = isCaixa ? 0 : (b.metros !== undefined && b.metros !== null && !isNaN(Number(b.metros)) ? Number(b.metros) : 3);
       runningTotal += m;
 
-      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal) {
+      if (b.numero_barra !== newNum || Number(b.metros_acumulados) !== runningTotal || Number(b.metros) !== m) {
         b.numero_barra = newNum;
+        b.metros = m;
         b.metros_acumulados = runningTotal;
 
         await supabase
           .from('tecnodrill_barras')
-          .update({ numero_barra: newNum, metros_acumulados: runningTotal })
+          .update({ numero_barra: newNum, metros: m, metros_acumulados: runningTotal })
           .eq('id', b.id);
       }
 
-      const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
       const allFotos = (b.fotos && b.fotos.length > 0)
         ? b.fotos
         : (meta.fotos && meta.fotos.length > 0 ? meta.fotos : (b.foto_url ? [b.foto_url] : []));
@@ -1052,12 +1072,12 @@ export class ApiService {
         id: b.id,
         furo_id: b.furo_id,
         numero_barra: newNum,
-        tipo_registro: b.tipo_registro || meta.tipo_registro || (b.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
+        tipo_registro: isCaixa ? 'CAIXA' : (b.tipo_registro || meta.tipo_registro || 'CANALIZACAO'),
         metros: m,
         metros_acumulados: runningTotal,
-        diametro: b.diametro || meta.diametro || '',
+        diametro: isCaixa ? '' : (b.diametro || meta.diametro || ''),
         numero_os: b.numero_os || meta.numero_os || '',
-        tem_caixa: Boolean(b.tem_caixa),
+        tem_caixa: isCaixa || Boolean(b.tem_caixa),
         angulo_pitch: b.angulo_pitch || '',
         profundidade_cm: Number(b.profundidade_cm) || 0,
         distancia_pista_cm: Number(b.distancia_pista_cm) || 0,
@@ -1084,14 +1104,24 @@ export class ApiService {
   }> {
     const { data: existingList } = await supabase
       .from('tecnodrill_barras')
-      .select('id, metros, metros_acumulados, horario_registro')
+      .select('id, metros, metros_acumulados, horario_registro, tem_caixa, observacao, tipo_registro, diametro')
       .eq('furo_id', furoId)
       .order('horario_registro', { ascending: true });
 
     const currentBarras = existingList || [];
     const nextNum = currentBarras.length + 1;
-    const metrosAnteriores = currentBarras.reduce((acc, b) => acc + (Number(b.metros) || 3), 0);
-    const metrosDesteRegistro = Number(data.metros) || 3;
+
+    const isCaixaRegistro = data.tipo_registro === 'CAIXA' || Boolean(data.tem_caixa && !data.diametro);
+
+    // Metros anteriores: desconsidera registros de caixa
+    const metrosAnteriores = currentBarras.reduce((acc, b) => {
+      const { meta } = parseBarraObservacao(b.observacao);
+      const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
+      if (isCaixa) return acc;
+      return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+    }, 0);
+
+    const metrosDesteRegistro = isCaixaRegistro ? 0 : (data.metros !== undefined && data.metros !== null ? Number(data.metros) : 3);
     const metrosAcumulados = metrosAnteriores + metrosDesteRegistro;
 
     const allFotos = Array.isArray(data.fotos) && data.fotos.length > 0
@@ -1100,8 +1130,8 @@ export class ApiService {
 
     const { observacao: cleanObs } = parseBarraObservacao(data.observacao || '');
     const encodedObs = buildBarraObservacao(cleanObs, {
-      tipo_registro: data.tipo_registro || (data.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
-      diametro: data.diametro || '',
+      tipo_registro: isCaixaRegistro ? 'CAIXA' : (data.tipo_registro || 'CANALIZACAO'),
+      diametro: isCaixaRegistro ? '' : (data.diametro || ''),
       numero_os: data.numero_os || '',
       fotos: allFotos
     });
@@ -1111,7 +1141,7 @@ export class ApiService {
       numero_barra: nextNum,
       metros: metrosDesteRegistro,
       metros_acumulados: metrosAcumulados,
-      tem_caixa: Boolean(data.tem_caixa || data.tipo_registro === 'CAIXA'),
+      tem_caixa: Boolean(data.tem_caixa || isCaixaRegistro),
       angulo_pitch: data.angulo_pitch || '',
       profundidade_cm: Number(data.profundidade_cm) || 0,
       distancia_pista_cm: Number(data.distancia_pista_cm) || 0,
@@ -1155,7 +1185,7 @@ export class ApiService {
       const { data: furoData } = await supabase.from('tecnodrill_furos').select('servico_id').eq('id', furoId).single();
       if (furoData) {
         const { data: servicoData } = await supabase.from('tecnodrill_servicos').select('*').eq('id', furoData.servico_id).single();
-        if (servicoData && Number(servicoData.meta_metros) > 0) {
+        if (servicoData && Number(servicoData.meta_metros) > 0 && !isCaixaRegistro) {
           const metaValor = Number(servicoData.meta_metros);
           const tipoMeta = servicoData.tipo_meta || 'DIARIA';
           const hojeStr = new Date().toISOString().split('T')[0];
@@ -1166,9 +1196,12 @@ export class ApiService {
 
           let metrosPeriodoAntes = 0;
           if (fIds.length > 0) {
-            const { data: todasBarras } = await supabase.from('tecnodrill_barras').select('id, metros, horario_registro').in('furo_id', fIds);
+            const { data: todasBarras } = await supabase.from('tecnodrill_barras').select('id, metros, horario_registro, tem_caixa, observacao, tipo_registro, diametro').in('furo_id', fIds);
             for (const b of (todasBarras || [])) {
-              if (b.id === created.id) continue; // Desconsiderar a barra que acabou de ser inserida para saber quanto tinha ANTES
+              if (b.id === created.id) continue;
+              const { meta } = parseBarraObservacao(b.observacao);
+              const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
+              if (isCaixa) continue;
               const m = Number(b.metros) || 3;
               const dtStr = b.horario_registro ? b.horario_registro.split('T')[0] : hojeStr;
               const dtObj = b.horario_registro ? new Date(b.horario_registro) : new Date();
@@ -1194,12 +1227,12 @@ export class ApiService {
       id: created.id,
       furo_id: created.furo_id,
       numero_barra: created.numero_barra,
-      tipo_registro: data.tipo_registro || (data.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
-      metros: Number(created.metros) || 3,
+      tipo_registro: isCaixaRegistro ? 'CAIXA' : (data.tipo_registro || 'CANALIZACAO'),
+      metros: isCaixaRegistro ? 0 : (created.metros !== undefined && created.metros !== null ? Number(created.metros) : metrosDesteRegistro),
       metros_acumulados: Number(created.metros_acumulados) || metrosAcumulados,
-      diametro: data.diametro || '',
+      diametro: isCaixaRegistro ? '' : (data.diametro || ''),
       numero_os: data.numero_os || '',
-      tem_caixa: Boolean(created.tem_caixa),
+      tem_caixa: Boolean(created.tem_caixa || isCaixaRegistro),
       angulo_pitch: created.angulo_pitch,
       profundidade_cm: Number(created.profundidade_cm) || 0,
       foto_url: created.foto_url || (allFotos.length > 0 ? allFotos[0] : ''),
@@ -1221,7 +1254,9 @@ export class ApiService {
     return {
       barra,
       celebrarMeta: metaAtingidaAgora,
-      mensagem: `Registro ${nextNum} apontado com sucesso (+${metrosDesteRegistro}m)!`
+      mensagem: isCaixaRegistro
+        ? `Instalação de Caixa #${nextNum} registrada com sucesso!`
+        : `Registro ${nextNum} apontado com sucesso (+${metrosDesteRegistro}m)!`
     };
   }
 

@@ -123,7 +123,7 @@ export const MapView: React.FC<MapViewProps> = ({
       const lng = b.longitude!;
       latLngs.push([lat, lng]);
 
-      const isBox = b.tem_caixa;
+      const isBox = Boolean(b.tem_caixa || b.tipo_registro === 'CAIXA');
       const color = isBox ? '#27AE60' : '#F05A22';
       const label = isBox ? 'CX' : `#${b.numero_barra}`;
 
@@ -173,7 +173,7 @@ export const MapView: React.FC<MapViewProps> = ({
           ` : ''}
 
           <div style="display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #64748B;">
-            <div><strong>Metros:</strong> ${b.metros}m (Acum: ${b.metros_acumulados}m)</div>
+            ${isBox ? '' : `<div><strong>Metros:</strong> ${b.metros || 3}m (Acum: ${b.metros_acumulados}m)</div>`}
             ${b.observacao ? `<div><strong>Obs:</strong> ${b.observacao}</div>` : ''}
             <div><strong>Data:</strong> ${b.horario_registro ? new Date(b.horario_registro).toLocaleString('pt-BR') : '-'}</div>
           </div>

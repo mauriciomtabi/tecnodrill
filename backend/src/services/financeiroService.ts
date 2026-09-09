@@ -108,7 +108,8 @@ export class FinanceiroService {
       for (const furo of furosDoServico) {
         const barras = barrasPorFuro[furo.id] || [];
         for (const b of barras) {
-          const m = Number(b.metros) || 3;
+          const isCaixa = b.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro);
+          const m = isCaixa ? 0 : (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
           metrosServico += m;
           totalMetrosGeral += m;
 

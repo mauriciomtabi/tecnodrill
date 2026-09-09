@@ -101,7 +101,10 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
 
   const currentServico = servicos.find(s => s.id === selectedServicoId);
 
-  const totalMetrosExecutados = barras.length > 0 ? (barras[barras.length - 1]?.metros_acumulados || 0) : 0;
+  const totalMetrosExecutados = barras.reduce((acc, b) => {
+    if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+    return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+  }, 0);
   const metaMetros = currentServico?.meta_metros || 54;
   const tipoMeta = currentServico?.tipo_meta || 'DIARIA';
   const percentualMeta = metaMetros > 0 ? Math.round((totalMetrosExecutados / metaMetros) * 100) : 0;
@@ -403,7 +406,7 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
                       <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
                         Registro #{b.numero_barra}
                       </strong>
-                      {b.tipo_registro === 'CAIXA' ? (
+                      {(b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? (
                         <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--success)', backgroundColor: 'rgba(39, 174, 96, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
                           📦 CAIXA
                         </span>

@@ -26,7 +26,10 @@ export const PhysicalReportPreview: React.FC<PhysicalReportPreviewProps> = ({
     window.location.href = ApiService.getExcelUrl(furo.id);
   };
 
-  const totalMetros = barras.length * 3;
+  const totalMetros = barras.reduce((acc, b) => {
+    if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
+    return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+  }, 0);
 
   // Split into left column (1-35) and right column (36-70)
   const leftSlots = Array.from({ length: 35 }, (_, i) => i + 1);
@@ -207,10 +210,11 @@ export const PhysicalReportPreview: React.FC<PhysicalReportPreviewProps> = ({
             <tbody>
               {leftSlots.map(n => {
                 const b = barras.find(x => x.numero_barra === n);
+                const isCaixa = b && (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro));
                 return (
                   <tr key={n} className={`text-center border-b border-gray-200 ${b ? 'bg-orange-50/50 font-semibold' : ''}`}>
                     <td className="border-r border-gray-400 p-0.5">{n}</td>
-                    <td className="border-r border-gray-400 p-0.5">{n * 3}</td>
+                    <td className="border-r border-gray-400 p-0.5">{isCaixa ? 'CX' : (b ? `${b.metros_acumulados} m` : '')}</td>
                     <td className="border-r border-gray-400 p-0.5 font-mono">{b?.angulo_pitch || ''}</td>
                     <td className="border-r border-gray-400 p-0.5 font-bold text-blue-900">{b?.profundidade_cm ? `${b.profundidade_cm} cm` : ''}</td>
                     <td className="p-0.5">{b?.distancia_pista_cm ? `${b.distancia_pista_cm}` : ''}</td>
@@ -234,10 +238,11 @@ export const PhysicalReportPreview: React.FC<PhysicalReportPreviewProps> = ({
             <tbody>
               {rightSlots.map(n => {
                 const b = barras.find(x => x.numero_barra === n);
+                const isCaixa = b && (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro));
                 return (
                   <tr key={n} className={`text-center border-b border-gray-200 ${b ? 'bg-orange-50/50 font-semibold' : ''}`}>
                     <td className="border-r border-gray-400 p-0.5">{n}</td>
-                    <td className="border-r border-gray-400 p-0.5">{n * 3}</td>
+                    <td className="border-r border-gray-400 p-0.5">{isCaixa ? 'CX' : (b ? `${b.metros_acumulados} m` : '')}</td>
                     <td className="border-r border-gray-400 p-0.5 font-mono">{b?.angulo_pitch || ''}</td>
                     <td className="border-r border-gray-400 p-0.5 font-bold text-blue-900">{b?.profundidade_cm ? `${b.profundidade_cm} cm` : ''}</td>
                     <td className="p-0.5">{b?.distancia_pista_cm ? `${b.distancia_pista_cm}` : ''}</td>
@@ -252,7 +257,7 @@ export const PhysicalReportPreview: React.FC<PhysicalReportPreviewProps> = ({
         <div className="flex items-center justify-between border-2 border-gray-800 p-2.5 rounded mb-6 bg-gray-50">
           <span className="font-bold uppercase text-xs">Metragem Total Executada:</span>
           <span className="text-xl font-black text-blue-950 tracking-wider">
-            TOTAL {totalMetros} MTS ({barras.length} Barras)
+            TOTAL {totalMetros} MTS ({barras.length} Registros)
           </span>
         </div>
 
