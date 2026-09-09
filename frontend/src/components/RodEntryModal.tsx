@@ -203,7 +203,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             longitude,
             updated,
             new Date(),
-            servico?.logo_cliente || null
+            servico?.logo_cliente || null,
+            servico?.logo_escala || 1.0
           ))
         );
         setFotosList(rewatermarked);
@@ -275,7 +276,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           curLon,
           curAddr,
           new Date(),
-          servico?.logo_cliente || null
+          servico?.logo_cliente || null,
+          servico?.logo_escala || 1.0
         );
 
         setFotosList(prev => [...prev, watermarked]);

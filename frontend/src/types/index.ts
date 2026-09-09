@@ -44,6 +44,7 @@ export interface Servico {
   tipo_meta: TipoMeta;
   meta_metros: number;
   logo_cliente?: string;
+  logo_escala?: number;
   criado_em?: string;
   metricas?: ResumoFinanceiroServico;
 }

@@ -205,7 +205,8 @@ export const applyTecnodrillWatermark = (
   lon: number | null,
   addrDetails: AddressDetails | null,
   originalDate?: Date,
-  customLogoSrc?: string | null
+  customLogoSrc?: string | null,
+  logoScale: number = 1.0
 ): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -314,8 +315,25 @@ export const applyTecnodrillWatermark = (
 
       // 4. Draw Logo in Top-Right Corner (Client custom logo or TecnoDrill fallback)
       if (logoLoaded && logo.width > 0 && logo.height > 0) {
-        const logoHeight = Math.round(fontSize * 1.8);
-        const logoWidth = Math.round(logo.width * (logoHeight / logo.height));
+        const scale = Math.max(0.4, Math.min(3.0, Number(logoScale) || 1.0));
+        // Base multiplier: 2.2x font size for comfortable default visibility
+        const baseHeight = fontSize * 2.2 * scale;
+        let logoHeight = Math.round(baseHeight);
+        let logoWidth = Math.round(logo.width * (logoHeight / logo.height));
+
+        // Limit maximum width to 45% of image width
+        const maxWidth = Math.round(img.width * 0.45);
+        if (logoWidth > maxWidth) {
+          logoWidth = maxWidth;
+          logoHeight = Math.round(logo.height * (logoWidth / logo.width));
+        }
+
+        // Limit maximum height to 30% of image height
+        const maxHeight = Math.round(img.height * 0.30);
+        if (logoHeight > maxHeight) {
+          logoHeight = maxHeight;
+          logoWidth = Math.round(logo.width * (logoHeight / logo.height));
+        }
 
         const logoX = img.width - padding - logoWidth;
         const logoY = padding;
@@ -346,7 +364,8 @@ export const applyTecnodrillWatermark = (
 export const generateWatermarkPreview = async (
   customLogoSrc?: string | null,
   city: string = 'Novo Hamburgo',
-  state: string = 'RS'
+  state: string = 'RS',
+  logoScale: number = 1.0
 ): Promise<string> => {
   // Create a canvas simulating a high-res jobsite photo
   const sampleCanvas = document.createElement('canvas');
@@ -405,6 +424,7 @@ export const generateWatermarkPreview = async (
     sampleLon,
     sampleAddr,
     new Date(),
-    customLogoSrc
+    customLogoSrc,
+    logoScale
   );
 };

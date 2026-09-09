@@ -6,6 +6,7 @@ export interface ServicoMetaTag {
   tipo_servico?: TipoServico;
   min_fotos_registro?: number;
   logo_cliente?: string;
+  logo_escala?: number;
 }
 
 export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
@@ -482,6 +483,7 @@ export class ApiService {
       const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
       const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
       const logoClienteFinal = s.logo_cliente || meta.logo_cliente || undefined;
+      const logoEscalaFinal = Number(s.logo_escala) || Number(meta.logo_escala) || 1.0;
 
       result.push({
         id: s.id,
@@ -511,6 +513,7 @@ export class ApiService {
         tipo_meta: s.tipo_meta || 'DIARIA',
         meta_metros: Number(s.meta_metros) || 100,
         logo_cliente: logoClienteFinal,
+        logo_escala: logoEscalaFinal,
         criado_em: s.criado_em,
         metricas: metricasResumo
       });
@@ -604,6 +607,7 @@ export class ApiService {
       tipo_meta: s.tipo_meta || 'DIARIA',
       meta_metros: Number(s.meta_metros) || 100,
       logo_cliente: s.logo_cliente || meta.logo_cliente || undefined,
+      logo_escala: Number(s.logo_escala) || Number(meta.logo_escala) || 1.0,
       criado_em: s.criado_em,
       furos
     };
@@ -633,7 +637,8 @@ export class ApiService {
     const encodedDesc = buildServicoDescricao(cleanDesc, {
       tipo_servico: data.tipo_servico || 'TELECOM',
       min_fotos_registro: Number(data.min_fotos_registro) || 2,
-      logo_cliente: data.logo_cliente || undefined
+      logo_cliente: data.logo_cliente || undefined,
+      logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0
     });
 
     const supabasePayload: any = {
@@ -675,6 +680,7 @@ export class ApiService {
           tipo_servico: data.tipo_servico || 'TELECOM',
           min_fotos_registro: Number(data.min_fotos_registro) || 2,
           logo_cliente: data.logo_cliente || undefined,
+          logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,
@@ -713,6 +719,8 @@ export class ApiService {
         descricao: cleanDesc,
         tipo_servico: data.tipo_servico || 'TELECOM',
         min_fotos_registro: Number(data.min_fotos_registro) || 2,
+        logo_cliente: data.logo_cliente || undefined,
+        logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
         navegador_id: data.navegador_id,
         navegador_nome: data.navegador_nome,
         operador_id: data.operador_id,
@@ -764,7 +772,8 @@ export class ApiService {
     const metaToSave: ServicoMetaTag = {
       tipo_servico: data.tipo_servico || existingMeta.tipo_servico || 'TELECOM',
       min_fotos_registro: data.min_fotos_registro ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2),
-      logo_cliente: data.logo_cliente !== undefined ? (data.logo_cliente || undefined) : existingMeta.logo_cliente
+      logo_cliente: data.logo_cliente !== undefined ? (data.logo_cliente || undefined) : existingMeta.logo_cliente,
+      logo_escala: data.logo_escala !== undefined ? Number(data.logo_escala) : (existingMeta.logo_escala || 1.0)
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -786,6 +795,7 @@ export class ApiService {
           tipo_servico: metaToSave.tipo_servico,
           min_fotos_registro: metaToSave.min_fotos_registro,
           logo_cliente: metaToSave.logo_cliente,
+          logo_escala: metaToSave.logo_escala,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,

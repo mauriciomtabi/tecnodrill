@@ -4,7 +4,7 @@ import { Servico, CenarioFinanceiro, Usuario, TipoServico } from '../types';
 import { ApiService } from '../services/api';
 import { generateWatermarkPreview } from '../utils/watermark';
 import { useModalBackButton } from '../hooks/useModalBackButton';
-import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon } from 'lucide-react';
+import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon, Minus, Plus } from 'lucide-react';
 
 interface NovoServicoModalProps {
   isOpen: boolean;
@@ -39,6 +39,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [nome, setNome] = useState('');
   const [cliente, setCliente] = useState('');
   const [logoCliente, setLogoCliente] = useState<string | null>(null);
+  const [logoEscala, setLogoEscala] = useState<number>(1.0);
   const [showWatermarkPreviewModal, setShowWatermarkPreviewModal] = useState<boolean>(false);
   const [previewWatermarkUrl, setPreviewWatermarkUrl] = useState<string>('');
   const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
@@ -112,6 +113,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setNome(initialData.nome || '');
         setCliente(initialData.cliente || '');
         setLogoCliente(initialData.logo_cliente || null);
+        setLogoEscala(initialData.logo_escala ? Number(initialData.logo_escala) : 1.0);
         
         let defaultTipo: TipoServico = 'TELECOM';
         if (initialData.nome && initialData.nome.toUpperCase().includes('SANEAMENTO')) {
@@ -162,6 +164,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setNome('');
         setCliente('');
         setLogoCliente(null);
+        setLogoEscala(1.0);
         setTipoServico('TELECOM');
         setMinFotosRegistro('2');
         setUf('SP');
@@ -266,20 +269,40 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handlePreviewWatermark = async () => {
+  const handlePreviewWatermark = async (overrideScale?: number) => {
+    const scaleToUse = overrideScale !== undefined ? overrideScale : logoEscala;
     setLoadingPreview(true);
     setShowWatermarkPreviewModal(true);
     try {
       const preview = await generateWatermarkPreview(
         logoCliente || null,
         (cidade || cidadeSearch).trim() || 'Novo Hamburgo',
-        (uf || 'RS').trim().toUpperCase()
+        (uf || 'RS').trim().toUpperCase(),
+        scaleToUse
       );
       setPreviewWatermarkUrl(preview);
     } catch (err) {
       console.error('Erro ao gerar preview da marca d água:', err);
     } finally {
       setLoadingPreview(false);
+    }
+  };
+
+  const handleUpdateLogoEscala = async (newScale: number) => {
+    const clamped = Math.max(0.4, Math.min(3.0, Number(newScale.toFixed(2))));
+    setLogoEscala(clamped);
+    if (showWatermarkPreviewModal) {
+      try {
+        const preview = await generateWatermarkPreview(
+          logoCliente || null,
+          (cidade || cidadeSearch).trim() || 'Novo Hamburgo',
+          (uf || 'RS').trim().toUpperCase(),
+          clamped
+        );
+        setPreviewWatermarkUrl(preview);
+      } catch (err) {
+        console.error('Erro ao atualizar preview com nova escala:', err);
+      }
     }
   };
 
@@ -317,6 +340,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         nome: nome.toUpperCase().trim(),
         cliente: cliente.trim(),
         logo_cliente: logoCliente || undefined,
+        logo_escala: logoEscala,
         local: localCompleto,
         cidade: (cidade || cidadeSearch).trim() || undefined,
         uf: (uf || 'SP').trim().toUpperCase(),
@@ -553,7 +577,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={handlePreviewWatermark}
+                      onClick={() => handlePreviewWatermark()}
                       disabled={loadingPreview}
                       className="btn-secondary"
                       style={{ 
@@ -571,6 +595,87 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {/* Controles de Escala / Tamanho do Logo no Passo 1 */}
+                {logoCliente && (
+                  <div style={{
+                    marginTop: '12px',
+                    paddingTop: '10px',
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                        Tamanho da Logo na Imagem:
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)' }}>
+                        {Math.round(logoEscala * 100)}%
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateLogoEscala(logoEscala - 0.1)}
+                        className="btn-secondary"
+                        style={{ padding: '3px 8px', fontSize: '12px', lineHeight: 1 }}
+                        title="Diminuir"
+                      >
+                        <Minus size={13} />
+                      </button>
+
+                      <input
+                        type="range"
+                        min="0.5"
+                        max="2.5"
+                        step="0.05"
+                        value={logoEscala}
+                        onChange={(e) => handleUpdateLogoEscala(parseFloat(e.target.value))}
+                        style={{ flex: 1, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateLogoEscala(logoEscala + 0.1)}
+                        className="btn-secondary"
+                        style={{ padding: '3px 8px', fontSize: '12px', lineHeight: 1 }}
+                        title="Aumentar"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '2px' }}>
+                      {[
+                        { label: 'Pequeno (70%)', val: 0.7 },
+                        { label: 'Normal (100%)', val: 1.0 },
+                        { label: 'Médio (140%)', val: 1.4 },
+                        { label: 'Grande (180%)', val: 1.8 },
+                        { label: 'Extra Grande (220%)', val: 2.2 }
+                      ].map(preset => (
+                        <button
+                          key={preset.val}
+                          type="button"
+                          onClick={() => handleUpdateLogoEscala(preset.val)}
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            padding: '3px 7px',
+                            borderRadius: '4px',
+                            border: Math.abs(logoEscala - preset.val) < 0.05 ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                            backgroundColor: Math.abs(logoEscala - preset.val) < 0.05 ? 'rgba(240, 90, 34, 0.2)' : 'rgba(255, 255, 255, 0.04)',
+                            color: Math.abs(logoEscala - preset.val) < 0.05 ? 'var(--primary)' : 'var(--text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* TIPO DE SERVIÇO E MÍNIMO DE FOTOS */}
@@ -1159,7 +1264,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                     <img 
                       src={previewWatermarkUrl} 
                       alt="Pré-visualização da Marca d'Água" 
-                      style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '55vh', objectFit: 'contain' }} 
+                      style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '50vh', objectFit: 'contain' }} 
                     />
                   </div>
                 ) : (
@@ -1167,6 +1272,95 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                     Carregando pré-visualização...
                   </div>
                 )}
+              </div>
+
+              {/* Controles Interativos para Aumentar / Diminuir tamanho do Logo */}
+              <div
+                style={{
+                  margin: '0 20px 16px 20px',
+                  padding: '12px 16px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                      Ajustar Tamanho da Logo:
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--primary)', minWidth: '46px' }}>
+                      {Math.round(logoEscala * 100)}%
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Visualização em tempo real
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateLogoEscala(logoEscala - 0.1)}
+                    className="btn-secondary"
+                    style={{ padding: '5px 12px', fontSize: '13px', lineHeight: 1 }}
+                    title="Diminuir"
+                  >
+                    <Minus size={14} />
+                  </button>
+
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.5"
+                    step="0.05"
+                    value={logoEscala}
+                    onChange={(e) => handleUpdateLogoEscala(parseFloat(e.target.value))}
+                    style={{ flex: 1, accentColor: 'var(--primary)', cursor: 'pointer' }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => handleUpdateLogoEscala(logoEscala + 0.1)}
+                    className="btn-secondary"
+                    style={{ padding: '5px 12px', fontSize: '13px', lineHeight: 1 }}
+                    title="Aumentar"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+
+                {/* Atalhos rápidos */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'Pequeno (70%)', val: 0.7 },
+                    { label: 'Normal (100%)', val: 1.0 },
+                    { label: 'Médio (140%)', val: 1.4 },
+                    { label: 'Grande (180%)', val: 1.8 },
+                    { label: 'Extra Grande (220%)', val: 2.2 }
+                  ].map(preset => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => handleUpdateLogoEscala(preset.val)}
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        border: Math.abs(logoEscala - preset.val) < 0.05 ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: Math.abs(logoEscala - preset.val) < 0.05 ? 'rgba(240, 90, 34, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                        color: Math.abs(logoEscala - preset.val) < 0.05 ? 'var(--primary)' : 'var(--text-main)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div
