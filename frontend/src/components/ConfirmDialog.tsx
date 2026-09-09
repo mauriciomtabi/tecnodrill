@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Trash2, HelpCircle } from 'lucide-react';
+import { useModalBackButton } from '../hooks/useModalBackButton';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -23,6 +24,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel
 }) => {
+  useModalBackButton(open, onCancel, 'confirmDialog');
+
   if (!open) return null;
 
   return createPortal(

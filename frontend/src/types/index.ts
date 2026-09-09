@@ -43,6 +43,7 @@ export interface Servico {
   metragem_prevista_total: number;
   tipo_meta: TipoMeta;
   meta_metros: number;
+  logo_cliente?: string;
   criado_em?: string;
   metricas?: ResumoFinanceiroServico;
 }

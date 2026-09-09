@@ -93,19 +93,67 @@ export const App: React.FC = () => {
     }
   }, [currentPath, selectedObraId, user]);
 
-  const handleNavigate = (path: string) => {
+  const handleNavigate = (path: string, pushHistory = true) => {
+    let targetPath = path;
+    let targetObraId: string | null = null;
+
     if (path.startsWith('/app/obras/') || path.startsWith('/tecnico/obras/')) {
       const parts = path.split('/');
-      const id = parts[parts.length - 1];
-      setSelectedObraId(id);
+      targetObraId = parts[parts.length - 1];
+      targetPath = '/app/obras/detalhe';
+      setSelectedObraId(targetObraId);
       setCurrentPath('/app/obras/detalhe');
     } else {
+      targetPath = path;
       setCurrentPath(path);
       if (path !== '/app/obras/detalhe') {
         setSelectedObraId(null);
       }
     }
+
+    if (pushHistory) {
+      window.history.pushState(
+        { screen: targetPath, selectedObraId: targetObraId },
+        '',
+        window.location.pathname
+      );
+    }
   };
+
+  // Intercepta o botão nativo de voltar no celular para não fechar o app
+  useEffect(() => {
+    if (!window.history.state?.screen && currentPath) {
+      window.history.replaceState(
+        { screen: currentPath, selectedObraId },
+        '',
+        window.location.pathname
+      );
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      // Se o popstate veio de um modal (fechado por useModalBackButton), não alterar a rota da tela
+      if (e.state?.isModal) return;
+
+      const defaultHome = (user?.perfil === 'OPERADOR' || user?.perfil === 'NAVEGADOR')
+        ? '/tecnico/obras'
+        : '/app/obras';
+
+      if (e.state?.screen) {
+        setCurrentPath(e.state.screen);
+        setSelectedObraId(e.state.selectedObraId || null);
+      } else {
+        // Se voltou até o início do histórico mas está em detalhe de obra ou tela interna
+        if (currentPath === '/app/obras/detalhe' || currentPath === '/app/usuarios' || currentPath === '/app/performance') {
+          setCurrentPath(defaultHome);
+          setSelectedObraId(null);
+          window.history.replaceState({ screen: defaultHome, selectedObraId: null }, '');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [currentPath, selectedObraId, user]);
 
   // Acionamento direto do formulário de novo registro pelo botão central da Câmera
   const handleOpenDirectRodModal = async () => {

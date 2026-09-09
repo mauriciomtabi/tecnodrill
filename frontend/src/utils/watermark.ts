@@ -204,7 +204,8 @@ export const applyTecnodrillWatermark = (
   lat: number | null,
   lon: number | null,
   addrDetails: AddressDetails | null,
-  originalDate?: Date
+  originalDate?: Date,
+  customLogoSrc?: string | null
 ): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -222,7 +223,7 @@ export const applyTecnodrillWatermark = (
       logoFinished = true;
       checkAllLoaded();
     };
-    logo.src = '/logo.png';
+    logo.src = customLogoSrc || '/logo.png';
 
     let imgLoaded = false;
     img.crossOrigin = 'anonymous';
@@ -311,7 +312,7 @@ export const applyTecnodrillWatermark = (
         currentY -= (fontSize + lineSpacing);
       });
 
-      // 4. Draw TecnoDrill Logo in Top-Right Corner
+      // 4. Draw Logo in Top-Right Corner (Client custom logo or TecnoDrill fallback)
       if (logoLoaded && logo.width > 0 && logo.height > 0) {
         const logoHeight = Math.round(fontSize * 1.8);
         const logoWidth = Math.round(logo.width * (logoHeight / logo.height));
@@ -329,7 +330,7 @@ export const applyTecnodrillWatermark = (
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
 
-        const brandText = 'TecnoDrill INFRA';
+        const brandText = customLogoSrc ? 'CLIENTE INFRA' : 'TecnoDrill INFRA';
         ctx.strokeText(brandText, img.width - padding, padding);
         ctx.fillText(brandText, img.width - padding, padding);
       }
@@ -337,4 +338,73 @@ export const applyTecnodrillWatermark = (
       resolve(canvas.toDataURL('image/jpeg', 0.88));
     }
   });
+};
+
+/**
+ * Generate a realistic sample photo preview with watermark to show how the client logo will look
+ */
+export const generateWatermarkPreview = async (
+  customLogoSrc?: string | null,
+  city: string = 'Novo Hamburgo',
+  state: string = 'RS'
+): Promise<string> => {
+  // Create a canvas simulating a high-res jobsite photo
+  const sampleCanvas = document.createElement('canvas');
+  sampleCanvas.width = 960;
+  sampleCanvas.height = 720;
+  const ctx = sampleCanvas.getContext('2d');
+  if (!ctx) return '';
+
+  // Background: Realistic jobsite gradient (ground / pipe trench simulation)
+  const grad = ctx.createLinearGradient(0, 0, 960, 720);
+  grad.addColorStop(0, '#1c2833');
+  grad.addColorStop(0.5, '#2c3e50');
+  grad.addColorStop(1, '#1a252f');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 960, 720);
+
+  // Decorative trench/pipe lines for realistic context
+  ctx.strokeStyle = 'rgba(240, 90, 34, 0.4)';
+  ctx.lineWidth = 24;
+  ctx.beginPath();
+  ctx.moveTo(100, 500);
+  ctx.bezierCurveTo(350, 450, 600, 600, 850, 550);
+  ctx.stroke();
+
+  // Subtle grid overlay
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < 960; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, 720);
+    ctx.stroke();
+  }
+  for (let y = 0; y < 720; y += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(960, y);
+    ctx.stroke();
+  }
+
+  // Sample watermark coordinates & address
+  const sampleLat = -29.6875;
+  const sampleLon = -51.1311;
+  const sampleAddr: AddressDetails = {
+    road: 'Rua Bento Gonçalves',
+    houseNumber: '1420',
+    neighbourhood: 'Centro',
+    city: city || 'Novo Hamburgo',
+    state: state || 'RS'
+  };
+
+  const sampleBase64 = sampleCanvas.toDataURL('image/jpeg', 0.9);
+  return applyTecnodrillWatermark(
+    sampleBase64,
+    sampleLat,
+    sampleLon,
+    sampleAddr,
+    new Date(),
+    customLogoSrc
+  );
 };

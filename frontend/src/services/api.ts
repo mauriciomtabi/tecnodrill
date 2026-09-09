@@ -5,6 +5,7 @@ import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiro
 export interface ServicoMetaTag {
   tipo_servico?: TipoServico;
   min_fotos_registro?: number;
+  logo_cliente?: string;
 }
 
 export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
@@ -480,6 +481,7 @@ export class ApiService {
       const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
       const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
       const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
+      const logoClienteFinal = s.logo_cliente || meta.logo_cliente || undefined;
 
       result.push({
         id: s.id,
@@ -508,6 +510,7 @@ export class ApiService {
         min_fotos_registro: minFotosFinal,
         tipo_meta: s.tipo_meta || 'DIARIA',
         meta_metros: Number(s.meta_metros) || 100,
+        logo_cliente: logoClienteFinal,
         criado_em: s.criado_em,
         metricas: metricasResumo
       });
@@ -600,6 +603,7 @@ export class ApiService {
       min_fotos_registro: minFotosFinal,
       tipo_meta: s.tipo_meta || 'DIARIA',
       meta_metros: Number(s.meta_metros) || 100,
+      logo_cliente: s.logo_cliente || meta.logo_cliente || undefined,
       criado_em: s.criado_em,
       furos
     };
@@ -628,7 +632,8 @@ export class ApiService {
     const { descricao: cleanDesc } = parseServicoDescricao(data.descricao || '');
     const encodedDesc = buildServicoDescricao(cleanDesc, {
       tipo_servico: data.tipo_servico || 'TELECOM',
-      min_fotos_registro: Number(data.min_fotos_registro) || 2
+      min_fotos_registro: Number(data.min_fotos_registro) || 2,
+      logo_cliente: data.logo_cliente || undefined
     });
 
     const supabasePayload: any = {
@@ -669,6 +674,7 @@ export class ApiService {
           descricao: cleanDesc,
           tipo_servico: data.tipo_servico || 'TELECOM',
           min_fotos_registro: Number(data.min_fotos_registro) || 2,
+          logo_cliente: data.logo_cliente || undefined,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,
@@ -757,7 +763,8 @@ export class ApiService {
     const { descricao: cleanDesc, meta: existingMeta } = parseServicoDescricao(data.descricao !== undefined ? data.descricao : '');
     const metaToSave: ServicoMetaTag = {
       tipo_servico: data.tipo_servico || existingMeta.tipo_servico || 'TELECOM',
-      min_fotos_registro: data.min_fotos_registro ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2)
+      min_fotos_registro: data.min_fotos_registro ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2),
+      logo_cliente: data.logo_cliente !== undefined ? (data.logo_cliente || undefined) : existingMeta.logo_cliente
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -778,6 +785,7 @@ export class ApiService {
           descricao: cleanDesc,
           tipo_servico: metaToSave.tipo_servico,
           min_fotos_registro: metaToSave.min_fotos_registro,
+          logo_cliente: metaToSave.logo_cliente,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,
@@ -1144,16 +1152,20 @@ export class ApiService {
       id: created.id,
       furo_id: created.furo_id,
       numero_barra: created.numero_barra,
+      tipo_registro: data.tipo_registro || (data.tem_caixa ? 'CAIXA' : 'CANALIZACAO'),
       metros: Number(created.metros) || 3,
       metros_acumulados: Number(created.metros_acumulados) || metrosAcumulados,
+      diametro: data.diametro || '',
+      numero_os: data.numero_os || '',
       tem_caixa: Boolean(created.tem_caixa),
       angulo_pitch: created.angulo_pitch,
       profundidade_cm: Number(created.profundidade_cm) || 0,
-      foto_url: created.foto_url,
+      foto_url: created.foto_url || (allFotos.length > 0 ? allFotos[0] : ''),
+      fotos: allFotos,
       latitude: created.latitude ? Number(created.latitude) : undefined,
       longitude: created.longitude ? Number(created.longitude) : undefined,
       endereco: created.endereco || data.endereco || undefined,
-      observacao: created.observacao,
+      observacao: cleanObs,
       horario_registro: created.horario_registro
     };
 

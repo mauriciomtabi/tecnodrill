@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Servico, CenarioFinanceiro, Usuario, TipoServico } from '../types';
 import { ApiService } from '../services/api';
-import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat } from 'lucide-react';
+import { generateWatermarkPreview } from '../utils/watermark';
+import { useModalBackButton } from '../hooks/useModalBackButton';
+import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon } from 'lucide-react';
 
 interface NovoServicoModalProps {
   isOpen: boolean;
@@ -36,6 +38,17 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   // Step 1: Informações Gerais
   const [nome, setNome] = useState('');
   const [cliente, setCliente] = useState('');
+  const [logoCliente, setLogoCliente] = useState<string | null>(null);
+  const [showWatermarkPreviewModal, setShowWatermarkPreviewModal] = useState<boolean>(false);
+  const [previewWatermarkUrl, setPreviewWatermarkUrl] = useState<string>('');
+  const [loadingPreview, setLoadingPreview] = useState<boolean>(false);
+
+  // Trata botão nativo de voltar do celular
+  useModalBackButton(
+    isOpen, 
+    showWatermarkPreviewModal ? () => setShowWatermarkPreviewModal(false) : onClose, 
+    'novoServico'
+  );
   
   // UF Searchable State
   const [uf, setUf] = useState('SP');
@@ -98,6 +111,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       if (initialData) {
         setNome(initialData.nome || '');
         setCliente(initialData.cliente || '');
+        setLogoCliente(initialData.logo_cliente || null);
         
         let defaultTipo: TipoServico = 'TELECOM';
         if (initialData.nome && initialData.nome.toUpperCase().includes('SANEAMENTO')) {
@@ -147,6 +161,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       } else {
         setNome('');
         setCliente('');
+        setLogoCliente(null);
         setTipoServico('TELECOM');
         setMinFotosRegistro('2');
         setUf('SP');
@@ -165,6 +180,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       }
       setCurrentStep(1);
       setFormError(null);
+      setShowWatermarkPreviewModal(false);
     }
   }, [isOpen, initialData]);
 
@@ -235,6 +251,38 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     c.toLowerCase().includes(cidadeSearch.toLowerCase())
   );
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        setLogoCliente(base64);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePreviewWatermark = async () => {
+    setLoadingPreview(true);
+    setShowWatermarkPreviewModal(true);
+    try {
+      const preview = await generateWatermarkPreview(
+        logoCliente || null,
+        (cidade || cidadeSearch).trim() || 'Novo Hamburgo',
+        (uf || 'RS').trim().toUpperCase()
+      );
+      setPreviewWatermarkUrl(preview);
+    } catch (err) {
+      console.error('Erro ao gerar preview da marca d água:', err);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim() || !cliente.trim()) {
@@ -268,6 +316,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       await onSave({
         nome: nome.toUpperCase().trim(),
         cliente: cliente.trim(),
+        logo_cliente: logoCliente || undefined,
         local: localCompleto,
         cidade: (cidade || cidadeSearch).trim() || undefined,
         uf: (uf || 'SP').trim().toUpperCase(),
@@ -432,6 +481,96 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   required
                   style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
                 />
+              </div>
+
+              {/* LOGO DO CLIENTE (OPCIONAL) PARA MARCA D'ÁGUA */}
+              <div style={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+                border: '1px dashed var(--border-color)', 
+                borderRadius: '8px', 
+                padding: '12px 14px' 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ImageIcon size={14} color="var(--primary)" />
+                    Logo do Cliente na Marca d'Água (Opcional)
+                  </label>
+                  {logoCliente && (
+                    <button
+                      type="button"
+                      onClick={() => setLogoCliente(null)}
+                      style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      Remover Logo
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  {logoCliente ? (
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '10px', 
+                      backgroundColor: '#fff', 
+                      padding: '6px 10px', 
+                      borderRadius: '6px' 
+                    }}>
+                      <img 
+                        src={logoCliente} 
+                        alt="Logo Cliente" 
+                        style={{ maxHeight: '36px', maxWidth: '120px', objectFit: 'contain' }} 
+                      />
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Padrão: Logo TecnoDrill será utilizado nas fotos de campo.
+                    </span>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+                    <label 
+                      className="btn-secondary" 
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        cursor: 'pointer', 
+                        fontSize: '11.5px', 
+                        padding: '6px 12px',
+                        margin: 0
+                      }}
+                    >
+                      <Upload size={13} />
+                      <span>{logoCliente ? 'Alterar Logo' : 'Enviar Logo (.png, .jpg)'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLogoUpload} 
+                        style={{ display: 'none' }} 
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={handlePreviewWatermark}
+                      disabled={loadingPreview}
+                      className="btn-secondary"
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        fontSize: '11.5px', 
+                        padding: '6px 12px',
+                        borderColor: 'var(--primary)',
+                        color: 'var(--primary)'
+                      }}
+                    >
+                      <Eye size={13} />
+                      <span>{loadingPreview ? 'Gerando...' : 'Visualizar Marca d\'Água'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* TIPO DE SERVIÇO E MÍNIMO DE FOTOS */}
@@ -956,6 +1095,101 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
             </>
           )}
         </div>
+
+        {/* MODAL DE PREVIEW DA MARCA D'ÁGUA */}
+        {showWatermarkPreviewModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10000,
+              padding: '16px'
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                width: '100%',
+                maxWidth: '620px',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.7)',
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  padding: '16px 20px',
+                  borderBottom: '1px solid var(--border-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
+                    Pré-visualização da Marca d'Água
+                  </h3>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {logoCliente ? 'Exibindo com Logo Personalizado do Cliente' : 'Exibindo com Logo Padrão da TecnoDrill'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWatermarkPreviewModal(false)}
+                  style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ padding: '20px', textAlign: 'center', overflowY: 'auto' }}>
+                {previewWatermarkUrl ? (
+                  <div style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'inline-block', maxWidth: '100%' }}>
+                    <img 
+                      src={previewWatermarkUrl} 
+                      alt="Pré-visualização da Marca d'Água" 
+                      style={{ width: '100%', height: 'auto', display: 'block', maxHeight: '55vh', objectFit: 'contain' }} 
+                    />
+                  </div>
+                ) : (
+                  <div style={{ padding: '30px', color: 'var(--text-muted)' }}>
+                    Carregando pré-visualização...
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 20px',
+                  borderTop: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--bg-app)',
+                  display: 'flex',
+                  justifyContent: 'flex-end'
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowWatermarkPreviewModal(false)}
+                  className="btn-secondary"
+                  style={{ padding: '8px 18px', fontSize: '12px' }}
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>,

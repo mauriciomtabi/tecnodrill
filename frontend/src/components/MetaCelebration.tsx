@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import { Trophy, Sparkles, CheckCircle2, X, Zap } from 'lucide-react';
+import { useModalBackButton } from '../hooks/useModalBackButton';
 
 interface MetaCelebrationProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const MetaCelebration: React.FC<MetaCelebrationProps> = ({
   navegadorNome,
   operadorNome
 }) => {
+  useModalBackButton(isOpen, onClose, 'metaCelebration');
   useEffect(() => {
     if (isOpen) {
       // Disparar rajadas de confetes multicoloridos e dourados

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
+import { useModalBackButton } from '../hooks/useModalBackButton';
 import { 
   applyTecnodrillWatermark, 
   reverseGeocode, 
@@ -23,7 +24,8 @@ import {
   Box,
   Wrench,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Edit3
 } from 'lucide-react';
 
 interface RodEntryModalProps {
@@ -45,6 +47,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   onSubmit,
   loading = false
 }) => {
+  // Trata botão nativo de voltar do celular
+  useModalBackButton(isOpen, onClose, 'rodEntry');
+
   // Step 0: Escolha Tipo (Canalização vs Caixa)
   // Step 1: Captura de Fotos (mínimo obrigatório + adicionais)
   // Step 2: Dados Técnicos (Canalização: diâmetro, metros, caixa, OS se saneamento)
@@ -75,6 +80,15 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [processingWatermark, setProcessingWatermark] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Raw photos list for re-watermarking when address is edited
+  const [rawPhotosList, setRawPhotosList] = useState<string[]>([]);
+  const [showAddressEditModal, setShowAddressEditModal] = useState<boolean>(false);
+  const [editRua, setEditRua] = useState<string>('');
+  const [editNumero, setEditNumero] = useState<string>('');
+  const [editBairro, setEditBairro] = useState<string>('');
+  const [editCidade, setEditCidade] = useState<string>('');
+  const [editUf, setEditUf] = useState<string>('');
 
   // Saved result for Step 4 Success screen
   const [savedSuccessData, setSavedSuccessData] = useState<{
@@ -125,7 +139,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           setCapturingGps(false);
           resolve({ lat: null, lon: null, addr: null });
         },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
       );
     });
 
@@ -139,6 +153,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setCurrentBarraNumber(nextBarraNumber);
       setTipoRegistro('CANALIZACAO');
       setFotosList([]);
+      setRawPhotosList([]);
       setRawPhotoBase64(null);
       setDiametro('110mm');
       setCustomDiametro('');
@@ -149,11 +164,57 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setAddressDetails(null);
       setStatusMessage('');
       setSavedSuccessData(null);
+      setShowAddressEditModal(false);
       captureLocation();
     }
   }, [isOpen, nextBarraNumber, captureLocation]);
 
   if (!isOpen) return null;
+
+  const handleOpenAddressEdit = () => {
+    setEditRua(addressDetails?.road || '');
+    setEditNumero(addressDetails?.houseNumber || '');
+    setEditBairro(addressDetails?.neighbourhood || '');
+    setEditCidade(addressDetails?.city || servico?.cidade || 'Novo Hamburgo');
+    setEditUf(addressDetails?.state || servico?.uf || 'RS');
+    setShowAddressEditModal(true);
+  };
+
+  const handleSaveEditedAddress = async () => {
+    const updated: AddressDetails = {
+      road: editRua.trim(),
+      houseNumber: editNumero.trim(),
+      neighbourhood: editBairro.trim(),
+      city: editCidade.trim() || 'Novo Hamburgo',
+      state: editUf.trim().toUpperCase() || 'RS'
+    };
+    updated.formattedAddress = formatFullAddress(updated);
+    setAddressDetails(updated);
+    setShowAddressEditModal(false);
+
+    if (rawPhotosList.length > 0) {
+      setProcessingWatermark(true);
+      setStatusMessage('Atualizando carimbo das fotos com o novo endereço...');
+      try {
+        const rewatermarked = await Promise.all(
+          rawPhotosList.map(raw => applyTecnodrillWatermark(
+            raw,
+            latitude,
+            longitude,
+            updated,
+            new Date(),
+            servico?.logo_cliente || null
+          ))
+        );
+        setFotosList(rewatermarked);
+      } catch (err) {
+        console.error('[Watermark Update Error]:', err);
+      } finally {
+        setProcessingWatermark(false);
+        setStatusMessage('');
+      }
+    }
+  };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -207,19 +268,22 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           }
         }
 
-        setStatusMessage('Estampando carimbo TecnoDrill...');
+        setStatusMessage('Estampando carimbo oficial...');
         const watermarked = await applyTecnodrillWatermark(
           rawBase64,
           curLat,
           curLon,
           curAddr,
-          new Date()
+          new Date(),
+          servico?.logo_cliente || null
         );
 
         setFotosList(prev => [...prev, watermarked]);
+        setRawPhotosList(prev => [...prev, rawBase64]);
       } catch (err) {
         console.error('[Watermark Error]:', err);
         setFotosList(prev => [...prev, rawBase64]);
+        setRawPhotosList(prev => [...prev, rawBase64]);
       } finally {
         setProcessingWatermark(false);
         setStatusMessage('');
@@ -231,6 +295,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const handleRemovePhoto = (index: number) => {
     setFotosList(prev => prev.filter((_, i) => i !== index));
+    setRawPhotosList(prev => prev.filter((_, i) => i !== index));
   };
 
   const getEffectiveDiametro = () => {
@@ -576,23 +641,52 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 />
               </div>
 
-              {/* GPS Status */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: latitude ? 'var(--success)' : '#2A8ACC' }}>
-                {capturingGps ? (
-                  <>
-                    <RefreshCw size={12} className="animate-spin" />
-                    <span>Obtendo localização GPS...</span>
-                  </>
-                ) : latitude && addressDetails ? (
-                  <>
-                    <Check size={12} />
-                    <span>GPS e Endereço prontos para o carimbo</span>
-                  </>
-                ) : (
-                  <>
-                    <MapPin size={12} />
-                    <span>GPS ativo</span>
-                  </>
+              {/* GPS Status & Endereço */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: latitude ? 'var(--success)' : '#2A8ACC' }}>
+                    {capturingGps ? (
+                      <>
+                        <RefreshCw size={12} className="animate-spin" />
+                        <span>Obtendo localização GPS...</span>
+                      </>
+                    ) : latitude && addressDetails ? (
+                      <>
+                        <Check size={12} />
+                        <span>GPS e Endereço prontos para o carimbo</span>
+                      </>
+                    ) : (
+                      <>
+                        <MapPin size={12} />
+                        <span>GPS ativo</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddressEdit}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--primary-light)',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Edit3 size={10} />
+                    <span>Ajustar Endereço</span>
+                  </button>
+                </div>
+                {addressDetails && (
+                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', lineHeight: '1.2' }}>
+                    📍 {formatFullAddress(addressDetails)}
+                  </span>
                 )}
               </div>
             </div>
@@ -918,16 +1012,36 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => Math.max(0.5, prev - 1))}
+                  onClick={() => setMetros(prev => Math.max(0.1, Number((prev - 1).toFixed(2))))}
                   style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
                   <Minus size={18} />
                 </button>
 
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px' }}>
-                  <span style={{ fontSize: '32px', fontWeight: 900, color: 'var(--primary)' }}>
-                    {metros}
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', backgroundColor: 'var(--bg-app)', padding: '2px 10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0.1"
+                    value={metros === 0 ? '' : metros}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setMetros(isNaN(val) ? 0 : val);
+                    }}
+                    style={{
+                      fontSize: '30px',
+                      fontWeight: 900,
+                      color: 'var(--primary)',
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      textAlign: 'center',
+                      width: '75px',
+                      outline: 'none',
+                      fontFamily: 'inherit',
+                      padding: 0
+                    }}
+                  />
                   <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-muted)' }}>
                     m
                   </span>
@@ -935,7 +1049,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setMetros(prev => prev + 1)}
+                  onClick={() => setMetros(prev => Number((prev + 1).toFixed(2)))}
                   style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                 >
                   <Plus size={18} />
@@ -964,47 +1078,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Caixa de Passagem na Haste */}
-            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '12px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-                Possui Caixa de Passagem nesta extensão?
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                Digite o valor ou utilize os botões +/-
               </span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setTemCaixa(false)}
-                  style={{
-                    padding: '10px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    backgroundColor: !temCaixa ? 'var(--primary)' : 'var(--bg-app)',
-                    color: !temCaixa ? '#FFFFFF' : 'var(--text-muted)',
-                    border: `1px solid ${!temCaixa ? 'var(--primary)' : 'var(--border-color)'}`
-                  }}
-                >
-                  Sem Caixa
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTemCaixa(true)}
-                  style={{
-                    padding: '10px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    backgroundColor: temCaixa ? 'var(--primary)' : 'var(--bg-app)',
-                    color: temCaixa ? '#FFFFFF' : 'var(--text-muted)',
-                    border: `1px solid ${temCaixa ? 'var(--primary)' : 'var(--border-color)'}`
-                  }}
-                >
-                  Com Caixa
-                </button>
-              </div>
             </div>
 
             {/* Observação */}
@@ -1099,21 +1175,32 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Caixa de Passagem:</span>
-                <strong style={{ color: temCaixa ? 'var(--success)' : 'var(--text-muted)' }}>
-                  {temCaixa ? 'Sim (Com Caixa)' : 'Não'}
-                </strong>
-              </div>
-
-              {addressDetails && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', paddingTop: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', paddingTop: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
                   <MapPin size={14} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: '2px' }} />
                   <span style={{ color: 'var(--text-muted)', fontSize: '11px', lineHeight: '1.3' }}>
-                    {formatFullAddress(addressDetails)}
+                    {addressDetails ? formatFullAddress(addressDetails) : 'Endereço não disponível / Sem GPS'}
                   </span>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={handleOpenAddressEdit}
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.08)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--primary-light)',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  Ajustar
+                </button>
+              </div>
             </div>
 
             {/* Confirm and Submit Button */}
@@ -1246,6 +1333,159 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               >
                 Concluir e Voltar ao Serviço
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL / OVERLAY PARA AJUSTAR ENDEREÇO MANUALMENTE */}
+        {showAddressEditModal && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 9999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px'
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: '380px',
+                backgroundColor: 'var(--bg-card)',
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                padding: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.8)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <strong style={{ fontSize: '14px', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MapPin size={16} style={{ color: 'var(--primary)' }} />
+                  Ajustar Endereço do Carimbo
+                </strong>
+                <button
+                  type="button"
+                  onClick={() => setShowAddressEditModal(false)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: 0 }}>
+                Corrija o endereço para que a marca d'água oficial seja carimbada com a localidade correta.
+              </p>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                  Rua / Logradouro
+                </label>
+                <input
+                  type="text"
+                  value={editRua}
+                  onChange={(e) => setEditRua(e.target.value)}
+                  placeholder="ex: Rua Bento Gonçalves"
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: '#FFFFFF', fontSize: '12px', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '8px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                    Número
+                  </label>
+                  <input
+                    type="text"
+                    value={editNumero}
+                    onChange={(e) => setEditNumero(e.target.value)}
+                    placeholder="ex: 1500 ou S/N"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: '#FFFFFF', fontSize: '12px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                    Bairro
+                  </label>
+                  <input
+                    type="text"
+                    value={editBairro}
+                    onChange={(e) => setEditBairro(e.target.value)}
+                    placeholder="ex: Centro / Ideal"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: '#FFFFFF', fontSize: '12px', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                    Cidade
+                  </label>
+                  <input
+                    type="text"
+                    value={editCidade}
+                    onChange={(e) => setEditCidade(e.target.value)}
+                    placeholder="ex: Novo Hamburgo"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: '#FFFFFF', fontSize: '12px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginBottom: '3px' }}>
+                    UF
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={2}
+                    value={editUf}
+                    onChange={(e) => setEditUf(e.target.value.toUpperCase())}
+                    placeholder="RS"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: '#FFFFFF', fontSize: '12px', boxSizing: 'border-box', textAlign: 'center' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddressEditModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-muted)',
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditedAddress}
+                  style={{
+                    flex: 2,
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: 'var(--primary)',
+                    color: '#FFFFFF',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Salvar Endereço
+                </button>
+              </div>
             </div>
           </div>
         )}

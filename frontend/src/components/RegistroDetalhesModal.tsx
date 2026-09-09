@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
+import { parseBarraObservacao } from '../services/api';
+import { useModalBackButton } from '../hooks/useModalBackButton';
 import { decToDMSForWatermark, reverseGeocode, formatFullAddress, AddressDetails } from '../utils/watermark';
 import { 
   X, 
@@ -47,9 +49,22 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const [dynamicAddress, setDynamicAddress] = useState<string | null>(null);
   const [loadingAddress, setLoadingAddress] = useState<boolean>(false);
 
+  // Trata botão nativo de voltar do celular (se tela cheia, fecha fullscreen; senão fecha modal)
+  useModalBackButton(
+    isOpen, 
+    isPhotoFullscreen ? () => setIsPhotoFullscreen(false) : onClose, 
+    'registroDetalhes'
+  );
+
+  const { observacao: cleanObservacao, meta: barraMeta } = parseBarraObservacao(barra?.observacao);
+  const effectiveDiametro = barra?.diametro || barraMeta.diametro;
+  const effectiveNumeroOs = barra?.numero_os || barraMeta.numero_os;
+  const effectiveTipoRegistro = barra?.tipo_registro || barraMeta.tipo_registro || (barra?.tem_caixa ? 'CAIXA' : 'CANALIZACAO');
   const allPhotos: string[] = (barra?.fotos && barra.fotos.length > 0)
     ? barra.fotos
-    : (barra?.foto_url ? [barra.foto_url] : []);
+    : (barraMeta.fotos && barraMeta.fotos.length > 0)
+      ? barraMeta.fotos
+      : (barra?.foto_url ? [barra.foto_url] : []);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
   useEffect(() => {
@@ -128,7 +143,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     a.click();
   };
 
-  const isBox = barra.tipo_registro === 'CAIXA' || barra.tem_caixa;
+  const isBox = effectiveTipoRegistro === 'CAIXA' || (Boolean(barra.tem_caixa) && !effectiveDiametro);
   const dataFormatada = barra.created_at || barra.data_registro || barra.horario_registro
     ? new Date(barra.created_at || barra.data_registro || barra.horario_registro!).toLocaleString('pt-BR')
     : new Date().toLocaleString('pt-BR');
@@ -160,157 +175,179 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
           maxWidth: isPhotoFullscreen ? '98vw' : '480px',
           maxHeight: '94vh',
           backgroundColor: '#0D1C24',
-          border: '1px solid var(--border-color)',
           borderRadius: '16px',
-          boxShadow: '0 25px 60px rgba(0,0,0,0.8)',
-          display: 'flex',
-          flexDirection: 'column',
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           overflow: 'hidden',
-          boxSizing: 'border-box'
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
-        {/* =========================================================================
-            PARTE 1: FOTO & TOOLBAR DE CONTROLES (IDÊNTICO AO APP JLE)
-           ========================================================================= */}
-        <div style={{ position: 'relative', width: '100%', backgroundColor: '#050C10', flexShrink: 0 }}>
-          
-          {/* Top Floating Voltar Button */}
+        {/* Top Floating Control Bar */}
+        <div 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 16px',
+            backgroundColor: 'rgba(13, 28, 36, 0.95)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+            zIndex: 10
+          }}
+        >
           <button
             onClick={onClose}
             style={{
-              position: 'absolute',
-              top: '12px',
-              left: '12px',
-              zIndex: 20,
-              backgroundColor: 'rgba(13, 28, 36, 0.85)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#FFFFFF',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              color: '#FFFFFF',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer'
             }}
           >
-            <ArrowLeft size={14} />
+            <ArrowLeft size={16} />
             <span>Voltar</span>
           </button>
 
-          {/* Top Right Photo Count Badge */}
+          {/* Photo Counter Pill if multiple photos */}
           {allPhotos.length > 1 && (
-            <div
+            <div 
               style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                zIndex: 20,
-                backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                backgroundColor: 'rgba(240, 90, 34, 0.2)',
+                border: '1px solid var(--primary)',
                 color: '#FFFFFF',
-                padding: '4px 10px',
                 borderRadius: '20px',
+                padding: '4px 12px',
                 fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.5px'
+                fontWeight: 800,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
               }}
             >
-              Foto {activePhotoIndex + 1} de {allPhotos.length}
+              <span>Foto {activePhotoIndex + 1} de {allPhotos.length}</span>
             </div>
           )}
 
-          {/* Photo Viewport with Pan/Zoom/Rotation */}
+          <button
+            onClick={onClose}
+            style={{
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: '4px'
+            }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Modal Scrollable Body */}
+        <div 
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            position: 'relative'
+          }}
+        >
+          {/* Main Photo View Area */}
           <div 
             style={{
+              position: 'relative',
               width: '100%',
-              height: isPhotoFullscreen ? '80vh' : '320px',
+              minHeight: isPhotoFullscreen ? '65vh' : '320px',
+              backgroundColor: '#000000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              overflow: 'hidden',
-              position: 'relative'
+              overflow: 'hidden'
             }}
           >
             {currentPhoto ? (
-              <img
-                src={currentPhoto}
-                alt={`Registro ${barra.numero_barra} Foto ${activePhotoIndex + 1}`}
+              <img 
+                src={currentPhoto} 
+                alt={`Registro ${barra.numero_barra}`}
                 style={{
                   maxWidth: '100%',
-                  maxHeight: '100%',
+                  maxHeight: isPhotoFullscreen ? '75vh' : '380px',
                   objectFit: 'contain',
                   transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                  transition: 'transform 0.2s ease',
-                  userSelect: 'none'
+                  transition: 'transform 0.2s ease-out'
                 }}
               />
             ) : (
-              <div style={{ color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                <Camera size={36} />
-                <span style={{ fontSize: '13px' }}>Sem foto cadastrada para este registro</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '8px' }}>
+                <Camera size={36} opacity={0.4} />
+                <span style={{ fontSize: '12px' }}>Nenhuma foto capturada</span>
               </div>
             )}
 
-            {/* Prev Photo Arrow */}
+            {/* Carousel Navigation Arrows if Multiple Photos */}
             {allPhotos.length > 1 && (
-              <button
-                type="button"
-                onClick={handlePrevPhoto}
-                style={{
-                  position: 'absolute',
-                  left: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  border: 'none',
-                  color: '#fff',
-                  borderRadius: '50%',
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  zIndex: 22
-                }}
-              >
-                <ChevronLeft size={20} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handlePrevPhoto}
+                  disabled={activePhotoIndex === 0}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: activePhotoIndex === 0 ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.7)',
+                    color: activePhotoIndex === 0 ? 'rgba(255,255,255,0.3)' : '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: activePhotoIndex === 0 ? 'default' : 'pointer',
+                    zIndex: 5
+                  }}
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextPhoto}
+                  disabled={activePhotoIndex === allPhotos.length - 1}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    backgroundColor: activePhotoIndex === allPhotos.length - 1 ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.7)',
+                    color: activePhotoIndex === allPhotos.length - 1 ? 'rgba(255,255,255,0.3)' : '#FFFFFF',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: activePhotoIndex === allPhotos.length - 1 ? 'default' : 'pointer',
+                    zIndex: 5
+                  }}
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </>
             )}
 
-            {/* Next Photo Arrow */}
+            {/* Thumbnail Carousel strip if multiple photos */}
             {allPhotos.length > 1 && (
-              <button
-                type="button"
-                onClick={handleNextPhoto}
-                style={{
-                  position: 'absolute',
-                  right: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  border: 'none',
-                  color: '#fff',
-                  borderRadius: '50%',
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  zIndex: 22
-                }}
-              >
-                <ChevronRight size={20} />
-              </button>
-            )}
-
-            {/* Thumbnail dots / strip */}
-            {allPhotos.length > 1 && (
-              <div
+              <div 
                 style={{
                   position: 'absolute',
                   bottom: '10px',
@@ -318,122 +355,100 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   transform: 'translateX(-50%)',
                   display: 'flex',
                   gap: '6px',
-                  backgroundColor: 'rgba(0,0,0,0.65)',
                   padding: '4px 8px',
+                  backgroundColor: 'rgba(0,0,0,0.75)',
                   borderRadius: '20px',
-                  zIndex: 22,
-                  backdropFilter: 'blur(4px)'
+                  backdropFilter: 'blur(4px)',
+                  zIndex: 6
                 }}
               >
-                {allPhotos.map((thumb, idx) => (
+                {allPhotos.map((photo, idx) => (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => { setActivePhotoIndex(idx); setZoom(1); setRotation(0); }}
+                    onClick={() => setActivePhotoIndex(idx)}
                     style={{
                       width: '28px',
                       height: '28px',
                       borderRadius: '4px',
-                      border: idx === activePhotoIndex ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.3)',
                       overflow: 'hidden',
+                      border: activePhotoIndex === idx ? '2px solid var(--primary)' : '1px solid rgba(255,255,255,0.2)',
                       padding: 0,
                       cursor: 'pointer',
-                      background: 'transparent'
+                      backgroundColor: '#000'
                     }}
                   >
-                    <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={photo} alt={`Miniatura ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Photo Action Toolbar (Zoom, Rotate, Download, Fullscreen) */}
+          {/* Photo Inspection Toolbar */}
           <div 
             style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '12px',
-              padding: '8px 12px',
-              backgroundColor: 'rgba(13, 28, 36, 0.95)',
-              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              color: '#FFFFFF'
+              gap: '16px',
+              padding: '8px 16px',
+              backgroundColor: '#071319',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
             }}
           >
-            <button
-              onClick={handleZoomOut}
-              title="Reduzir Zoom"
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: '4px', cursor: 'pointer' }}
+            <button 
+              onClick={handleZoomOut} 
+              title="Reduzir Zoom" 
+              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               <ZoomOut size={16} />
             </button>
-
-            <button
-              onClick={handleResetZoom}
-              title="Zoom Padrão"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--primary)',
-                fontSize: '11px',
-                fontWeight: 800,
-                fontFamily: 'var(--font-mono)',
-                cursor: 'pointer',
-                padding: '2px 6px'
-              }}
+            <button 
+              onClick={handleResetZoom} 
+              title="Resetar Zoom"
+              style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: 700, fontSize: '11px', cursor: 'pointer' }}
             >
               {Math.round(zoom * 100)}%
             </button>
-
-            <button
-              onClick={handleZoomIn}
-              title="Aumentar Zoom"
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: '4px', cursor: 'pointer' }}
+            <button 
+              onClick={handleZoomIn} 
+              title="Aumentar Zoom" 
+              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               <ZoomIn size={16} />
             </button>
-
-            <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255, 255, 255, 0.2)' }} />
-
-            <button
-              onClick={handleRotate}
-              title="Girar Foto 90°"
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: '4px', cursor: 'pointer' }}
+            <div style={{ width: '1px', height: '14px', backgroundColor: 'rgba(255, 255, 255, 0.15)' }} />
+            <button 
+              onClick={handleRotate} 
+              title="Girar Imagem" 
+              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               <RotateCw size={16} />
             </button>
-
-            <button
-              onClick={handleDownload}
-              title="Baixar Foto Oficial"
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: '4px', cursor: 'pointer' }}
+            <button 
+              onClick={handleDownload} 
+              title="Baixar Foto Original" 
+              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               <Download size={16} />
             </button>
-
-            <button
-              onClick={() => setIsPhotoFullscreen(prev => !prev)}
-              title={isPhotoFullscreen ? 'Sair da Tela Cheia' : 'Foto em Tela Cheia'}
-              style={{ background: 'none', border: 'none', color: '#FFFFFF', padding: '4px', cursor: 'pointer' }}
+            <button 
+              onClick={() => setIsPhotoFullscreen(!isPhotoFullscreen)} 
+              title={isPhotoFullscreen ? "Reduzir Foto" : "Expandir Foto"} 
+              style={{ background: 'none', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
             >
               {isPhotoFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
             </button>
           </div>
-        </div>
 
-        {/* =========================================================================
-            PARTE 2: PAINEL DE DETALHES TÉCNICOS (COM ENDEREÇO COMPLETO E COORDENADAS)
-           ========================================================================= */}
-        {!isPhotoFullscreen && (
+          {/* Technical Data Details Card */}
           <div 
             style={{
               padding: '18px 20px',
               display: 'flex',
               flexDirection: 'column',
               gap: '14px',
-              overflowY: 'auto',
               backgroundColor: '#0D1C24'
             }}
           >
@@ -458,7 +473,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   <span>{isBox ? 'INSTALAÇÃO DE CAIXA' : 'CANALIZAÇÃO'}</span>
                 </span>
 
-                {barra.diametro && (
+                {effectiveDiametro && (
                   <span 
                     style={{
                       display: 'inline-flex',
@@ -473,11 +488,11 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                     }}
                   >
                     <Layers size={11} />
-                    <span>Ø {barra.diametro}</span>
+                    <span>Ø {effectiveDiametro}</span>
                   </span>
                 )}
 
-                {barra.numero_os && (
+                {effectiveNumeroOs && (
                   <span 
                     style={{
                       display: 'inline-flex',
@@ -492,7 +507,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                     }}
                   >
                     <Hash size={11} />
-                    <span>OS: {barra.numero_os}</span>
+                    <span>OS: {effectiveNumeroOs}</span>
                   </span>
                 )}
               </div>
@@ -511,23 +526,23 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12.5px' }}>
               
               {/* Diâmetro do Tubo se houver */}
-              {barra.diametro && (
+              {effectiveDiametro && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                   <Layers size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                   <div>
                     <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>DIÂMETRO DA TUBULAÇÃO</span>
-                    <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{barra.diametro}</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{effectiveDiametro}</span>
                   </div>
                 </div>
               )}
 
               {/* Número da OS se houver */}
-              {barra.numero_os && (
+              {effectiveNumeroOs && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                   <Hash size={16} style={{ color: '#00bcd4', flexShrink: 0 }} />
                   <div>
                     <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>ORDEM DE SERVIÇO (OS)</span>
-                    <span style={{ color: '#00bcd4', fontWeight: 700 }}>{barra.numero_os}</span>
+                    <span style={{ color: '#00bcd4', fontWeight: 700 }}>{effectiveNumeroOs}</span>
                   </div>
                 </div>
               )}
@@ -576,7 +591,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                     {dynamicAddress ? (
                       dynamicAddress
                     ) : loadingAddress ? (
-                      <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px' }}>
+                      <span style={{ color: 'var(--primary)', fontStyle: 'italic', fontSize: '11px' }}>
                         Identificando endereço do registro...
                       </span>
                     ) : (
@@ -597,14 +612,14 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                 </div>
               </div>
 
-              {/* Observação Técnica se houver */}
-              {barra.observacao && (
+              {/* Observação Técnica se houver texto limpo digitado pelo usuário */}
+              {cleanObservacao && cleanObservacao.trim().length > 0 && (
                 <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
                   <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>
                     OBSERVAÇÃO TÉCNICA
                   </span>
                   <p style={{ color: '#FFFFFF', fontSize: '12px', fontStyle: 'italic', margin: 0, lineHeight: '1.4' }}>
-                    {barra.observacao}
+                    {cleanObservacao}
                   </p>
                 </div>
               )}
@@ -638,8 +653,8 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
 
             </div>
           </div>
-        )}
 
+        </div>
       </div>
     </div>
   );
