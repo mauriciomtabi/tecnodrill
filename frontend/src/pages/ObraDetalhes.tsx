@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Servico, Furo, Barra } from '../types';
-import { ApiService } from '../services/api';
+import { ApiService, sanitizeLocalidade } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RodEntryModal } from '../components/RodEntryModal';
 import { MetaCelebration } from '../components/MetaCelebration';
@@ -73,7 +73,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     try {
       const s = await ApiService.getServico(servicoId);
       setServico(s);
-      setHeaderInfo(s.nome, `OS: ${s.id} · ${s.cliente} (${s.local})`);
+      setHeaderInfo(s.nome, `OS: ${s.id} · ${s.cliente} (${sanitizeLocalidade(s.local, s.cidade, s.uf)})`);
 
       const furos = await ApiService.getFuros(servicoId);
       if (furos.length > 0) {
@@ -324,7 +324,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
               </span>
             </div>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 6px 0' }}>
-              {servico.cliente} • {servico.local}
+              {servico.cliente} • {sanitizeLocalidade(servico.local, servico.cidade, servico.uf)}
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               {(servico.navegador_nome || furo?.navegador_nome) && (

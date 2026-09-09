@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Servico, CenarioFinanceiro, Usuario, TipoServico } from '../types';
-import { ApiService } from '../services/api';
+import { ApiService, sanitizeLocalidade } from '../services/api';
 import { generateWatermarkPreview } from '../utils/watermark';
 import { useModalBackButton } from '../hooks/useModalBackButton';
 import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon, Minus, Plus } from 'lucide-react';
@@ -129,13 +129,13 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         // Recuperar UF e Cidade do initialData ou analisar o campo local ("Cidade - UF • Detalhes")
         let initUf = (initialData.uf || '').trim().toUpperCase();
         let initCidade = (initialData.cidade || '').trim();
-        let initLocal = (initialData.local || '').trim();
+        let initLocal = sanitizeLocalidade(initialData.local, initCidade, initUf);
 
         if (!initUf || !initCidade) {
           // Extrair todas as ocorrências de "Cidade - UF" no texto local
           const matches = Array.from(initLocal.matchAll(/([^-•\n]+?)\s*-\s*([A-Za-z]{2})/g));
           if (matches.length > 0) {
-            // Se houver mais de uma (ex: acúmulo de Adamantina - SP anterior), pega a última ocorrência legítima
+            // Se houver mais de uma, pega a última ocorrência legítima
             const last = matches[matches.length - 1];
             if (!initCidade) initCidade = last[1].trim();
             if (!initUf) initUf = last[2].trim().toUpperCase();
@@ -149,7 +149,20 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setUfSearch(finalUf);
         setCidade(finalCidade);
         setCidadeSearch(finalCidade);
-        setLocalizacao(initLocal);
+
+        // Remove repetições de "Cidade - UF" da localizacao interna para não acumular
+        let cleanDetail = initLocal;
+        if (finalCidade && finalUf) {
+          const pattern = new RegExp(`${finalCidade}\\s*-\\s*${finalUf}`, 'gi');
+          cleanDetail = cleanDetail.replace(pattern, '');
+        }
+        cleanDetail = cleanDetail
+          .split('•')
+          .map(p => p.trim())
+          .filter(Boolean)
+          .join(' • ');
+
+        setLocalizacao(cleanDetail);
 
         setNavegadorId(initialData.navegador_id || '');
         setOperadorId(initialData.operador_id || '');
@@ -332,9 +345,19 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const opNomeFinal = opObj?.nome || (operadorId && !opObj ? operadorId : undefined);
 
     try {
-      const localCompleto = cidade 
-        ? `${cidade} - ${uf}${localizacao.trim() ? ` • ${localizacao.trim()}` : ''}`
-        : localizacao.trim() || 'Brasil';
+      // Remove repetições de cidade - uf do detalhe complementar
+      const cleanDetail = (localizacao || '')
+        .replace(new RegExp(`${cidade}\\s*-\\s*${uf}`, 'gi'), '')
+        .split('•')
+        .map(p => p.trim())
+        .filter(Boolean)
+        .join(' • ');
+
+      const rawLocal = cidade 
+        ? `${cidade} - ${uf}${cleanDetail ? ` • ${cleanDetail}` : ''}`
+        : cleanDetail || 'Brasil';
+
+      const localCompleto = sanitizeLocalidade(rawLocal, cidade, uf);
 
       await onSave({
         nome: nome.toUpperCase().trim(),

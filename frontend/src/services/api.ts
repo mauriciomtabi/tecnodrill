@@ -52,6 +52,38 @@ export function buildBarraObservacao(cleanObs: string, meta: BarraMetaTag): stri
   return cleanObs ? `${metaStr}\n${cleanObs}` : metaStr;
 }
 
+/**
+ * Remove repetições consecutivas ou acúmulos de "Cidade - UF • Cidade - UF" no texto de localização.
+ */
+export function sanitizeLocalidade(local?: string | null, cidade?: string | null, uf?: string | null): string {
+  const fallback = cidade && uf 
+    ? `${cidade.trim()} - ${uf.trim().toUpperCase()}` 
+    : (cidade?.trim() || 'Brasil');
+
+  if (!local || !local.trim()) {
+    return fallback;
+  }
+
+  // Divide por marcadores '•'
+  const rawParts = local.split('•').map(p => p.trim()).filter(Boolean);
+  const uniqueParts: string[] = [];
+  const seen = new Set<string>();
+
+  for (const part of rawParts) {
+    const normalized = part.toLowerCase().replace(/\s+/g, ' ');
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      uniqueParts.push(part);
+    }
+  }
+
+  if (uniqueParts.length === 0) {
+    return fallback;
+  }
+
+  return uniqueParts.join(' • ');
+}
+
 export class ApiService {
   private static getToken(): string | null {
     return localStorage.getItem('tecnodrill_token');
@@ -493,7 +525,7 @@ export class ApiService {
         projeto: s.projeto || '',
         obra: s.obra || '',
         centro_custo: s.centro_custo || '',
-        local: s.local || '',
+        local: sanitizeLocalidade(s.local, s.cidade, s.uf),
         cidade: s.cidade || undefined,
         uf: s.uf || undefined,
         gestor_id: s.gestor_id,
@@ -587,7 +619,7 @@ export class ApiService {
       projeto: s.projeto || '',
       obra: s.obra || '',
       centro_custo: s.centro_custo || '',
-      local: s.local || '',
+      local: sanitizeLocalidade(s.local, s.cidade, s.uf),
       cidade: s.cidade || undefined,
       uf: s.uf || undefined,
       gestor_id: s.gestor_id,
@@ -649,7 +681,7 @@ export class ApiService {
       projeto: data.projeto || null,
       obra: data.obra || null,
       centro_custo: data.centro_custo || null,
-      local: data.local || '',
+      local: sanitizeLocalidade(data.local, data.cidade, data.uf),
       cidade: data.cidade || null,
       uf: data.uf || null,
       gestor_id: data.gestor_id || null,
@@ -750,7 +782,7 @@ export class ApiService {
     const supabasePayload: any = {};
     if (data.nome !== undefined) supabasePayload.nome = data.nome.toUpperCase().trim();
     if (data.cliente !== undefined) supabasePayload.cliente = data.cliente.trim();
-    if (data.local !== undefined) supabasePayload.local = data.local;
+    if (data.local !== undefined) supabasePayload.local = sanitizeLocalidade(data.local, data.cidade, data.uf);
     if (data.cidade !== undefined) supabasePayload.cidade = data.cidade || null;
     if (data.uf !== undefined) supabasePayload.uf = data.uf || null;
     if (data.projeto !== undefined) supabasePayload.projeto = data.projeto || null;

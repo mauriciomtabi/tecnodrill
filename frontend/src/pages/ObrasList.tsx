@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Servico, Furo } from '../types';
-import { ApiService } from '../services/api';
+import { ApiService, sanitizeLocalidade } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { 
   Plus, 
@@ -342,7 +342,7 @@ export const ObrasList: React.FC<ObrasListProps> = ({
                     overflow: 'hidden'
                   }}
                 >
-                  {servico.cliente} • {servico.local}
+                  {servico.cliente} • {sanitizeLocalidade(servico.local, servico.cidade, servico.uf)}
                 </p>
 
                 {/* Equipe Técnica Vinculada (Caixa compacta idêntica ao App JLE) */}
