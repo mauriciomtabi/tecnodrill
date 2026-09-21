@@ -75,7 +75,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       setServico(s);
       setHeaderInfo(s.nome, `OS: ${s.id} · ${s.cliente} (${sanitizeLocalidade(s.local, s.cidade, s.uf)})`);
 
-      const furos = await ApiService.getFuros(servicoId);
+      const furos = (s.furos && s.furos.length > 0) ? s.furos : await ApiService.getFuros(servicoId);
       if (furos.length > 0) {
         setFuro(furos[0]);
         const b = await ApiService.getBarras(furos[0].id);

@@ -41,9 +41,11 @@ export const ObrasList: React.FC<ObrasListProps> = ({
   const fetchServicos = async () => {
     setLoading(true);
     try {
-      const data = await ApiService.getServicos();
+      const [data, furosData] = await Promise.all([
+        ApiService.getServicos(),
+        ApiService.getFuros()
+      ]);
       setServicos(data);
-      const furosData = await ApiService.getFuros();
       setFuros(furosData);
     } catch (err) {
       console.error('Erro ao buscar serviços:', err);

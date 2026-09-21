@@ -244,9 +244,23 @@ export const applyTecnodrillWatermark = (
     }
 
     function drawWatermark() {
+      // Escalonamento proporcional inteligente: limita dimensão máxima a 1600px para alto desempenho
+      const MAX_DIM = 1600;
+      let targetWidth = img.width;
+      let targetHeight = img.height;
+      if (targetWidth > MAX_DIM || targetHeight > MAX_DIM) {
+        if (targetWidth > targetHeight) {
+          targetHeight = Math.round((targetHeight * MAX_DIM) / targetWidth);
+          targetWidth = MAX_DIM;
+        } else {
+          targetWidth = Math.round((targetWidth * MAX_DIM) / targetHeight);
+          targetHeight = MAX_DIM;
+        }
+      }
+
       const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         resolve(base64Src);
@@ -254,11 +268,11 @@ export const applyTecnodrillWatermark = (
       }
 
       // 1. Draw base photo
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
 
       // 2. Format Date and Dimensions
       const dateStr = formatWatermarkDate(originalDate || new Date());
-      const fontSize = Math.max(16, Math.round(img.height * 0.032));
+      const fontSize = Math.max(16, Math.round(targetHeight * 0.032));
       ctx.font = `bold ${fontSize}px Arial, "Helvetica Neue", Helvetica, sans-serif`;
 
       const padding = Math.round(fontSize * 1.2);
@@ -278,13 +292,16 @@ export const applyTecnodrillWatermark = (
 
       // Address lines (Rua + Nº, Bairro, Cidade, Estado)
       if (addrDetails) {
-        if (addrDetails.road) {
-          const streetLine = addrDetails.houseNumber && addrDetails.houseNumber !== 'S/N'
-            ? `${addrDetails.road}, ${addrDetails.houseNumber}`
-            : addrDetails.road;
-          lines.push(streetLine);
+        const street = addrDetails.road
+          ? (addrDetails.houseNumber && addrDetails.houseNumber !== 'S/N'
+              ? `${addrDetails.road}, ${addrDetails.houseNumber}`
+              : addrDetails.road)
+          : '';
+
+        if (street) {
+          lines.push(street);
         }
-        if (addrDetails.neighbourhood && addrDetails.neighbourhood !== addrDetails.city && addrDetails.neighbourhood !== addrDetails.road) {
+        if (addrDetails.neighbourhood && addrDetails.neighbourhood !== addrDetails.city) {
           lines.push(addrDetails.neighbourhood);
         }
         if (addrDetails.city) {
@@ -304,12 +321,12 @@ export const applyTecnodrillWatermark = (
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
 
-      let currentY = img.height - padding;
+      let currentY = targetHeight - padding;
       const reversedLines = [...lines].reverse();
 
       reversedLines.forEach((line) => {
-        ctx.strokeText(line, img.width - padding, currentY);
-        ctx.fillText(line, img.width - padding, currentY);
+        ctx.strokeText(line, targetWidth - padding, currentY);
+        ctx.fillText(line, targetWidth - padding, currentY);
         currentY -= (fontSize + lineSpacing);
       });
 
@@ -322,20 +339,20 @@ export const applyTecnodrillWatermark = (
         let logoWidth = Math.round(logo.width * (logoHeight / logo.height));
 
         // Limit maximum width to 45% of image width
-        const maxWidth = Math.round(img.width * 0.45);
+        const maxWidth = Math.round(targetWidth * 0.45);
         if (logoWidth > maxWidth) {
           logoWidth = maxWidth;
           logoHeight = Math.round(logo.height * (logoWidth / logo.width));
         }
 
         // Limit maximum height to 30% of image height
-        const maxHeight = Math.round(img.height * 0.30);
+        const maxHeight = Math.round(targetHeight * 0.30);
         if (logoHeight > maxHeight) {
           logoHeight = maxHeight;
-          logoWidth = Math.round(logo.width * (logoHeight / logo.height));
+          logoWidth = Math.round(logo.width * (logoHeight / logo.width));
         }
 
-        const logoX = img.width - padding - logoWidth;
+        const logoX = targetWidth - padding - logoWidth;
         const logoY = padding;
 
         ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
@@ -349,11 +366,11 @@ export const applyTecnodrillWatermark = (
         ctx.textBaseline = 'top';
 
         const brandText = customLogoSrc ? 'CLIENTE INFRA' : 'TecnoDrill INFRA';
-        ctx.strokeText(brandText, img.width - padding, padding);
-        ctx.fillText(brandText, img.width - padding, padding);
+        ctx.strokeText(brandText, targetWidth - padding, padding);
+        ctx.fillText(brandText, targetWidth - padding, padding);
       }
 
-      resolve(canvas.toDataURL('image/jpeg', 0.88));
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
     }
   });
 };
