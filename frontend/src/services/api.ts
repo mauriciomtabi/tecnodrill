@@ -273,25 +273,39 @@ export class ApiService {
   }
 
   public static async getUsuarios(): Promise<Usuario[]> {
-    try {
-      const { data, error } = await supabase
-        .from('tecnodrill_usuarios')
-        .select('*')
-        .order('criado_em', { ascending: false });
+    let lastError: any = null;
 
-      if (!error && data && data.length > 0) {
-        return data.map(u => ({
-          id: u.id,
-          nome: u.nome,
-          perfil: u.perfil as PerfilUsuario,
-          username: u.username,
-          email: u.email || '',
-          ativo: Boolean(u.ativo),
-          trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
-        }));
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('tecnodrill_usuarios')
+          .select('*')
+          .order('criado_em', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          return data.map(u => ({
+            id: u.id,
+            nome: u.nome,
+            perfil: u.perfil as PerfilUsuario,
+            username: u.username,
+            email: u.email || '',
+            ativo: Boolean(u.ativo),
+            trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
+          }));
+        }
+
+        if (error) {
+          lastError = error;
+          console.warn(`[Supabase getUsuarios attempt ${attempt} error]:`, error);
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`[Supabase getUsuarios attempt ${attempt} catch]:`, err);
       }
-    } catch (err) {
-      console.warn('[Supabase getUsuarios warn]:', err);
+
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 600 * attempt));
+      }
     }
 
     // Fallback via API backend local
@@ -310,6 +324,10 @@ export class ApiService {
         }));
       }
     } catch (_) {}
+
+    if (lastError) {
+      throw new Error(lastError.message || 'Erro ao carregar usuários do banco de dados.');
+    }
 
     return [];
   }
@@ -444,18 +462,32 @@ export class ApiService {
   // ============================================================================
   public static async getServicos(): Promise<Servico[]> {
     let servicosData: any[] = [];
+    let lastError: any = null;
 
-    try {
-      const { data, error } = await supabase
-        .from('tecnodrill_servicos')
-        .select('*')
-        .order('criado_em', { ascending: false });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { data, error } = await supabase
+          .from('tecnodrill_servicos')
+          .select('*')
+          .order('criado_em', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        servicosData = data;
+        if (!error && data && data.length > 0) {
+          servicosData = data;
+          break;
+        }
+
+        if (error) {
+          lastError = error;
+          console.warn(`[Get Servicos attempt ${attempt} error]:`, error);
+        }
+      } catch (error) {
+        lastError = error;
+        console.warn(`[Get Servicos attempt ${attempt} catch]:`, error);
       }
-    } catch (error) {
-      console.warn('[Get Servicos Supabase Warn]:', error);
+
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 600 * attempt));
+      }
     }
 
     // Fallback para API backend se Supabase estiver vazio ou inacessível
@@ -468,7 +500,12 @@ export class ApiService {
       } catch (_) {}
     }
 
-    if (!servicosData || servicosData.length === 0) return [];
+    if (!servicosData || servicosData.length === 0) {
+      if (lastError) {
+        throw new Error(lastError.message || 'Erro ao carregar serviços do banco de dados.');
+      }
+      return [];
+    }
 
     const usuarioAtual = this.getUsuarioAtual();
     const result: Servico[] = [];
@@ -964,27 +1001,44 @@ export class ApiService {
   // FUROS & BARRAS
   // ============================================================================
   public static async getFuros(servicoId?: string): Promise<Furo[]> {
-    let query = supabase.from('tecnodrill_furos').select('*').order('criado_em', { ascending: true });
-    if (servicoId) query = query.eq('servico_id', servicoId);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        let query = supabase.from('tecnodrill_furos').select('*').order('criado_em', { ascending: true });
+        if (servicoId) query = query.eq('servico_id', servicoId);
 
-    const { data, error } = await query;
-    if (error) return [];
-    return (data || []).map(f => ({
-      id: f.id,
-      servico_id: f.servico_id,
-      data_furo: f.data_furo,
-      navegador_nome: f.navegador_nome || '',
-      operador_nome: f.operador_nome || '',
-      tubo_aplicado: f.tubo_aplicado || '',
-      diametro_furo: f.diametro_furo || '',
-      comprimento_furo: Number(f.comprimento_furo) || 0,
-      tipo_perfuracao: f.tipo_perfuracao || [],
-      utilizacao_tubo: f.utilizacao_tubo || [],
-      hora_inicio_furo: f.hora_inicio_furo || '',
-      hora_fim_furo: f.hora_fim_furo || '',
-      status: f.status || 'EM_EXECUCAO',
-      barras: []
-    }));
+        const { data, error } = await query;
+        if (error) {
+          console.warn(`[getFuros attempt ${attempt} error]:`, error);
+          if (attempt < 3) {
+            await new Promise(r => setTimeout(r, 600 * attempt));
+            continue;
+          }
+          return [];
+        }
+        return (data || []).map(f => ({
+          id: f.id,
+          servico_id: f.servico_id,
+          data_furo: f.data_furo,
+          navegador_nome: f.navegador_nome || '',
+          operador_nome: f.operador_nome || '',
+          tubo_aplicado: f.tubo_aplicado || '',
+          diametro_furo: f.diametro_furo || '',
+          comprimento_furo: Number(f.comprimento_furo) || 0,
+          tipo_perfuracao: f.tipo_perfuracao || [],
+          utilizacao_tubo: f.utilizacao_tubo || [],
+          hora_inicio_furo: f.hora_inicio_furo || '',
+          hora_fim_furo: f.hora_fim_furo || '',
+          status: f.status || 'EM_EXECUCAO',
+          barras: []
+        }));
+      } catch (err) {
+        console.warn(`[getFuros attempt ${attempt} catch]:`, err);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 600 * attempt));
+        }
+      }
+    }
+    return [];
   }
 
   public static async getFuro(id: string): Promise<Furo> {

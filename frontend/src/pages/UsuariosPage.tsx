@@ -43,6 +43,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
   const { user, showToast } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [perfilFilter, setPerfilFilter] = useState<string>('TODOS');
 
@@ -80,12 +81,14 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
 
   const fetchUsuarios = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const data = await ApiService.getUsuarios();
       setUsuarios(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao buscar usuários:', err);
-      showToast('Erro ao carregar lista de usuários.', 'error');
+      setFetchError(err.message || 'Erro ao conectar ao banco de dados.');
+      showToast('Erro ao carregar lista de usuários. Toque em Tentar Novamente.', 'error');
     } finally {
       setLoading(false);
     }
@@ -404,6 +407,16 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
         {loading ? (
           <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
             <div className="skeleton" style={{ width: '100%', height: '160px', borderRadius: '8px' }} />
+            <p style={{ marginTop: '12px', fontSize: '12px' }}>Conectando ao banco de dados...</p>
+          </div>
+        ) : fetchError ? (
+          <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+            <p style={{ marginBottom: '8px', color: 'var(--warning)' }}>Falha na conexão com o banco de dados</p>
+            <p style={{ fontSize: '11px', marginBottom: '16px' }}>{fetchError}</p>
+            <button onClick={fetchUsuarios} className="btn-primary" style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '13px' }}>
+              🔄 Tentar Novamente
+            </button>
           </div>
         ) : filteredUsuarios.length === 0 ? (
           <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>

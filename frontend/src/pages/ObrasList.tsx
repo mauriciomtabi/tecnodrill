@@ -32,6 +32,7 @@ export const ObrasList: React.FC<ObrasListProps> = ({
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [furos, setFuros] = useState<Furo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('TODAS');
   const [activeTab, setActiveTab] = useState<'ATIVAS' | 'CONCLUIDAS'>('ATIVAS');
@@ -40,6 +41,7 @@ export const ObrasList: React.FC<ObrasListProps> = ({
 
   const fetchServicos = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const [data, furosData] = await Promise.all([
         ApiService.getServicos(),
@@ -47,9 +49,10 @@ export const ObrasList: React.FC<ObrasListProps> = ({
       ]);
       setServicos(data);
       setFuros(furosData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao buscar serviços:', err);
-      showToast('Erro ao carregar serviços.', 'error');
+      setFetchError(err.message || 'Erro ao conectar ao banco de dados.');
+      showToast('Erro ao carregar serviços. Toque em Tentar Novamente.', 'error');
     } finally {
       setLoading(false);
     }
@@ -256,6 +259,16 @@ export const ObrasList: React.FC<ObrasListProps> = ({
       {loading ? (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
           <div className="skeleton" style={{ width: '100%', height: '180px', borderRadius: 'var(--radius-md)' }} />
+          <p style={{ marginTop: '12px', fontSize: '12px' }}>Conectando ao banco de dados...</p>
+        </div>
+      ) : fetchError ? (
+        <div style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-card)' }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+          <p style={{ marginBottom: '8px', color: 'var(--warning)' }}>Falha na conexão com o banco de dados</p>
+          <p style={{ fontSize: '11px', marginBottom: '16px' }}>{fetchError}</p>
+          <button onClick={fetchServicos} className="btn-primary" style={{ padding: '10px 24px', borderRadius: '8px', fontSize: '13px' }}>
+            🔄 Tentar Novamente
+          </button>
         </div>
       ) : filteredServicos.length === 0 ? (
         <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-card)' }}>
