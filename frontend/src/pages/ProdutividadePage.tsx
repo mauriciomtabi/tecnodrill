@@ -20,24 +20,15 @@ import {
 } from 'recharts';
 import { 
   TrendingUp, 
-  DollarSign, 
-  Calendar, 
   Download, 
   HardHat, 
   Scale,
   Search, 
   Layers, 
-  Droplet, 
-  Milestone, 
-  Radio, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle,
   ChevronRight,
   Filter,
   BarChart3,
   PieChart as PieIcon,
-  RefreshCw,
   Coins
 } from 'lucide-react';
 
@@ -1061,8 +1052,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
           {/* Gráfico Recharts */}
           <div style={{ width: '100%', height: '300px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              {metricaEvolucao === 'FINANCEIRO' ? (
+            {metricaEvolucao === 'FINANCEIRO' ? (
+              <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={dadosEvolucao} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid stroke="#1B3645" strokeDasharray="3 3" vertical={false} />
                   <XAxis 
@@ -1086,9 +1077,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       fontSize: '12px',
                       color: '#FFFFFF'
                     }}
-                    formatter={(val: any, name: string) => {
+                    formatter={(val: any, name: any) => {
                       const num = Number(val) || 0;
-                      return [`R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, name];
+                      return [`R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, String(name || '')];
                     }}
                   />
                   <Legend 
@@ -1100,7 +1091,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   <Bar dataKey="custo" name="Custo" fill="#E74C3C" radius={[4, 4, 0, 0]} maxBarSize={30} />
                   <Line type="monotone" dataKey="margem" name="Margem Líquida" stroke="#F05A22" strokeWidth={2.5} dot={{ fill: '#F05A22', r: 3 }} />
                 </ComposedChart>
-              ) : (
+              </ResponsiveContainer>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosEvolucao} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid stroke="#1B3645" strokeDasharray="3 3" vertical={false} />
                   <XAxis 
@@ -1128,8 +1121,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   />
                   <Bar dataKey="metros" name="Metros Perfurados" fill="#F05A22" radius={[4, 4, 0, 0]} maxBarSize={35} />
                 </BarChart>
-              )}
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -1225,13 +1218,13 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       fontSize: '12px',
                       color: '#FFFFFF'
                     }}
-                    formatter={(val: any, name: string) => {
+                    formatter={(val: any, name: any) => {
                       const num = Number(val) || 0;
                       return [
                         metricaSegmento === 'RECEITA'
                           ? `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : `${num.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} metros`,
-                        name
+                        String(name || '')
                       ];
                     }}
                   />
