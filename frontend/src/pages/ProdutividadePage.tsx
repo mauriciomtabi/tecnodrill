@@ -454,14 +454,14 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     });
   }, [servicosFiltrados, barrasPorServico, filtroAno, filtroMes, granularidade, currentYear, currentMonth]);
 
-  // Escala máxima do gráfico de evolução para desenhar as barras com precisão
+  // Escala máxima do gráfico de evolução para desenhar as barras com precisão e espaço para rótulos de dados
   const maxEvolucaoVal = useMemo(() => {
     if (metricaEvolucao === 'FINANCEIRO') {
       const maxVal = Math.max(...dadosEvolucao.map(d => Math.max(d.receita, d.custo)), 1000);
-      return maxVal * 1.15;
+      return maxVal * 1.28;
     }
     const maxMetros = Math.max(...dadosEvolucao.map(d => d.metros), 50);
-    return maxMetros * 1.15;
+    return maxMetros * 1.28;
   }, [dadosEvolucao, metricaEvolucao]);
 
   // Dados para o Gráfico de Distribuição por Segmento (Donut)
@@ -553,6 +553,18 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     if (a >= 1000000) return (a / 1000000).toFixed(1) + 'M';
     if (a >= 1000) return (a / 1000).toFixed(0) + 'k';
     return a.toFixed(0);
+  };
+
+  // Formatador de rótulos de dados (Data Labels) no topo das barras
+  const formatDataLabel = (val: number, isMoney: boolean): string => {
+    if (!val || val <= 0) return '';
+    if (isMoney) {
+      if (val >= 1000000) return `R$ ${(val / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+      if (val >= 1000) return `R$ ${(val / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+      return `R$ ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+    }
+    if (val >= 1000) return `${(val / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}km`;
+    return `${val.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}m`;
   };
 
   if (loading) {
@@ -1062,10 +1074,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           </div>
 
           {/* Visualizador de Barras Analíticas SVG Customizado (Estilo BI JLE) */}
-          <div style={{ position: 'relative', width: '100%', height: '260px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'relative', width: '100%', height: '280px', display: 'flex', flexDirection: 'column' }}>
             
             {/* Linhas de Grade de Fundo */}
-            <div style={{ position: 'absolute', top: 0, left: '45px', right: 0, bottom: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: 0, left: '45px', right: 0, bottom: '32px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
               {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '-45px', fontSize: '10px', color: '#8BA6B5', width: '40px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
@@ -1160,45 +1172,130 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       </div>
                     )}
 
-                    {/* Barras do Mês */}
+                    {/* Barras do Mês com Rótulos de Dados (Data Labels) */}
                     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '3px' }}>
                       {metricaEvolucao === 'FINANCEIRO' ? (
                         <>
-                          {/* Barra de Receita */}
+                          {/* Coluna Receita com Rótulo de Dados */}
                           <div 
-                            style={{
-                              width: '42%',
-                              height: `${Math.max(receitaHeightPct, 2)}%`,
-                              backgroundColor: '#2ECC71',
-                              borderRadius: '3px 3px 0 0',
-                              transition: 'height 0.3s ease',
-                              opacity: d.receita > 0 ? 1 : 0.2
+                            style={{ 
+                              width: '44%', 
+                              height: '100%', 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              justifyContent: 'flex-end', 
+                              alignItems: 'center' 
                             }}
-                          />
-                          {/* Barra de Custo */}
+                          >
+                            {/* Rótulo de Dado da Receita */}
+                            {d.receita > 0 && (
+                              <span 
+                                style={{ 
+                                  fontSize: '9.5px', 
+                                  fontWeight: 800, 
+                                  color: '#2ECC71', 
+                                  fontFamily: 'var(--font-mono)',
+                                  marginBottom: '3px',
+                                  whiteSpace: 'nowrap',
+                                  letterSpacing: '-0.3px',
+                                  lineHeight: 1
+                                }}
+                              >
+                                {formatDataLabel(d.receita, true)}
+                              </span>
+                            )}
+                            <div 
+                              style={{
+                                width: '100%',
+                                height: `${Math.max(receitaHeightPct, 2)}%`,
+                                backgroundColor: '#2ECC71',
+                                borderRadius: '3px 3px 0 0',
+                                transition: 'height 0.3s ease',
+                                opacity: d.receita > 0 ? 1 : 0.2
+                              }}
+                            />
+                          </div>
+
+                          {/* Coluna Custo com Rótulo de Dados */}
                           <div 
-                            style={{
-                              width: '42%',
-                              height: `${Math.max(custoHeightPct, 2)}%`,
-                              backgroundColor: '#E74C3C',
-                              borderRadius: '3px 3px 0 0',
-                              transition: 'height 0.3s ease',
-                              opacity: d.custo > 0 ? 1 : 0.2
+                            style={{ 
+                              width: '44%', 
+                              height: '100%', 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              justifyContent: 'flex-end', 
+                              alignItems: 'center' 
                             }}
-                          />
+                          >
+                            {/* Rótulo de Dado do Custo */}
+                            {d.custo > 0 && (
+                              <span 
+                                style={{ 
+                                  fontSize: '9.5px', 
+                                  fontWeight: 800, 
+                                  color: '#E74C3C', 
+                                  fontFamily: 'var(--font-mono)',
+                                  marginBottom: '3px',
+                                  whiteSpace: 'nowrap',
+                                  letterSpacing: '-0.3px',
+                                  lineHeight: 1
+                                }}
+                              >
+                                {formatDataLabel(d.custo, true)}
+                              </span>
+                            )}
+                            <div 
+                              style={{
+                                width: '100%',
+                                height: `${Math.max(custoHeightPct, 2)}%`,
+                                backgroundColor: '#E74C3C',
+                                borderRadius: '3px 3px 0 0',
+                                transition: 'height 0.3s ease',
+                                opacity: d.custo > 0 ? 1 : 0.2
+                              }}
+                            />
+                          </div>
                         </>
                       ) : (
-                        /* Barra de Metros */
+                        /* Coluna Metros com Rótulo de Dados */
                         <div 
-                          style={{
-                            width: '70%',
-                            height: `${Math.max(metrosHeightPct, 2)}%`,
-                            backgroundColor: 'var(--primary)',
-                            borderRadius: '4px 4px 0 0',
-                            transition: 'height 0.3s ease',
-                            opacity: d.metros > 0 ? 1 : 0.2
+                          style={{ 
+                            width: '70%', 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            justifyContent: 'flex-end', 
+                            alignItems: 'center' 
                           }}
-                        />
+                        >
+                          {/* Rótulo de Dado dos Metros */}
+                          {d.metros > 0 && (
+                            <span 
+                              style={{ 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                color: 'var(--primary)', 
+                                fontFamily: 'var(--font-mono)',
+                                marginBottom: '3px',
+                                whiteSpace: 'nowrap',
+                                letterSpacing: '-0.3px',
+                                lineHeight: 1
+                              }}
+                            >
+                              {formatDataLabel(d.metros, false)}
+                            </span>
+                          )}
+                          <div 
+                            style={{
+                              width: '100%',
+                              height: `${Math.max(metrosHeightPct, 2)}%`,
+                              backgroundColor: 'var(--primary)',
+                              borderRadius: '4px 4px 0 0',
+                              transition: 'height 0.3s ease',
+                              opacity: d.metros > 0 ? 1 : 0.2
+                            }}
+                          />
+                        </div>
                       )}
                     </div>
 
