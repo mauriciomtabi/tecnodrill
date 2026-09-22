@@ -47,6 +47,7 @@ export interface Servico {
   logo_cliente?: string;
   logo_escala?: number;
   // Projeção de custos
+  custo_metro?: number;
   custo_equipe_diario?: number;
   custo_combustivel_diario?: number;
   custo_equipamento_diario?: number;

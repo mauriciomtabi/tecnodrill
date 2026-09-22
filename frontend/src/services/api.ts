@@ -8,6 +8,7 @@ export interface ServicoMetaTag {
   os_obrigatoria?: boolean;
   logo_cliente?: string;
   logo_escala?: number;
+  custo_metro?: number;
   custo_equipe_diario?: number;
   custo_combustivel_diario?: number;
   custo_equipamento_diario?: number;
@@ -646,6 +647,7 @@ export class ApiService {
         tipo_servico: tipoServicoFinal,
         min_fotos_registro: minFotosFinal,
         os_obrigatoria: meta.os_obrigatoria ?? false,
+        custo_metro: Number(meta.custo_metro) || 0,
         custo_equipe_diario: Number(meta.custo_equipe_diario) || 0,
         custo_combustivel_diario: Number(meta.custo_combustivel_diario) || 0,
         custo_equipamento_diario: Number(meta.custo_equipamento_diario) || 0,
@@ -745,6 +747,7 @@ export class ApiService {
       tipo_servico: tipoServicoFinal,
       min_fotos_registro: minFotosFinal,
       os_obrigatoria: meta.os_obrigatoria ?? false,
+      custo_metro: Number(meta.custo_metro) || 0,
       custo_equipe_diario: Number(meta.custo_equipe_diario) || 0,
       custo_combustivel_diario: Number(meta.custo_combustivel_diario) || 0,
       custo_equipamento_diario: Number(meta.custo_equipamento_diario) || 0,
@@ -785,6 +788,7 @@ export class ApiService {
       os_obrigatoria: !!data.os_obrigatoria,
       logo_cliente: data.logo_cliente || undefined,
       logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+      custo_metro: Number(data.custo_metro) || 0,
       custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
       custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
       custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
@@ -833,6 +837,7 @@ export class ApiService {
           os_obrigatoria: !!data.os_obrigatoria,
           logo_cliente: data.logo_cliente || undefined,
           logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+          custo_metro: Number(data.custo_metro) || 0,
           custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
           custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
           custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
@@ -883,6 +888,7 @@ export class ApiService {
         os_obrigatoria: !!data.os_obrigatoria,
         logo_cliente: data.logo_cliente || undefined,
         logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+        custo_metro: Number(data.custo_metro) || 0,
         custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
         custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
         custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
@@ -942,6 +948,7 @@ export class ApiService {
       os_obrigatoria: data.os_obrigatoria !== undefined ? !!data.os_obrigatoria : (existingMeta.os_obrigatoria ?? false),
       logo_cliente: data.logo_cliente !== undefined ? (data.logo_cliente || undefined) : existingMeta.logo_cliente,
       logo_escala: data.logo_escala !== undefined ? Number(data.logo_escala) : (existingMeta.logo_escala || 1.0),
+      custo_metro: data.custo_metro !== undefined ? Number(data.custo_metro) : (existingMeta.custo_metro || 0),
       custo_equipe_diario: data.custo_equipe_diario !== undefined ? Number(data.custo_equipe_diario) : (existingMeta.custo_equipe_diario || 0),
       custo_combustivel_diario: data.custo_combustivel_diario !== undefined ? Number(data.custo_combustivel_diario) : (existingMeta.custo_combustivel_diario || 0),
       custo_equipamento_diario: data.custo_equipamento_diario !== undefined ? Number(data.custo_equipamento_diario) : (existingMeta.custo_equipamento_diario || 0),
@@ -967,6 +974,7 @@ export class ApiService {
           tipo_servico: metaToSave.tipo_servico,
           min_fotos_registro: metaToSave.min_fotos_registro,
           os_obrigatoria: metaToSave.os_obrigatoria,
+          custo_metro: metaToSave.custo_metro,
           custo_equipe_diario: metaToSave.custo_equipe_diario,
           custo_combustivel_diario: metaToSave.custo_combustivel_diario,
           custo_equipamento_diario: metaToSave.custo_equipamento_diario,

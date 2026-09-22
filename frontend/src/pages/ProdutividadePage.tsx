@@ -115,20 +115,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return true;
   };
 
-  // Multiplicador de dias para projeção de custos conforme período selecionado
-  const getFatorDiasPeriodo = (p: PeriodoFiltro, diasEstimadosTotal: number): number => {
-    switch (p) {
-      case 'HOJE':
-        return 1;
-      case 'SEMANA':
-        return 7;
-      case 'MES':
-        return 30;
-      case 'GERAL':
-      default:
-        return Math.max(1, diasEstimadosTotal);
-    }
-  };
 
   // Cálculos consolidados por serviço
   const servicosCalculados = useMemo(() => {
@@ -164,18 +150,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         receitaPeriodo = totalPrevisto > 0 ? (metrosPeriodo / totalPrevisto) * valFechado : 0;
       }
 
-      // Custos diários
-      const custoEquipe = Number(s.custo_equipe_diario) || 0;
-      const custoCombustivel = Number(s.custo_combustivel_diario) || 0;
-      const custoEquipamento = Number(s.custo_equipamento_diario) || 0;
-      const custoOutros = Number(s.custo_outros_diario) || 0;
-      const custoDiarioTotal = custoEquipe + custoCombustivel + custoEquipamento + custoOutros;
-
-      const diasObraEstimados = Math.max(1, Math.ceil(totalPrevisto / (metaDiaria > 0 ? metaDiaria : 100)));
-      const diasPeriodo = getFatorDiasPeriodo(periodo, diasObraEstimados);
-
-      // Se no período não houve produção e o filtro é Hoje/Semana, consideramos custo proporcional
-      const custoPeriodo = custoDiarioTotal * diasPeriodo;
+      // Custo operacional baseado unicamente no valor por metro perfurado
+      const custoMetro = Number(s.custo_metro) || 0;
+      const custoPeriodo = metrosPeriodo * custoMetro;
       const margemPeriodo = receitaPeriodo - custoPeriodo;
       const margemPercentual = receitaPeriodo > 0 ? (margemPeriodo / receitaPeriodo) * 100 : 0;
 
@@ -189,7 +166,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         totalPrevisto,
         percentualConcluido,
         receitaPeriodo,
-        custoDiarioTotal,
+        custoMetro,
         custoPeriodo,
         margemPeriodo,
         margemPercentual,
@@ -288,8 +265,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       'Metros Totais (m)': Number(s.metrosTotais.toFixed(1)),
       'Progresso (%)': `${s.percentualConcluido}%`,
       'Receita Estimada (R$)': Number(s.receitaPeriodo.toFixed(2)),
-      'Custo Diário Total (R$)': Number(s.custoDiarioTotal.toFixed(2)),
-      'Custo Projetado Período (R$)': Number(s.custoPeriodo.toFixed(2)),
+      'Custo / Metro (R$/m)': Number((s.custoMetro || 0).toFixed(2)),
+      'Custo no Período (R$)': Number(s.custoPeriodo.toFixed(2)),
       'Margem Estimada (R$)': Number(s.margemPeriodo.toFixed(2)),
       'Margem (%)': `${s.margemPercentual.toFixed(1)}%`,
       'Registros no Período': s.qtdRegistrosPeriodo,
@@ -867,8 +844,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       </td>
 
                       {/* Custo no Período */}
-                      <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E74C3C' }}>
-                        R$ {s.custoPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ padding: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E74C3C' }}>
+                            R$ {s.custoPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                            R$ {s.custoMetro.toFixed(2)}/m
+                          </span>
+                        </div>
                       </td>
 
                       {/* Margem no Período */}

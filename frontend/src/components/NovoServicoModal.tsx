@@ -102,11 +102,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [minFotosRegistro, setMinFotosRegistro] = useState('2');
   const [osObrigatoria, setOsObrigatoria] = useState(false);
 
-  // Projeção de Custos Diários
-  const [custoEquipeDiario, setCustoEquipeDiario] = useState('0');
-  const [custoCombustivelDiario, setCustoCombustivelDiario] = useState('0');
-  const [custoEquipamentoDiario, setCustoEquipamentoDiario] = useState('0');
-  const [custoOutrosDiario, setCustoOutrosDiario] = useState('0');
+  // Projeção de Custo por Metro
+  const [custoMetro, setCustoMetro] = useState('0');
 
   // Valores de cada modelo
   const [valorMetro, setValorMetro] = useState('180');
@@ -158,10 +155,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
         setMinFotosRegistro(String(initialData.min_fotos_registro || 2));
         setOsObrigatoria(initialData.os_obrigatoria ?? (initialData.tipo_servico === 'SANEAMENTO'));
-        setCustoEquipeDiario(String(initialData.custo_equipe_diario || 0));
-        setCustoCombustivelDiario(String(initialData.custo_combustivel_diario || 0));
-        setCustoEquipamentoDiario(String(initialData.custo_equipamento_diario || 0));
-        setCustoOutrosDiario(String(initialData.custo_outros_diario || 0));
+        setCustoMetro(String(initialData.custo_metro || 0));
         setDescricao(initialData.descricao || '');
 
         // Recuperar UF e Cidade do initialData ou analisar o campo local ("Cidade - UF • Detalhes")
@@ -219,10 +213,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setTipoServico('TELECOM');
         setMinFotosRegistro('2');
         setOsObrigatoria(false);
-        setCustoEquipeDiario('0');
-        setCustoCombustivelDiario('0');
-        setCustoEquipamentoDiario('0');
-        setCustoOutrosDiario('0');
+        setCustoMetro('0');
         setUf('SP');
         setUfSearch('SP');
         setCidade('');
@@ -416,10 +407,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         metragem_prevista_total: mTotal,
         tipo_meta: 'DIARIA',
         meta_metros: mDia,
-        custo_equipe_diario: Number(custoEquipeDiario) || 0,
-        custo_combustivel_diario: Number(custoCombustivelDiario) || 0,
-        custo_equipamento_diario: Number(custoEquipamentoDiario) || 0,
-        custo_outros_diario: Number(custoOutrosDiario) || 0
+        custo_metro: Number(custoMetro) || 0
       });
       onClose();
       setCurrentStep(1);
@@ -448,21 +436,9 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     return m * valorUnitarioEstimado();
   };
 
-  const custoDiarioTotal = () => {
-    return (Number(custoEquipeDiario) || 0) + 
-           (Number(custoCombustivelDiario) || 0) + 
-           (Number(custoEquipamentoDiario) || 0) + 
-           (Number(custoOutrosDiario) || 0);
-  };
-
-  const diasEstimadosObra = () => {
-    const mTotal = Number(metragemPrevista) || 1;
-    const mDia = Number(metaDiaria) || 100;
-    return Math.max(1, Math.ceil(mTotal / (mDia > 0 ? mDia : 100)));
-  };
-
   const custoTotalProjetado = () => {
-    return custoDiarioTotal() * diasEstimadosObra();
+    const m = Number(metragemPrevista) || 0;
+    return m * (Number(custoMetro) || 0);
   };
 
   const margemEstimada = () => {
@@ -1264,7 +1240,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
               </div>
 
-              {/* SESSÃO: PROJEÇÃO DE CUSTOS E MARGEM */}
+              {/* SESSÃO: PROJEÇÃO DE CUSTO */}
               <div style={{ 
                 marginTop: '14px',
                 backgroundColor: 'var(--bg-app)', 
@@ -1274,76 +1250,38 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 800, color: '#E67E22', textTransform: 'uppercase' }}>
-                    <span>📉</span> Projeção de Custos Diários
+                    <span>📉</span> Projeção de Custo
                   </label>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    ~{diasEstimadosObra()} dias previstos
-                  </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                      EQUIPE (R$/DIA)
-                    </label>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                    Valor de Custo por Metro (R$) *
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <span style={{ position: 'absolute', left: '12px', fontWeight: 700, color: 'var(--text-muted)', fontSize: '13px' }}>R$</span>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      value={custoEquipeDiario}
-                      onChange={(e) => setCustoEquipeDiario(e.target.value)}
+                      value={custoMetro}
+                      onChange={(e) => setCustoMetro(e.target.value)}
                       placeholder="0.00"
-                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                      COMBUSTÍVEL (R$/DIA)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoCombustivelDiario}
-                      onChange={(e) => setCustoCombustivelDiario(e.target.value)}
-                      placeholder="0.00"
-                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                      EQUIPAMENTO / LOCAÇÃO (R$/DIA)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoEquipamentoDiario}
-                      onChange={(e) => setCustoEquipamentoDiario(e.target.value)}
-                      placeholder="0.00"
-                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                      OUTROS CUSTOS (R$/DIA)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoOutrosDiario}
-                      onChange={(e) => setCustoOutrosDiario(e.target.value)}
-                      placeholder="0.00"
-                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
+                      style={{ 
+                        fontSize: '14px', 
+                        fontWeight: 700, 
+                        color: 'var(--text-main)', 
+                        padding: '10px 12px 10px 38px',
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        width: '100%'
+                      }}
                     />
                   </div>
                 </div>
 
-                {/* Resumo Financeiro Consolidado: Custo Total, Receita e Margem */}
+                {/* Resumo Financeiro Consolidado: Custo Total e Margem */}
                 <div style={{ 
                   marginTop: '14px', 
                   paddingTop: '12px', 
@@ -1352,16 +1290,9 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   flexDirection: 'column',
                   gap: '8px'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Custo Diário Total:</span>
-                    <strong style={{ color: '#E67E22' }}>
-                      R$ {custoDiarioTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/dia
-                    </strong>
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Custo Projetado Total (~{diasEstimadosObra()} dias):</span>
-                    <strong style={{ color: '#E74C3C' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12.5px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Custo Previsto Total ({metragemPrevista || 0} m):</span>
+                    <strong style={{ color: '#E74C3C', fontSize: '14px' }}>
                       R$ {custoTotalProjetado().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </strong>
                   </div>
@@ -1389,6 +1320,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   </div>
                 </div>
               </div>
+
 
             </form>
           )}
