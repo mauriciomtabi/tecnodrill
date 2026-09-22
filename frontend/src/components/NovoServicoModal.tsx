@@ -14,11 +14,38 @@ interface NovoServicoModalProps {
   loading?: boolean;
 }
 
-const UFS_LIST = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 
-  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 
-  'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+export const ESTADOS_BRASIL = [
+  { sigla: 'AC', nome: 'Acre' },
+  { sigla: 'AL', nome: 'Alagoas' },
+  { sigla: 'AP', nome: 'Amapá' },
+  { sigla: 'AM', nome: 'Amazonas' },
+  { sigla: 'BA', nome: 'Bahia' },
+  { sigla: 'CE', nome: 'Ceará' },
+  { sigla: 'DF', nome: 'Distrito Federal' },
+  { sigla: 'ES', nome: 'Espírito Santo' },
+  { sigla: 'GO', nome: 'Goiás' },
+  { sigla: 'MA', nome: 'Maranhão' },
+  { sigla: 'MT', nome: 'Mato Grosso' },
+  { sigla: 'MS', nome: 'Mato Grosso do Sul' },
+  { sigla: 'MG', nome: 'Minas Gerais' },
+  { sigla: 'PA', nome: 'Pará' },
+  { sigla: 'PB', nome: 'Paraíba' },
+  { sigla: 'PR', nome: 'Paraná' },
+  { sigla: 'PE', nome: 'Pernambuco' },
+  { sigla: 'PI', nome: 'Piauí' },
+  { sigla: 'RJ', nome: 'Rio de Janeiro' },
+  { sigla: 'RN', nome: 'Rio Grande do Norte' },
+  { sigla: 'RS', nome: 'Rio Grande do Sul' },
+  { sigla: 'RO', nome: 'Rondônia' },
+  { sigla: 'RR', nome: 'Roraima' },
+  { sigla: 'SC', nome: 'Santa Catarina' },
+  { sigla: 'SP', nome: 'São Paulo' },
+  { sigla: 'SE', nome: 'Sergipe' },
+  { sigla: 'TO', nome: 'Tocantins' }
 ];
+
+export const UFS_LIST = ESTADOS_BRASIL.map(e => e.sigla);
+
 
 export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   isOpen,
@@ -51,11 +78,10 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     'novoServico'
   );
   
-  // UF Searchable State
+  // UF State
   const [uf, setUf] = useState('SP');
   const [ufSearch, setUfSearch] = useState('SP');
-  const [ufDropdownOpen, setUfDropdownOpen] = useState(false);
-  const ufContainerRef = useRef<HTMLDivElement>(null);
+
 
   // Cidade Searchable State
   const [cidade, setCidade] = useState('');
@@ -244,12 +270,9 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     return () => { isMounted = false; };
   }, [uf]);
 
-  // Fechar dropdowns ao clicar fora
+  // Fechar dropdown de cidades ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (ufContainerRef.current && !ufContainerRef.current.contains(event.target as Node)) {
-        setUfDropdownOpen(false);
-      }
       if (cidadeContainerRef.current && !cidadeContainerRef.current.contains(event.target as Node)) {
         setCidadeDropdownOpen(false);
       }
@@ -260,53 +283,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSelectUf = (selectedUf: string) => {
-    setUf(selectedUf);
-    setUfSearch(selectedUf);
-    if (selectedUf !== uf) {
-      setCidade('');
-      setCidadeSearch('');
-    }
-    setUfDropdownOpen(false);
-  };
-
-  const handleUfInputChange = (val: string) => {
-    const upper = val.toUpperCase().slice(0, 2);
-    setUfSearch(upper);
-    setUfDropdownOpen(true);
-    if (UFS_LIST.includes(upper)) {
-      if (upper !== uf) {
-        setUf(upper);
-        setCidade('');
-        setCidadeSearch('');
-      }
-    }
-  };
-
-  const handleUfBlur = () => {
-    const upper = ufSearch.trim().toUpperCase();
-    if (UFS_LIST.includes(upper)) {
-      if (upper !== uf) {
-        setUf(upper);
-        setCidade('');
-        setCidadeSearch('');
-      }
-      setUfSearch(upper);
-    } else {
-      setUfSearch(uf);
-    }
-    setTimeout(() => setUfDropdownOpen(false), 200);
-  };
-
   const handleSelectCidade = (selectedCidade: string) => {
     setCidade(selectedCidade);
     setCidadeSearch(selectedCidade);
     setCidadeDropdownOpen(false);
   };
 
-  const filteredUfs = UFS_LIST.filter(u => 
-    u.toLowerCase().includes(ufSearch.toLowerCase())
-  );
 
   const filteredCidades = cidadesList.filter(c => 
     c.toLowerCase().includes(cidadeSearch.toLowerCase())
@@ -390,7 +372,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const opNomeFinal = opObj?.nome || (operadorId && !opObj ? operadorId : undefined);
 
     try {
-      const finalUf = (UFS_LIST.includes(ufSearch.trim().toUpperCase()) ? ufSearch.trim().toUpperCase() : uf) || 'SP';
+      const finalUf = (uf || 'SP').trim().toUpperCase();
       const finalCidade = (cidade || cidadeSearch).trim();
 
       // Remove repetições de cidade - uf do detalhe complementar
@@ -911,67 +893,48 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 </div>
               </div>
 
-              {/* UF e Cidade do IBGE Pesquisáveis */}
-              <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '12px' }}>
+              {/* UF e Cidade do IBGE */}
+              <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '12px' }}>
                 
                 {/* Campo UF */}
-                <div ref={ufContainerRef} style={{ position: 'relative' }}>
+                <div>
                   <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
                     UF *
                   </label>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      type="text"
-                      value={ufSearch}
-                      onChange={(e) => handleUfInputChange(e.target.value)}
-                      onBlur={handleUfBlur}
-                      onFocus={() => setUfDropdownOpen(true)}
-                      placeholder="UF"
-                      maxLength={2}
-                      style={{ fontSize: '13px', textTransform: 'uppercase', fontWeight: 700, backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px' }}
-                    />
-                    <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-                  </div>
-
-                  {ufDropdownOpen && (
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        maxHeight: '180px',
-                        overflowY: 'auto',
-                        backgroundColor: 'var(--bg-card)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        zIndex: 99999,
-                        marginTop: '4px',
-                        boxShadow: 'var(--shadow-lg)'
-                      }}
-                    >
-                      {filteredUfs.map((item) => (
-                        <div
-                          key={item}
-                          onClick={() => handleSelectUf(item)}
-                          style={{
-                            padding: '8px 12px',
-                            fontSize: '12.5px',
-                            fontWeight: uf === item ? 700 : 400,
-                            color: uf === item ? 'var(--primary)' : 'var(--text-main)',
-                            backgroundColor: uf === item ? 'rgba(240, 90, 34, 0.1)' : 'transparent',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }}
-                        >
-                          <span>{item}</span>
-                          {uf === item && <Check size={12} />}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <select
+                    value={uf}
+                    onChange={(e) => {
+                      const selectedUf = e.target.value;
+                      setUf(selectedUf);
+                      setUfSearch(selectedUf);
+                      if (selectedUf !== uf) {
+                        setCidade('');
+                        setCidadeSearch('');
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      backgroundColor: 'var(--bg-app)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '10px 8px',
+                      color: 'var(--text-main)',
+                      cursor: 'pointer'
+                    }}
+                    required
+                  >
+                    {ESTADOS_BRASIL.map(item => (
+                      <option 
+                        key={item.sigla} 
+                        value={item.sigla}
+                        style={{ backgroundColor: '#0D1C24', color: 'var(--text-main)' }}
+                      >
+                        {item.sigla} - {item.nome}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Campo Cidade */}
