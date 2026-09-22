@@ -3,33 +3,18 @@ import { useAuth } from '../context/AuthContext';
 import { ApiService } from '../services/api';
 import { Servico, Barra, TipoServico } from '../types';
 import * as XLSX from 'xlsx';
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  BarChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
-  PieChart as RechartsPieChart,
-  Pie,
-  Cell
-} from 'recharts';
 import { 
   TrendingUp, 
   Download, 
   HardHat, 
-  Scale,
+  Scale, 
   Search, 
   Layers, 
-  ChevronRight,
-  Filter,
-  BarChart3,
-  PieChart as PieIcon,
-  Coins
+  ChevronRight, 
+  Filter, 
+  BarChart3, 
+  PieChart as PieIcon, 
+  Coins 
 } from 'lucide-react';
 
 interface ProdutividadePageProps {
@@ -51,12 +36,6 @@ const MESES_SHORT = [
   'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
 ];
 
-const CORES_SEGMENTO: Record<string, string> = {
-  SANEAMENTO: '#00B4D8',
-  RODOVIA: '#F39C12',
-  TELECOM: '#9B59B6'
-};
-
 export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderInfo, onSelectServico }) => {
   const { user } = useAuth();
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -77,12 +56,13 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>('FINANCEIRO');
   const [granularidade, setGranularidade] = useState<GranularidadeEvolucao>('MENSAL');
   const [metricaSegmento, setMetricaSegmento] = useState<'RECEITA' | 'METROS'>('RECEITA');
+  const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
 
   useEffect(() => {
     setHeaderInfo('Painel de Produtividade & Custos', 'Dashboard Analítico de Produção e Performance Financeira');
   }, [setHeaderInfo]);
 
-  // Carregar dados
+  // Carregar dados de forma rápida e paralelizada
   const loadData = async () => {
     setLoading(true);
     try {
@@ -268,7 +248,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         qtdCaixasPeriodo: barrasPeriodo.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length
       };
     });
-  }, [servicos, barrasPorServico, periodoRapido, filtroAno, filtroMes, todayStr, sevenDaysAgo]);
+  }, [servicos, barrasPorServico, periodoRapido, filtroAno, filtroMes, sevenDaysAgo, now]);
 
   // Filtragem por busca e por segmento
   const servicosFiltrados = useMemo(() => {
@@ -312,7 +292,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
     if (granularidade === 'MENSAL') {
       // 12 Meses do ano selecionado
-      const mesesData = Array.from({ length: 12 }, (_, i) => {
+      return Array.from({ length: 12 }, (_, i) => {
         const monthNum = i + 1;
         let metros = 0;
         let receita = 0;
@@ -333,7 +313,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               const m = (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? 0 : (b.metros ?? 3);
               metros += m;
 
-              // Receita
               let rec = 0;
               if (s.cenario_financeiro === 'VALOR_METRO') {
                 rec = m * (Number(s.valor_metro) || 0);
@@ -352,21 +331,19 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         const margem = receita - custo;
 
         return {
+          idx: i,
           label: MESES_SHORT[i],
           nomeMes: MESES_LABEL[i],
-          mesNum,
+          mesNum: monthNum,
           metros: Number(metros.toFixed(1)),
           receita: Number(receita.toFixed(2)),
           custo: Number(custo.toFixed(2)),
           margem: Number(margem.toFixed(2))
         };
       });
-
-      return mesesData;
     }
 
     if (granularidade === 'SEMANAL') {
-      // 5 Semanas do mês selecionado
       const targetMonthNum = filtroMes !== 'TODOS' ? Number(filtroMes) : Number(currentMonth);
       const semanas = [
         { label: 'Sem 1 (1-7)', min: 1, max: 7 },
@@ -376,7 +353,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         { label: 'Sem 5 (29-31)', min: 29, max: 31 }
       ];
 
-      return semanas.map(sem => {
+      return semanas.map((sem, i) => {
         let metros = 0;
         let receita = 0;
         let custo = 0;
@@ -412,7 +389,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         });
 
         return {
+          idx: i,
           label: sem.label,
+          nomeMes: sem.label,
+          mesNum: i + 1,
           metros: Number(metros.toFixed(1)),
           receita: Number(receita.toFixed(2)),
           custo: Number(custo.toFixed(2)),
@@ -462,7 +442,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       });
 
       return {
+        idx: i,
         label: `${day}`,
+        nomeMes: `Dia ${day}`,
+        mesNum: day,
         metros: Number(metros.toFixed(1)),
         receita: Number(receita.toFixed(2)),
         custo: Number(custo.toFixed(2)),
@@ -470,6 +453,16 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       };
     });
   }, [servicosFiltrados, barrasPorServico, filtroAno, filtroMes, granularidade, currentYear, currentMonth]);
+
+  // Escala máxima do gráfico de evolução para desenhar as barras com precisão
+  const maxEvolucaoVal = useMemo(() => {
+    if (metricaEvolucao === 'FINANCEIRO') {
+      const maxVal = Math.max(...dadosEvolucao.map(d => Math.max(d.receita, d.custo)), 1000);
+      return maxVal * 1.15;
+    }
+    const maxMetros = Math.max(...dadosEvolucao.map(d => d.metros), 50);
+    return maxMetros * 1.15;
+  }, [dadosEvolucao, metricaEvolucao]);
 
   // Dados para o Gráfico de Distribuição por Segmento (Donut)
   const dadosSegmentos = useMemo(() => {
@@ -489,25 +482,27 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       }
     });
 
-    const totalValMetros = Object.values(tipos).reduce((acc, curr) => acc + curr.metros, 0) || 1;
-    const totalValReceita = Object.values(tipos).reduce((acc, curr) => acc + curr.receita, 0) || 1;
+    const totalValMetros = Object.values(tipos).reduce((acc, curr) => acc + curr.metros, 0);
+    const totalValReceita = Object.values(tipos).reduce((acc, curr) => acc + curr.receita, 0);
 
-    return Object.entries(tipos).map(([key, val]) => ({
-      key,
-      name: val.nome,
-      icon: val.icon,
-      color: val.color,
-      count: val.count,
-      metros: Number(val.metros.toFixed(1)),
-      receita: Number(val.receita.toFixed(2)),
-      custo: Number(val.custo.toFixed(2)),
-      value: metricaSegmento === 'RECEITA' ? val.receita : val.metros,
-      pct: Math.round(
-        metricaSegmento === 'RECEITA'
-          ? (val.receita / totalValReceita) * 100
-          : (val.metros / totalValMetros) * 100
-      )
-    }));
+    const baseTotal = metricaSegmento === 'RECEITA' ? totalValReceita : totalValMetros;
+
+    return Object.entries(tipos).map(([key, val]) => {
+      const currentVal = metricaSegmento === 'RECEITA' ? val.receita : val.metros;
+      const pct = baseTotal > 0 ? Math.round((currentVal / baseTotal) * 100) : 0;
+      return {
+        key,
+        name: val.nome,
+        icon: val.icon,
+        color: val.color,
+        count: val.count,
+        metros: Number(val.metros.toFixed(1)),
+        receita: Number(val.receita.toFixed(2)),
+        custo: Number(val.custo.toFixed(2)),
+        value: currentVal,
+        pct
+      };
+    });
   }, [servicosFiltrados, metricaSegmento]);
 
   // Exportação para Excel (.xlsx) no padrão executivo BI JLE
@@ -536,24 +531,11 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
 
     const colWidths = [
-      { wch: 10 }, // Código
-      { wch: 32 }, // Serviço
-      { wch: 22 }, // Cliente
-      { wch: 15 }, // Segmento
-      { wch: 6 },  // UF
-      { wch: 20 }, // Cidade
-      { wch: 15 }, // Status
-      { wch: 20 }, // Metros Previstos
-      { wch: 22 }, // Metros Período
-      { wch: 20 }, // Metros Totais
-      { wch: 16 }, // Progresso %
-      { wch: 18 }, // Receita R$
-      { wch: 18 }, // Custo/m
-      { wch: 22 }, // Custo Período
-      { wch: 18 }, // Margem R$
-      { wch: 12 }, // Margem %
-      { wch: 16 }, // Registros
-      { wch: 16 }  // Caixas
+      { wch: 10 }, { wch: 32 }, { wch: 22 }, { wch: 15 },
+      { wch: 6 },  { wch: 20 }, { wch: 15 }, { wch: 20 },
+      { wch: 22 }, { wch: 20 }, { wch: 16 }, { wch: 18 },
+      { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 12 },
+      { wch: 16 }, { wch: 16 }
     ];
     worksheet['!cols'] = colWidths;
 
@@ -583,6 +565,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       </div>
     );
   }
+
+  // Cálculos geométricos do SVG Donut
+  const donutCircumference = 2 * Math.PI * 40; // r=40 -> ~251.32
+  let accumulatedDonutPct = 0;
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '40px' }}>
@@ -701,10 +687,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                 cursor: 'pointer'
               }}
             >
-              <option value="TODOS">Todos os Meses</option>
+              <option value="TODOS">Todos os Meses (Jan - Dez)</option>
               {MESES_LABEL.map((nome, idx) => (
                 <option key={idx + 1} value={(idx + 1).toString()}>
-                  {nome}
+                  {idx + 1} - {nome}
                 </option>
               ))}
             </select>
@@ -930,7 +916,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       ────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '20px' }}>
         
-        {/* GRÁFICO 1: EVOLUÇÃO (MENSAL, SEMANAL OU DIÁRIO COM TODOS OS MESES DO ANO) */}
+        {/* GRÁFICO 1: EVOLUÇÃO (MENSAL COM OS 12 MESES, SEMANAL OU DIÁRIO) */}
         <div 
           style={{ 
             backgroundColor: 'var(--bg-card)', 
@@ -941,7 +927,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             flexDirection: 'column',
             gap: '16px',
             boxShadow: 'var(--shadow-sm)',
-            minHeight: '400px'
+            minHeight: '420px'
           }}
         >
           {/* Header do Gráfico */}
@@ -949,10 +935,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <BarChart3 size={18} color="var(--primary)" />
-                Evolução {granularidade === 'MENSAL' ? `Mensal de ${filtroAno !== 'TODOS' ? filtroAno : currentYear}` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
+                Evolução {granularidade === 'MENSAL' ? `Mensal (${filtroAno !== 'TODOS' ? filtroAno : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
               </h3>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita, Custo e Margem' : 'Volume de Perfuração em Metros'}
+                {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita, Custo e Margem Líquida' : 'Volume de Perfuração em Metros'}
               </span>
             </div>
 
@@ -1011,7 +997,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     cursor: 'pointer'
                   }}
                 >
-                  Mensal
+                  Mensal (12 Meses)
                 </button>
                 <button
                   type="button"
@@ -1050,80 +1036,192 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </div>
           </div>
 
-          {/* Gráfico Recharts */}
-          <div style={{ width: '100%', height: '300px' }}>
+          {/* Legenda do Gráfico de Evolução */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', fontSize: '11px', color: 'var(--text-muted)' }}>
             {metricaEvolucao === 'FINANCEIRO' ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={dadosEvolucao} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid stroke="#1B3645" strokeDasharray="3 3" vertical={false} />
-                  <XAxis 
-                    dataKey="label" 
-                    tick={{ fill: '#8BA6B5', fontSize: 11 }} 
-                    axisLine={{ stroke: '#1B3645' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fill: '#8BA6B5', fontSize: 11 }} 
-                    axisLine={{ stroke: '#1B3645' }}
-                    tickLine={false}
-                    tickFormatter={(v) => `R$ ${formatShortValue(v)}`}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#0D1C24', 
-                      borderColor: '#1B3645', 
-                      borderRadius: '8px', 
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                      fontSize: '12px',
-                      color: '#FFFFFF'
-                    }}
-                    formatter={(val: any, name: any) => {
-                      const num = Number(val) || 0;
-                      return [`R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, String(name || '')];
-                    }}
-                  />
-                  <Legend 
-                    verticalAlign="top" 
-                    align="right"
-                    wrapperStyle={{ paddingBottom: '10px', fontSize: '11px' }} 
-                  />
-                  <Bar dataKey="receita" name="Receita" fill="#2ECC71" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                  <Bar dataKey="custo" name="Custo" fill="#E74C3C" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                  <Line type="monotone" dataKey="margem" name="Margem Líquida" stroke="#F05A22" strokeWidth={2.5} dot={{ fill: '#F05A22', r: 3 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2ECC71' }} />
+                  <span>Receita</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#E74C3C' }} />
+                  <span>Custo Operacional</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '12px', height: '3px', backgroundColor: '#F05A22' }} />
+                  <span>Margem Líquida</span>
+                </div>
+              </>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dadosEvolucao} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid stroke="#1B3645" strokeDasharray="3 3" vertical={false} />
-                  <XAxis 
-                    dataKey="label" 
-                    tick={{ fill: '#8BA6B5', fontSize: 11 }} 
-                    axisLine={{ stroke: '#1B3645' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fill: '#8BA6B5', fontSize: 11 }} 
-                    axisLine={{ stroke: '#1B3645' }}
-                    tickLine={false}
-                    tickFormatter={(v) => `${v}m`}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#0D1C24', 
-                      borderColor: '#1B3645', 
-                      borderRadius: '8px', 
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                      fontSize: '12px',
-                      color: '#FFFFFF'
-                    }}
-                    formatter={(val: any) => [`${Number(val).toLocaleString('pt-BR', { minimumFractionDigits: 1 })} metros`, 'Produção']}
-                  />
-                  <Bar dataKey="metros" name="Metros Perfurados" fill="#F05A22" radius={[4, 4, 0, 0]} maxBarSize={35} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
+                <span>Metros Perfurados (m)</span>
+              </div>
             )}
           </div>
+
+          {/* Visualizador de Barras Analíticas SVG Customizado (Estilo BI JLE) */}
+          <div style={{ position: 'relative', width: '100%', height: '260px', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Linhas de Grade de Fundo */}
+            <div style={{ position: 'absolute', top: 0, left: '45px', right: 0, bottom: '30px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+              {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '-45px', fontSize: '10px', color: '#8BA6B5', width: '40px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                    {metricaEvolucao === 'FINANCEIRO' 
+                      ? `R$ ${formatShortValue(maxEvolucaoVal * ratio)}` 
+                      : `${(maxEvolucaoVal * ratio).toFixed(0)}m`}
+                  </span>
+                  <div style={{ width: '100%', height: '1px', backgroundColor: '#1B3645' }} />
+                </div>
+              ))}
+            </div>
+
+            {/* Container das Colunas dos Meses */}
+            <div style={{ marginLeft: '45px', flex: 1, display: 'flex', alignItems: 'flex-end', gap: '8px', zIndex: 2, paddingBottom: '30px' }}>
+              {dadosEvolucao.map((d, i) => {
+                const isHovered = hoveredMonthIdx === i;
+                const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
+                const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
+                const custoHeightPct = Math.min(100, (d.custo / maxEvolucaoVal) * 100);
+                const metrosHeightPct = Math.min(100, (d.metros / maxEvolucaoVal) * 100);
+
+                return (
+                  <div
+                    key={d.label}
+                    onMouseEnter={() => setHoveredMonthIdx(i)}
+                    onMouseLeave={() => setHoveredMonthIdx(null)}
+                    onClick={() => {
+                      if (granularidade === 'MENSAL') {
+                        setFiltroMes(d.mesNum.toString());
+                        setPeriodoRapido('CUSTOM');
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      backgroundColor: isHovered || isSelectedMonth ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                  >
+                    {/* Tooltip Flutuante no Hover */}
+                    {isHovered && (
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          bottom: '105%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          backgroundColor: '#0D1C24',
+                          border: '1px solid #1B3645',
+                          borderRadius: '8px',
+                          padding: '8px 12px',
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                          zIndex: 10,
+                          pointerEvents: 'none',
+                          minWidth: '130px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '3px'
+                        }}
+                      >
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#FFFFFF', borderBottom: '1px solid #1B3645', paddingBottom: '3px', marginBottom: '2px' }}>
+                          {d.nomeMes}
+                        </span>
+                        {metricaEvolucao === 'FINANCEIRO' ? (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+                              <span style={{ color: '#8BA6B5' }}>Receita:</span>
+                              <span style={{ color: '#2ECC71', fontWeight: 700 }}>R$ {d.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
+                              <span style={{ color: '#8BA6B5' }}>Custo:</span>
+                              <span style={{ color: '#E74C3C', fontWeight: 700 }}>R$ {d.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', borderTop: '1px dashed #1B3645', paddingTop: '3px', marginTop: '2px' }}>
+                              <span style={{ color: '#8BA6B5' }}>Margem:</span>
+                              <span style={{ color: d.margem >= 0 ? '#10B981' : '#E74C3C', fontWeight: 800 }}>R$ {d.margem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                            <span style={{ color: '#8BA6B5' }}>Produção:</span>
+                            <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{d.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Barras do Mês */}
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '3px' }}>
+                      {metricaEvolucao === 'FINANCEIRO' ? (
+                        <>
+                          {/* Barra de Receita */}
+                          <div 
+                            style={{
+                              width: '42%',
+                              height: `${Math.max(receitaHeightPct, 2)}%`,
+                              backgroundColor: '#2ECC71',
+                              borderRadius: '3px 3px 0 0',
+                              transition: 'height 0.3s ease',
+                              opacity: d.receita > 0 ? 1 : 0.2
+                            }}
+                          />
+                          {/* Barra de Custo */}
+                          <div 
+                            style={{
+                              width: '42%',
+                              height: `${Math.max(custoHeightPct, 2)}%`,
+                              backgroundColor: '#E74C3C',
+                              borderRadius: '3px 3px 0 0',
+                              transition: 'height 0.3s ease',
+                              opacity: d.custo > 0 ? 1 : 0.2
+                            }}
+                          />
+                        </>
+                      ) : (
+                        /* Barra de Metros */
+                        <div 
+                          style={{
+                            width: '70%',
+                            height: `${Math.max(metrosHeightPct, 2)}%`,
+                            backgroundColor: 'var(--primary)',
+                            borderRadius: '4px 4px 0 0',
+                            transition: 'height 0.3s ease',
+                            opacity: d.metros > 0 ? 1 : 0.2
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Rótulo do Eixo X (Mês) */}
+                    <span 
+                      style={{
+                        position: 'absolute',
+                        bottom: '-24px',
+                        fontSize: '11px',
+                        fontWeight: isSelectedMonth ? 900 : isHovered ? 700 : 500,
+                        color: isSelectedMonth ? 'var(--primary)' : isHovered ? '#FFFFFF' : '#8BA6B5',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {d.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+          </div>
+
         </div>
 
         {/* GRÁFICO 2: DISTRIBUIÇÃO POR TIPO DE SERVIÇO (DONUT BI JLE) */}
@@ -1137,7 +1235,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             flexDirection: 'column',
             gap: '16px',
             boxShadow: 'var(--shadow-sm)',
-            minHeight: '400px'
+            minHeight: '420px'
           }}
         >
           {/* Header do Gráfico */}
@@ -1189,51 +1287,61 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </div>
           </div>
 
-          {/* Gráfico Donut Recharts + Legenda Lateral */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'center', flex: 1 }}>
+          {/* Gráfico Donut SVG + Legenda Lateral (Padrão BI JLE) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', alignItems: 'center', flex: 1 }}>
             
-            <div style={{ width: '100%', height: '220px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsPieChart>
-                  <Pie
-                    data={dadosSegmentos}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={3}
-                  >
-                    {dadosSegmentos.map((entry) => (
-                      <Cell key={entry.key} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#0D1C24', 
-                      borderColor: '#1B3645', 
-                      borderRadius: '8px', 
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                      fontSize: '12px',
-                      color: '#FFFFFF'
-                    }}
-                    formatter={(val: any, name: any) => {
-                      const num = Number(val) || 0;
-                      return [
-                        metricaSegmento === 'RECEITA'
-                          ? `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                          : `${num.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} metros`,
-                        String(name || '')
-                      ];
-                    }}
-                  />
-                </RechartsPieChart>
-              </ResponsiveContainer>
+            {/* SVG Donut Ring */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <svg width="200" height="200" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                {/* Background Ring */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="transparent"
+                  stroke="#1B3645"
+                  strokeWidth="12"
+                />
+                {/* Segments */}
+                {dadosSegmentos.map((item) => {
+                  const strokeDash = (item.pct / 100) * donutCircumference;
+                  const offset = -(accumulatedDonutPct / 100) * donutCircumference;
+                  accumulatedDonutPct += item.pct;
+
+                  if (item.pct <= 0) return null;
+
+                  return (
+                    <circle
+                      key={item.key}
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="transparent"
+                      stroke={item.color}
+                      strokeWidth="12"
+                      strokeDasharray={`${strokeDash} ${donutCircumference}`}
+                      strokeDashoffset={offset}
+                      style={{ transition: 'stroke-dasharray 0.5s ease' }}
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Rótulo Central do Donut */}
+              <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                  Total Período
+                </span>
+                <span style={{ fontSize: '14px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)' }}>
+                  {metricaSegmento === 'RECEITA' 
+                    ? `R$ ${formatShortValue(totais.totalReceita)}` 
+                    : `${totais.totalMetros.toFixed(0)}m`}
+                </span>
+              </div>
             </div>
 
             {/* Legenda Detalhada dos Segmentos (Padrão BI JLE) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {dadosSegmentos.map(item => (
                 <div 
                   key={item.key}
@@ -1244,7 +1352,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     padding: '10px 12px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px'
+                    gap: '6px'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1252,9 +1360,30 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       <span style={{ fontSize: '13px' }}>{item.icon}</span>
                       <strong style={{ fontSize: '12px', color: 'var(--text-main)' }}>{item.name}</strong>
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: 800, color: item.color }}>
+                    <span style={{ 
+                      fontSize: '11px', 
+                      fontWeight: 800, 
+                      padding: '2px 8px', 
+                      borderRadius: '10px', 
+                      backgroundColor: `${item.color}22`, 
+                      color: item.color,
+                      border: `1px solid ${item.color}44` 
+                    }}>
                       {item.pct}%
                     </span>
+                  </div>
+
+                  {/* Barra de Progresso Horizontal Proporcional */}
+                  <div style={{ width: '100%', height: '4px', backgroundColor: '#1B3645', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div 
+                      style={{ 
+                        height: '100%', 
+                        width: `${item.pct}%`, 
+                        backgroundColor: item.color,
+                        borderRadius: '2px',
+                        transition: 'width 0.4s ease'
+                      }} 
+                    />
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -1290,7 +1419,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           boxShadow: 'var(--shadow-sm)'
         }}
       >
-        {/* Header da Tabela com Busca e Filtro */}
+        {/* Header da Tabela com Busca e Contagem */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
