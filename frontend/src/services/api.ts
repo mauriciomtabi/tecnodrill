@@ -5,8 +5,13 @@ import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiro
 export interface ServicoMetaTag {
   tipo_servico?: TipoServico;
   min_fotos_registro?: number;
+  os_obrigatoria?: boolean;
   logo_cliente?: string;
   logo_escala?: number;
+  custo_equipe_diario?: number;
+  custo_combustivel_diario?: number;
+  custo_equipamento_diario?: number;
+  custo_outros_diario?: number;
 }
 
 export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
@@ -611,7 +616,7 @@ export class ApiService {
 
       const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
       const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
-      const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
+      const minFotosFinal = Number(meta.min_fotos_registro) || Number(s.min_fotos_registro) || 2;
       const logoClienteFinal = s.logo_cliente || meta.logo_cliente || undefined;
       const logoEscalaFinal = Number(s.logo_escala) || Number(meta.logo_escala) || 1.0;
 
@@ -640,6 +645,11 @@ export class ApiService {
         metragem_prevista_total: totalPrevisto,
         tipo_servico: tipoServicoFinal,
         min_fotos_registro: minFotosFinal,
+        os_obrigatoria: meta.os_obrigatoria ?? false,
+        custo_equipe_diario: Number(meta.custo_equipe_diario) || 0,
+        custo_combustivel_diario: Number(meta.custo_combustivel_diario) || 0,
+        custo_equipamento_diario: Number(meta.custo_equipamento_diario) || 0,
+        custo_outros_diario: Number(meta.custo_outros_diario) || 0,
         tipo_meta: s.tipo_meta || 'DIARIA',
         meta_metros: Number(s.meta_metros) || 100,
         logo_cliente: logoClienteFinal,
@@ -686,7 +696,7 @@ export class ApiService {
 
     const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
     const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
-    const minFotosFinal = Number(s.min_fotos_registro) || Number(meta.min_fotos_registro) || 2;
+    const minFotosFinal = Number(meta.min_fotos_registro) || Number(s.min_fotos_registro) || 2;
     const navId = furosData.length > 0 ? furosData[0].navegador_id : s.navegador_id;
     const navNome = furosData.length > 0 ? furosData[0].navegador_nome : s.navegador_nome;
     const opId = furosData.length > 0 ? furosData[0].operador_id : s.operador_id;
@@ -734,6 +744,11 @@ export class ApiService {
       metragem_prevista_total: Number(s.metragem_prevista_total) || 1000,
       tipo_servico: tipoServicoFinal,
       min_fotos_registro: minFotosFinal,
+      os_obrigatoria: meta.os_obrigatoria ?? false,
+      custo_equipe_diario: Number(meta.custo_equipe_diario) || 0,
+      custo_combustivel_diario: Number(meta.custo_combustivel_diario) || 0,
+      custo_equipamento_diario: Number(meta.custo_equipamento_diario) || 0,
+      custo_outros_diario: Number(meta.custo_outros_diario) || 0,
       tipo_meta: s.tipo_meta || 'DIARIA',
       meta_metros: Number(s.meta_metros) || 100,
       logo_cliente: s.logo_cliente || meta.logo_cliente || undefined,
@@ -767,8 +782,13 @@ export class ApiService {
     const encodedDesc = buildServicoDescricao(cleanDesc, {
       tipo_servico: data.tipo_servico || 'TELECOM',
       min_fotos_registro: Number(data.min_fotos_registro) || 2,
+      os_obrigatoria: !!data.os_obrigatoria,
       logo_cliente: data.logo_cliente || undefined,
-      logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0
+      logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+      custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
+      custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
+      custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
+      custo_outros_diario: Number(data.custo_outros_diario) || 0
     });
 
     const supabasePayload: any = {
@@ -790,6 +810,7 @@ export class ApiService {
       diametro_furo_mm: Number(data.diametro_furo_mm) || 0,
       valor_total_fechado: Number(data.valor_total_fechado) || 0,
       metragem_prevista_total: Number(data.metragem_prevista_total) || 1000,
+      min_fotos_registro: Number(data.min_fotos_registro) || 2,
       tipo_meta: data.tipo_meta || 'DIARIA',
       meta_metros: Number(data.meta_metros) || 100
     };
@@ -809,8 +830,13 @@ export class ApiService {
           descricao: cleanDesc,
           tipo_servico: data.tipo_servico || 'TELECOM',
           min_fotos_registro: Number(data.min_fotos_registro) || 2,
+          os_obrigatoria: !!data.os_obrigatoria,
           logo_cliente: data.logo_cliente || undefined,
           logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+          custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
+          custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
+          custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
+          custo_outros_diario: Number(data.custo_outros_diario) || 0,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,
@@ -835,7 +861,12 @@ export class ApiService {
           operador_id: data.operador_id,
           operador_nome: data.operador_nome,
           tipo_servico: data.tipo_servico || 'TELECOM',
-          min_fotos_registro: Number(data.min_fotos_registro) || 2
+          min_fotos_registro: Number(data.min_fotos_registro) || 2,
+          os_obrigatoria: !!data.os_obrigatoria,
+          custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
+          custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
+          custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
+          custo_outros_diario: Number(data.custo_outros_diario) || 0
         })
       });
       if (res.ok && !createdServico) {
@@ -849,8 +880,13 @@ export class ApiService {
         descricao: cleanDesc,
         tipo_servico: data.tipo_servico || 'TELECOM',
         min_fotos_registro: Number(data.min_fotos_registro) || 2,
+        os_obrigatoria: !!data.os_obrigatoria,
         logo_cliente: data.logo_cliente || undefined,
         logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
+        custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
+        custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
+        custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
+        custo_outros_diario: Number(data.custo_outros_diario) || 0,
         navegador_id: data.navegador_id,
         navegador_nome: data.navegador_nome,
         operador_id: data.operador_id,
@@ -896,14 +932,20 @@ export class ApiService {
     if (data.metragem_prevista_total !== undefined) supabasePayload.metragem_prevista_total = Number(data.metragem_prevista_total) || 1000;
     if (data.tipo_meta !== undefined) supabasePayload.tipo_meta = data.tipo_meta || 'DIARIA';
     if (data.meta_metros !== undefined) supabasePayload.meta_metros = Number(data.meta_metros) || 100;
+    if (data.min_fotos_registro !== undefined) supabasePayload.min_fotos_registro = Number(data.min_fotos_registro) || 2;
     supabasePayload.atualizado_em = new Date().toISOString();
 
     const { descricao: cleanDesc, meta: existingMeta } = parseServicoDescricao(data.descricao !== undefined ? data.descricao : '');
     const metaToSave: ServicoMetaTag = {
       tipo_servico: data.tipo_servico || existingMeta.tipo_servico || 'TELECOM',
-      min_fotos_registro: data.min_fotos_registro ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2),
+      min_fotos_registro: data.min_fotos_registro !== undefined ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2),
+      os_obrigatoria: data.os_obrigatoria !== undefined ? !!data.os_obrigatoria : (existingMeta.os_obrigatoria ?? false),
       logo_cliente: data.logo_cliente !== undefined ? (data.logo_cliente || undefined) : existingMeta.logo_cliente,
-      logo_escala: data.logo_escala !== undefined ? Number(data.logo_escala) : (existingMeta.logo_escala || 1.0)
+      logo_escala: data.logo_escala !== undefined ? Number(data.logo_escala) : (existingMeta.logo_escala || 1.0),
+      custo_equipe_diario: data.custo_equipe_diario !== undefined ? Number(data.custo_equipe_diario) : (existingMeta.custo_equipe_diario || 0),
+      custo_combustivel_diario: data.custo_combustivel_diario !== undefined ? Number(data.custo_combustivel_diario) : (existingMeta.custo_combustivel_diario || 0),
+      custo_equipamento_diario: data.custo_equipamento_diario !== undefined ? Number(data.custo_equipamento_diario) : (existingMeta.custo_equipamento_diario || 0),
+      custo_outros_diario: data.custo_outros_diario !== undefined ? Number(data.custo_outros_diario) : (existingMeta.custo_outros_diario || 0)
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -924,6 +966,11 @@ export class ApiService {
           descricao: cleanDesc,
           tipo_servico: metaToSave.tipo_servico,
           min_fotos_registro: metaToSave.min_fotos_registro,
+          os_obrigatoria: metaToSave.os_obrigatoria,
+          custo_equipe_diario: metaToSave.custo_equipe_diario,
+          custo_combustivel_diario: metaToSave.custo_combustivel_diario,
+          custo_equipamento_diario: metaToSave.custo_equipamento_diario,
+          custo_outros_diario: metaToSave.custo_outros_diario,
           logo_cliente: metaToSave.logo_cliente,
           logo_escala: metaToSave.logo_escala,
           navegador_id: data.navegador_id,

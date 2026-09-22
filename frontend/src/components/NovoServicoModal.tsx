@@ -74,6 +74,13 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [cenario, setCenario] = useState<CenarioFinanceiro>('VALOR_METRO');
   const [tipoServico, setTipoServico] = useState<TipoServico>('TELECOM');
   const [minFotosRegistro, setMinFotosRegistro] = useState('2');
+  const [osObrigatoria, setOsObrigatoria] = useState(false);
+
+  // Projeção de Custos Diários
+  const [custoEquipeDiario, setCustoEquipeDiario] = useState('0');
+  const [custoCombustivelDiario, setCustoCombustivelDiario] = useState('0');
+  const [custoEquipamentoDiario, setCustoEquipamentoDiario] = useState('0');
+  const [custoOutrosDiario, setCustoOutrosDiario] = useState('0');
 
   // Valores de cada modelo
   const [valorMetro, setValorMetro] = useState('180');
@@ -124,6 +131,11 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setTipoServico(initialData.tipo_servico || defaultTipo);
 
         setMinFotosRegistro(String(initialData.min_fotos_registro || 2));
+        setOsObrigatoria(initialData.os_obrigatoria ?? (initialData.tipo_servico === 'SANEAMENTO'));
+        setCustoEquipeDiario(String(initialData.custo_equipe_diario || 0));
+        setCustoCombustivelDiario(String(initialData.custo_combustivel_diario || 0));
+        setCustoEquipamentoDiario(String(initialData.custo_equipamento_diario || 0));
+        setCustoOutrosDiario(String(initialData.custo_outros_diario || 0));
         setDescricao(initialData.descricao || '');
 
         // Recuperar UF e Cidade do initialData ou analisar o campo local ("Cidade - UF • Detalhes")
@@ -180,6 +192,11 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setLogoEscala(1.0);
         setTipoServico('TELECOM');
         setMinFotosRegistro('2');
+        setOsObrigatoria(false);
+        setCustoEquipeDiario('0');
+        setCustoCombustivelDiario('0');
+        setCustoEquipamentoDiario('0');
+        setCustoOutrosDiario('0');
         setUf('SP');
         setUfSearch('SP');
         setCidade('');
@@ -244,13 +261,41 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   if (!isOpen) return null;
 
   const handleSelectUf = (selectedUf: string) => {
+    setUf(selectedUf);
+    setUfSearch(selectedUf);
     if (selectedUf !== uf) {
-      setUf(selectedUf);
-      setUfSearch(selectedUf);
       setCidade('');
       setCidadeSearch('');
     }
     setUfDropdownOpen(false);
+  };
+
+  const handleUfInputChange = (val: string) => {
+    const upper = val.toUpperCase().slice(0, 2);
+    setUfSearch(upper);
+    setUfDropdownOpen(true);
+    if (UFS_LIST.includes(upper)) {
+      if (upper !== uf) {
+        setUf(upper);
+        setCidade('');
+        setCidadeSearch('');
+      }
+    }
+  };
+
+  const handleUfBlur = () => {
+    const upper = ufSearch.trim().toUpperCase();
+    if (UFS_LIST.includes(upper)) {
+      if (upper !== uf) {
+        setUf(upper);
+        setCidade('');
+        setCidadeSearch('');
+      }
+      setUfSearch(upper);
+    } else {
+      setUfSearch(uf);
+    }
+    setTimeout(() => setUfDropdownOpen(false), 200);
   };
 
   const handleSelectCidade = (selectedCidade: string) => {
@@ -345,19 +390,25 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const opNomeFinal = opObj?.nome || (operadorId && !opObj ? operadorId : undefined);
 
     try {
+      const finalUf = (UFS_LIST.includes(ufSearch.trim().toUpperCase()) ? ufSearch.trim().toUpperCase() : uf) || 'SP';
+      const finalCidade = (cidade || cidadeSearch).trim();
+
       // Remove repetições de cidade - uf do detalhe complementar
-      const cleanDetail = (localizacao || '')
-        .replace(new RegExp(`${cidade}\\s*-\\s*${uf}`, 'gi'), '')
+      let cleanDetail = (localizacao || '');
+      if (finalCidade && finalUf) {
+        cleanDetail = cleanDetail.replace(new RegExp(`${finalCidade}\\s*-\\s*${finalUf}`, 'gi'), '');
+      }
+      cleanDetail = cleanDetail
         .split('•')
         .map(p => p.trim())
         .filter(Boolean)
         .join(' • ');
 
-      const rawLocal = cidade 
-        ? `${cidade} - ${uf}${cleanDetail ? ` • ${cleanDetail}` : ''}`
+      const rawLocal = finalCidade 
+        ? `${finalCidade} - ${finalUf}${cleanDetail ? ` • ${cleanDetail}` : ''}`
         : cleanDetail || 'Brasil';
 
-      const localCompleto = sanitizeLocalidade(rawLocal, cidade, uf);
+      const localCompleto = sanitizeLocalidade(rawLocal, finalCidade, finalUf);
 
       await onSave({
         nome: nome.toUpperCase().trim(),
@@ -365,11 +416,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         logo_cliente: logoCliente || undefined,
         logo_escala: logoEscala,
         local: localCompleto,
-        cidade: (cidade || cidadeSearch).trim() || undefined,
-        uf: (uf || 'SP').trim().toUpperCase(),
+        cidade: finalCidade || undefined,
+        uf: finalUf,
         descricao: descricao.trim() || undefined,
         tipo_servico: tipoServico,
         min_fotos_registro: Math.max(1, Number(minFotosRegistro) || 2),
+        os_obrigatoria: osObrigatoria,
         navegador_id: navIdFinal,
         navegador_nome: navNomeFinal,
         operador_id: opIdFinal,
@@ -381,7 +433,11 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         valor_total_fechado: Number(valorFechado) || 0,
         metragem_prevista_total: mTotal,
         tipo_meta: 'DIARIA',
-        meta_metros: mDia
+        meta_metros: mDia,
+        custo_equipe_diario: Number(custoEquipeDiario) || 0,
+        custo_combustivel_diario: Number(custoCombustivelDiario) || 0,
+        custo_equipamento_diario: Number(custoEquipamentoDiario) || 0,
+        custo_outros_diario: Number(custoOutrosDiario) || 0
       });
       onClose();
       setCurrentStep(1);
@@ -408,6 +464,33 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     const m = Number(metragemPrevista) || 0;
     if (cenario === 'VALOR_FECHADO') return Number(valorFechado) || 0;
     return m * valorUnitarioEstimado();
+  };
+
+  const custoDiarioTotal = () => {
+    return (Number(custoEquipeDiario) || 0) + 
+           (Number(custoCombustivelDiario) || 0) + 
+           (Number(custoEquipamentoDiario) || 0) + 
+           (Number(custoOutrosDiario) || 0);
+  };
+
+  const diasEstimadosObra = () => {
+    const mTotal = Number(metragemPrevista) || 1;
+    const mDia = Number(metaDiaria) || 100;
+    return Math.max(1, Math.ceil(mTotal / (mDia > 0 ? mDia : 100)));
+  };
+
+  const custoTotalProjetado = () => {
+    return custoDiarioTotal() * diasEstimadosObra();
+  };
+
+  const margemEstimada = () => {
+    return retornoPrevistoTotal() - custoTotalProjetado();
+  };
+
+  const margemPercentual = () => {
+    const ret = retornoPrevistoTotal();
+    if (ret <= 0) return 0;
+    return (margemEstimada() / ret) * 100;
   };
 
   const navegadoresList = usuarios.filter(u => u.perfil === 'NAVEGADOR' || u.perfil === 'ADMIN' || u.perfil === 'GESTOR');
@@ -736,6 +819,63 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                 </div>
               </div>
 
+              {/* OBRIGATORIEDADE DE NÚMERO DE OS */}
+              <div style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase', marginBottom: '2px' }}>
+                    Nº da OS no Formulário de Campo
+                  </label>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {osObrigatoria ? '⚠️ Obrigatório: técnicos devem informar a OS para cada registro.' : 'Opcional: técnicos podem registrar sem preencher a OS.'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setOsObrigatoria(false)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      border: !osObrigatoria ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
+                      backgroundColor: !osObrigatoria ? 'rgba(240, 90, 34, 0.15)' : 'transparent',
+                      color: !osObrigatoria ? 'var(--primary)' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Opcional
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOsObrigatoria(true)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      fontSize: '11.5px',
+                      fontWeight: 700,
+                      border: osObrigatoria ? '1.5px solid var(--danger)' : '1px solid var(--border-color)',
+                      backgroundColor: osObrigatoria ? 'rgba(231, 76, 60, 0.15)' : 'transparent',
+                      color: osObrigatoria ? '#FF7675' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Obrigatório *
+                  </button>
+                </div>
+              </div>
+
               {/* SELEÇÃO DE EQUIPE (NAVEGADOR E OPERADOR) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
@@ -783,10 +923,8 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                     <input
                       type="text"
                       value={ufSearch}
-                      onChange={(e) => {
-                        setUfSearch(e.target.value.toUpperCase());
-                        setUfDropdownOpen(true);
-                      }}
+                      onChange={(e) => handleUfInputChange(e.target.value)}
+                      onBlur={handleUfBlur}
                       onFocus={() => setUfDropdownOpen(true)}
                       placeholder="UF"
                       maxLength={2}
@@ -1161,6 +1299,132 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                   </strong>
                 </div>
 
+              </div>
+
+              {/* SESSÃO: PROJEÇÃO DE CUSTOS E MARGEM */}
+              <div style={{ 
+                marginTop: '14px',
+                backgroundColor: 'var(--bg-app)', 
+                padding: '16px', 
+                borderRadius: '8px', 
+                border: '1px solid var(--border-color)' 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 800, color: '#E67E22', textTransform: 'uppercase' }}>
+                    <span>📉</span> Projeção de Custos Diários
+                  </label>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    ~{diasEstimadosObra()} dias previstos
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      EQUIPE (R$/DIA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={custoEquipeDiario}
+                      onChange={(e) => setCustoEquipeDiario(e.target.value)}
+                      placeholder="0.00"
+                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      COMBUSTÍVEL (R$/DIA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={custoCombustivelDiario}
+                      onChange={(e) => setCustoCombustivelDiario(e.target.value)}
+                      placeholder="0.00"
+                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      EQUIPAMENTO / LOCAÇÃO (R$/DIA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={custoEquipamentoDiario}
+                      onChange={(e) => setCustoEquipamentoDiario(e.target.value)}
+                      placeholder="0.00"
+                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                      OUTROS CUSTOS (R$/DIA)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={custoOutrosDiario}
+                      onChange={(e) => setCustoOutrosDiario(e.target.value)}
+                      placeholder="0.00"
+                      style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', padding: '8px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Resumo Financeiro Consolidado: Custo Total, Receita e Margem */}
+                <div style={{ 
+                  marginTop: '14px', 
+                  paddingTop: '12px', 
+                  borderTop: '1px dashed var(--border-color)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Custo Diário Total:</span>
+                    <strong style={{ color: '#E67E22' }}>
+                      R$ {custoDiarioTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/dia
+                    </strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Custo Projetado Total (~{diasEstimadosObra()} dias):</span>
+                    <strong style={{ color: '#E74C3C' }}>
+                      R$ {custoTotalProjetado().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    fontSize: '13px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    backgroundColor: margemEstimada() >= 0 ? 'rgba(39, 174, 96, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+                    border: `1px solid ${margemEstimada() >= 0 ? 'rgba(39, 174, 96, 0.3)' : 'rgba(231, 76, 60, 0.3)'}`
+                  }}>
+                    <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                      Margem Estimada ({margemPercentual().toFixed(1)}%):
+                    </span>
+                    <strong style={{ 
+                      fontSize: '15px', 
+                      fontWeight: 900, 
+                      color: margemEstimada() >= 0 ? 'var(--success)' : 'var(--danger)' 
+                    }}>
+                      R$ {margemEstimada().toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </strong>
+                  </div>
+                </div>
               </div>
 
             </form>

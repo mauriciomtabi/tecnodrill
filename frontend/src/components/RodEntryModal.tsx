@@ -108,6 +108,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const minFotos = servico?.min_fotos_registro ? Math.max(1, servico.min_fotos_registro) : 2;
   const isSaneamento = servico?.tipo_servico === 'SANEAMENTO';
+  const isOsRequired = servico?.os_obrigatoria !== undefined ? servico.os_obrigatoria : isSaneamento;
 
   const captureLocation = useCallback((): Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> => {
     if (!('geolocation' in navigator)) {
@@ -307,7 +308,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const handleSaveCaixaDireto = async () => {
     if (fotosList.length < minFotos) return;
-    if (isSaneamento && !numeroOs.trim()) return;
+    if (isOsRequired && !numeroOs.trim()) return;
 
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     setSubmitting(true);
@@ -349,6 +350,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    if (isOsRequired && !numeroOs.trim()) return;
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     const finalDiametro = getEffectiveDiametro();
     setSubmitting(true);
@@ -359,7 +361,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         tipo_registro: 'CANALIZACAO',
         metros: Number(metros) || 3,
         diametro: finalDiametro,
-        numero_os: isSaneamento ? (numeroOs.trim() || undefined) : undefined,
+        numero_os: numeroOs.trim() || undefined,
         tem_caixa: temCaixa,
         tipo_caixa: temCaixa ? 'Caixa de Passagem' : undefined,
         observacao: observacao.trim() || undefined,
@@ -377,7 +379,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         tipo_registro: 'CANALIZACAO',
         metros: Number(metros) || 3,
         diametro: finalDiametro,
-        numero_os: isSaneamento ? (numeroOs.trim() || undefined) : undefined,
+        numero_os: numeroOs.trim() || undefined,
         tem_caixa: temCaixa,
         endereco: formattedAddress,
         fotos: fotosList
@@ -802,21 +804,24 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Fluxo Especial para INSTALAÇÃO DE CAIXA: só tira fotos e salva */}
             {tipoRegistro === 'CAIXA' && (
               <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {isSaneamento && (
-                  <div>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
-                      NÚMERO DA OS (SANEAMENTO) *
-                    </label>
-                    <input
-                      type="text"
-                      value={numeroOs}
-                      onChange={(e) => setNumeroOs(e.target.value)}
-                      placeholder="ex: OS-2026-9821"
-                      required
-                      style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
-                    />
-                  </div>
-                )}
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: isOsRequired ? '#FF7675' : 'var(--text-main)', marginBottom: '4px' }}>
+                    NÚMERO DA OS {isOsRequired ? '* (OBRIGATÓRIO)' : '(OPCIONAL)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={numeroOs}
+                    onChange={(e) => setNumeroOs(e.target.value)}
+                    placeholder="ex: OS-2026-9821"
+                    required={isOsRequired}
+                    style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: `1px solid ${isOsRequired && !numeroOs.trim() ? '#E74C3C' : 'var(--border-color)'}`, borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  {isOsRequired && !numeroOs.trim() && (
+                    <span style={{ display: 'block', fontSize: '10.5px', color: '#E74C3C', marginTop: '3px' }}>
+                      Nº da OS é obrigatório para este serviço.
+                    </span>
+                  )}
+                </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -833,29 +838,31 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
                 <button
                   type="button"
-                  disabled={fotosList.length < minFotos || (isSaneamento && !numeroOs.trim()) || submitting}
+                  disabled={fotosList.length < minFotos || (isOsRequired && !numeroOs.trim()) || submitting}
                   onClick={handleSaveCaixaDireto}
                   style={{
-                    backgroundColor: (fotosList.length >= minFotos && (!isSaneamento || numeroOs.trim())) ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)',
+                    backgroundColor: (fotosList.length >= minFotos && (!isOsRequired || numeroOs.trim())) ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)',
                     color: '#FFFFFF',
                     fontWeight: 800,
                     fontSize: '13.5px',
                     padding: '13px',
                     borderRadius: '8px',
                     border: 'none',
-                    cursor: (fotosList.length >= minFotos && (!isSaneamento || numeroOs.trim())) ? 'pointer' : 'not-allowed',
+                    cursor: (fotosList.length >= minFotos && (!isOsRequired || numeroOs.trim())) ? 'pointer' : 'not-allowed',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: fotosList.length >= minFotos ? '0 4px 14px rgba(39, 174, 96, 0.4)' : 'none'
+                    boxShadow: fotosList.length >= minFotos && (!isOsRequired || numeroOs.trim()) ? '0 4px 14px rgba(39, 174, 96, 0.4)' : 'none'
                   }}
                 >
                   {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                   <span>
                     {fotosList.length < minFotos 
                       ? `Faltam ${minFotos - fotosList.length} foto(s) para salvar`
-                      : 'Salvar Instalação de Caixa'}
+                      : (isOsRequired && !numeroOs.trim())
+                        ? 'Informe o número da OS para salvar'
+                        : 'Salvar Instalação de Caixa'}
                   </span>
                 </button>
               </div>
@@ -977,22 +984,25 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               )}
             </div>
 
-            {/* CAMPO NÚMERO DA OS (CASO SANEAMENTO) */}
-            {isSaneamento && (
-              <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid rgba(42, 138, 204, 0.4)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#2A8ACC', textTransform: 'uppercase', marginBottom: '6px' }}>
-                  Número da OS (Saneamento) *
-                </label>
-                <input
-                  type="text"
-                  value={numeroOs}
-                  onChange={(e) => setNumeroOs(e.target.value)}
-                  placeholder="ex: OS-2026-9821"
-                  required
-                  style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
-                />
-              </div>
-            )}
+            {/* CAMPO NÚMERO DA OS */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: `1px solid ${isOsRequired && !numeroOs.trim() ? '#E74C3C' : isOsRequired ? 'rgba(240, 90, 34, 0.4)' : 'var(--border-color)'}`, borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: isOsRequired ? 'var(--primary)' : 'var(--text-main)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Número da OS {isOsRequired ? '* (Obrigatório)' : '(Opcional)'}
+              </label>
+              <input
+                type="text"
+                value={numeroOs}
+                onChange={(e) => setNumeroOs(e.target.value)}
+                placeholder="ex: OS-2026-9821"
+                required={isOsRequired}
+                style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: `1px solid ${isOsRequired && !numeroOs.trim() ? '#E74C3C' : 'var(--border-color)'}`, borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
+              />
+              {isOsRequired && !numeroOs.trim() && (
+                <span style={{ display: 'block', fontSize: '11px', color: '#E74C3C', marginTop: '4px' }}>
+                  Este serviço exige o preenchimento do número da OS para avançar.
+                </span>
+              )}
+            </div>
 
             {/* Metragem Apontada */}
             <div 
@@ -1102,21 +1112,21 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Avançar para Confirmação */}
             <button
               type="button"
-              disabled={isSaneamento && !numeroOs.trim()}
+              disabled={isOsRequired && !numeroOs.trim()}
               onClick={() => setStep(3)}
               style={{
-                backgroundColor: (isSaneamento && !numeroOs.trim()) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
+                backgroundColor: (isOsRequired && !numeroOs.trim()) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
                 color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: '13.5px',
                 padding: '13px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: (isSaneamento && !numeroOs.trim()) ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)'
+                cursor: (isOsRequired && !numeroOs.trim()) ? 'not-allowed' : 'pointer',
+                boxShadow: (isOsRequired && !numeroOs.trim()) ? 'none' : '0 4px 16px rgba(240, 90, 34, 0.45)'
               }}
             >
-              Avançar para Confirmação
+              {(isOsRequired && !numeroOs.trim()) ? 'Preencha o Nº da OS para Avançar' : 'Avançar para Confirmação'}
             </button>
           </div>
         )}

@@ -35,6 +35,7 @@ export interface Servico {
   status: StatusServico;
   tipo_servico?: TipoServico;
   min_fotos_registro?: number;
+  os_obrigatoria?: boolean;
   cenario_financeiro: CenarioFinanceiro;
   valor_metro: number;
   fator_financeiro: number;
@@ -45,6 +46,11 @@ export interface Servico {
   meta_metros: number;
   logo_cliente?: string;
   logo_escala?: number;
+  // Projeção de custos
+  custo_equipe_diario?: number;
+  custo_combustivel_diario?: number;
+  custo_equipamento_diario?: number;
+  custo_outros_diario?: number;
   criado_em?: string;
   metricas?: ResumoFinanceiroServico;
 }

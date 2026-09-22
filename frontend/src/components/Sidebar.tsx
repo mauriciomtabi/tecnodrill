@@ -4,6 +4,7 @@ import {
   HardHat, 
   Users, 
   Trophy,
+  TrendingUp,
   Sun, 
   Moon, 
   LogOut, 
@@ -31,6 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
   const menuItems = isGestor
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
+        { path: '/app/produtividade', label: 'Produtividade', icon: TrendingUp },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
       ]

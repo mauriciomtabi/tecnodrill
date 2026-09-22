@@ -5,6 +5,7 @@ import {
   Users, 
   Camera, 
   Trophy,
+  TrendingUp,
   Plus
 } from 'lucide-react';
 
@@ -70,6 +71,26 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       >
         <HardHat size={24} />
       </button>
+
+      {/* 2. PRODUTIVIDADE (GESTOR) */}
+      {isGestor && (
+        <button
+          onClick={() => onNavigate('/app/produtividade')}
+          title="Produtividade & Custos"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: currentPath === '/app/produtividade' ? 'var(--primary)' : 'var(--text-muted)',
+            padding: '10px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          <TrendingUp size={24} />
+        </button>
+      )}
 
       {/* 2. CENTRO: BOTÃO PRINCIPAL FLUTUANTE COM CONTORNO CLARO (56px) */}
       <button

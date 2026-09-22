@@ -7,6 +7,7 @@ import { ObrasList } from './pages/ObrasList';
 import { ObraDetalhes } from './pages/ObraDetalhes';
 import { UsuariosPage } from './pages/UsuariosPage';
 import { PerformancePage } from './pages/PerformancePage';
+import { ProdutividadePage } from './pages/ProdutividadePage';
 import { NovoServicoModal } from './components/NovoServicoModal';
 import { RodEntryModal } from './components/RodEntryModal';
 import { MetaCelebration } from './components/MetaCelebration';
@@ -143,7 +144,7 @@ export const App: React.FC = () => {
         setSelectedObraId(e.state.selectedObraId || null);
       } else {
         // Se voltou até o início do histórico mas está em detalhe de obra ou tela interna
-        if (currentPath === '/app/obras/detalhe' || currentPath === '/app/usuarios' || currentPath === '/app/performance') {
+        if (currentPath === '/app/obras/detalhe' || currentPath === '/app/usuarios' || currentPath === '/app/performance' || currentPath === '/app/produtividade') {
           setCurrentPath(defaultHome);
           setSelectedObraId(null);
           window.history.replaceState({ screen: defaultHome, selectedObraId: null }, '');
@@ -289,6 +290,14 @@ export const App: React.FC = () => {
         return (
           <PerformancePage
             setHeaderInfo={setHeaderInfo}
+          />
+        );
+
+      case '/app/produtividade':
+        return (
+          <ProdutividadePage
+            setHeaderInfo={setHeaderInfo}
+            onSelectServico={(id) => handleNavigate(`/app/obras/${id}`)}
           />
         );
 
