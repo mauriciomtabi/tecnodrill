@@ -227,11 +227,11 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     }
   };
 
-  const handleConfirmDeleteBarra = async () => {
-    if (!confirmDeleteBarraId) return;
+  const handleDeleteBarraById = async (barraId: string) => {
     try {
-      const res = await ApiService.deleteBarra(confirmDeleteBarraId);
+      const res = await ApiService.deleteBarra(barraId);
       showToast('Registro de apontamento excluído e sequência recalculada.', 'info');
+      setSelectedBarraDetails(null);
       setConfirmDeleteBarraId(null);
       if (res.remainingBarras) {
         setBarras(res.remainingBarras);
@@ -245,7 +245,13 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       }
     } catch (err: any) {
       showToast(err.message || 'Erro ao excluir registro.', 'error');
+      throw err;
     }
+  };
+
+  const handleConfirmDeleteBarra = async () => {
+    if (!confirmDeleteBarraId) return;
+    await handleDeleteBarraById(confirmDeleteBarraId);
   };
 
   const handleConfirmDeleteServico = async () => {
@@ -1176,10 +1182,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         barra={selectedBarraDetails}
         servico={servico}
         isGestor={isGestor}
-        onDelete={(id) => {
-          setSelectedBarraDetails(null);
-          setConfirmDeleteBarraId(id);
-        }}
+        onDelete={handleDeleteBarraById}
         onBarraUpdated={(updated) => {
           setBarras(prev => prev.map(b => b.id === updated.id ? { ...b, ...updated } : b));
           setSelectedBarraDetails(updated);

@@ -29,7 +29,8 @@ export function useModalBackButton(
     return () => {
       window.removeEventListener('popstate', handlePopState);
       // Se o modal foi fechado por ação interna (botão X, salvar, cancelar) e não pelo popstate nativo
-      if (!isPoppingRef.current && window.history.state?.isModal) {
+      // E APENAS se o topo da pilha for o próprio modal (evita desempilhar outro modal recém-aberto)
+      if (!isPoppingRef.current && window.history.state?.modalKey === stateKey) {
         try {
           window.history.back();
         } catch {

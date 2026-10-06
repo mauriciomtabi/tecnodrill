@@ -27,7 +27,9 @@ import {
   Calendar,
   DollarSign,
   Save,
-  Check
+  Check,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 
 interface RegistroDetalhesModalProps {
@@ -36,7 +38,7 @@ interface RegistroDetalhesModalProps {
   barra: Barra | null;
   servico?: Servico | null;
   isGestor?: boolean;
-  onDelete?: (barraId: string) => void;
+  onDelete?: (barraId: string) => Promise<void> | void;
   onBarraUpdated?: (updatedBarra: Barra) => void;
 }
 
@@ -57,6 +59,8 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const [mesRef, setMesRef] = useState<string>('');
   const [savingMesRef, setSavingMesRef] = useState(false);
   const [mesRefSaved, setMesRefSaved] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Trata botão nativo de voltar do celular (se tela cheia, fecha fullscreen; senão fecha modal)
   useModalBackButton(
@@ -82,7 +86,23 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     setRotation(0);
     setMesRef(barra?.mes_referencia || barraMeta.mes_referencia || '');
     setMesRefSaved(false);
-  }, [barra?.id]);
+    setConfirmDelete(false);
+    setDeleting(false);
+  }, [barra?.id, isOpen]);
+
+  const handleConfirmDelete = async () => {
+    if (!barra || !onDelete) return;
+    try {
+      setDeleting(true);
+      await onDelete(barra.id);
+      setConfirmDelete(false);
+      onClose();
+    } catch (err) {
+      console.error('[Delete Record Error]:', err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Dynamic reverse geocoding for existing records that don't have endereco pre-saved
   useEffect(() => {
@@ -759,30 +779,107 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                 </div>
               )}
 
-              {/* Botão Excluir Registro para Gestores */}
+              {/* Botão / Confirmação de Exclusão de Registro para Gestores */}
               {isGestor && onDelete && (
                 <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px', marginTop: '4px' }}>
-                  <button
-                    onClick={() => onDelete(barra.id)}
-                    style={{
-                      width: '100%',
-                      backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                      border: '1px solid var(--danger)',
-                      color: 'var(--danger)',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    <span>Excluir este Registro</span>
-                  </button>
+                  {!confirmDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(true)}
+                      style={{
+                        width: '100%',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        border: '1px solid var(--danger)',
+                        color: 'var(--danger)',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      <span>Excluir este Registro</span>
+                    </button>
+                  ) : (
+                    <div
+                      className="fade-in"
+                      style={{
+                        backgroundColor: 'rgba(231, 76, 60, 0.12)',
+                        border: '1.5px solid var(--danger)',
+                        borderRadius: '8px',
+                        padding: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#FF7675' }}>
+                        <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+                        <strong style={{ fontSize: '13.5px' }}>
+                          Excluir Registro #{barra.numero_barra}?
+                        </strong>
+                      </div>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        Tem certeza? Esta ação removerá este apontamento fotográfico permanentemente e recalculará a metragem total da obra.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={() => setConfirmDelete(false)}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'transparent',
+                            color: 'var(--text-muted)',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: deleting ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={handleConfirmDelete}
+                          style={{
+                            padding: '8px 18px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: 'var(--danger)',
+                            color: '#FFFFFF',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            cursor: deleting ? 'wait' : 'pointer',
+                            boxShadow: '0 3px 12px rgba(231, 76, 60, 0.45)'
+                          }}
+                        >
+                          {deleting ? (
+                            <>
+                              <Loader2 size={15} className="animate-spin" />
+                              <span>Excluindo...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 size={15} />
+                              <span>Sim, Excluir</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
