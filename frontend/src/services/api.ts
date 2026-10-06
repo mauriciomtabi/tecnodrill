@@ -1112,7 +1112,7 @@ export class ApiService {
   /**
    * Adiciona um novo operador ou navegador à equipe da obra sem substituir os atuais (apenas acrescenta)
    */
-  public static async addEquipeMembro(servicoId: string, membro: { id: string; nome: string; perfil: 'NAVEGADOR' | 'OPERADOR' }): Promise<Servico> {
+  public static async addEquipeMembro(servicoId: string, membro: { id?: string; nome: string; perfil?: 'NAVEGADOR' | 'OPERADOR'; cargo?: 'NAVEGADOR' | 'OPERADOR' }): Promise<Servico> {
     const s = await this.getServico(servicoId);
     const { meta } = parseServicoDescricao(s.descricao);
     
@@ -1126,13 +1126,16 @@ export class ApiService {
       novosOps.push({ id: s.operador_id, nome: s.operador_nome });
     }
 
-    if (membro.perfil === 'NAVEGADOR') {
-      if (!novosNavs.some(n => n.id === membro.id)) {
-        novosNavs.push({ id: membro.id, nome: membro.nome });
+    const funcao = membro.perfil || membro.cargo;
+    const membroId = membro.id || `custom_${Date.now()}`;
+
+    if (funcao === 'NAVEGADOR') {
+      if (!novosNavs.some(n => n.id === membroId)) {
+        novosNavs.push({ id: membroId, nome: membro.nome });
       }
-    } else if (membro.perfil === 'OPERADOR') {
-      if (!novosOps.some(o => o.id === membro.id)) {
-        novosOps.push({ id: membro.id, nome: membro.nome });
+    } else if (funcao === 'OPERADOR') {
+      if (!novosOps.some(o => o.id === membroId)) {
+        novosOps.push({ id: membroId, nome: membro.nome });
       }
     }
 

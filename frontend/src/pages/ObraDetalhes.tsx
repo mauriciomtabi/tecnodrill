@@ -22,7 +22,8 @@ import {
   Edit,
   UserPlus,
   Users,
-  DollarSign
+  DollarSign,
+  X
 } from 'lucide-react';
 
 interface ObraDetalhesProps {
@@ -134,6 +135,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
       await ApiService.addEquipeMembro(servico.id, {
         id: idFinal || undefined,
         nome: nomeFinal,
+        perfil: membroTipo,
         cargo: membroTipo
       });
       showToast(`${membroTipo === 'NAVEGADOR' ? 'Navegador' : 'Operador'} adicionado à equipe com sucesso!`, 'success');
