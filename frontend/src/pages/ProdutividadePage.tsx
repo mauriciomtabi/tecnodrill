@@ -7,7 +7,6 @@ import {
   TrendingUp, 
   Download, 
   HardHat, 
-  Scale, 
   Search, 
   Layers, 
   ChevronRight, 
@@ -594,8 +593,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       'Receita Estimada (R$)': Number(s.receitaPeriodo.toFixed(2)),
       'Custo por Metro (R$/m)': Number((s.custoMetro || 0).toFixed(2)),
       'Custo Operacional Período (R$)': Number(s.custoPeriodo.toFixed(2)),
-      'Margem Líquida (R$)': Number(s.margemPeriodo.toFixed(2)),
-      'Margem (%)': `${s.margemPercentual.toFixed(1)}%`,
       'Registros / Barras': s.qtdRegistrosPeriodo,
       'Caixas Instaladas': s.qtdCaixasPeriodo
     }));
@@ -606,8 +603,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       { wch: 10 }, { wch: 32 }, { wch: 22 }, { wch: 15 },
       { wch: 6 },  { wch: 20 }, { wch: 15 }, { wch: 20 },
       { wch: 22 }, { wch: 20 }, { wch: 16 }, { wch: 18 },
-      { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 12 },
-      { wch: 16 }, { wch: 16 }
+      { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 16 }
     ];
     worksheet['!cols'] = colWidths;
 
@@ -849,7 +845,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       {/* ────────────────────────────────────────────────────────────────
           2. CARDS DE KPI (PADRÃO BI JLE)
       ────────────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
         
         {/* Card 1: Receita no Período */}
         <div 
@@ -913,56 +909,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           </div>
         </div>
 
-        {/* Card 3: Margem Líquida */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-sm)'
-          }}
-        >
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: totais.totalMargem >= 0 ? '#10B981' : '#E74C3C' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Margem Líquida
-                </span>
-                <span style={{ 
-                  fontSize: '11px', 
-                  fontWeight: 800, 
-                  padding: '2px 7px', 
-                  borderRadius: '10px', 
-                  backgroundColor: totais.totalMargem >= 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(231, 76, 60, 0.15)',
-                  color: totais.totalMargem >= 0 ? '#10B981' : '#E74C3C' 
-                }}>
-                  {totais.margemPercentualGeral.toFixed(1)}%
-                </span>
-              </div>
-              <h2 style={{ 
-                fontSize: '24px', 
-                fontWeight: 900, 
-                color: totais.totalMargem >= 0 ? '#10B981' : '#E74C3C', 
-                margin: '8px 0 4px 0', 
-                fontFamily: 'var(--font-mono)' 
-              }}>
-                R$ {totais.totalMargem.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h2>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                {totais.totalMargem >= 0 ? 'Resultado positivo (Lucro estimado)' : 'Resultado em atenção (Custo superou faturamento)'}
-              </span>
-            </div>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: totais.totalMargem >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(231, 76, 60, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: totais.totalMargem >= 0 ? '#10B981' : '#E74C3C' }}>
-              <Scale size={20} />
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: Metros Perfurados */}
+        {/* Card 3: Metros Perfurados */}
         <div 
           style={{ 
             backgroundColor: 'var(--bg-card)', 
@@ -1020,7 +967,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               Evolução {granularidade === 'MENSAL' ? `Mensal (${filtroAno !== 'TODOS' ? filtroAno : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
             </h3>
             <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-              {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita, Custo e Margem Líquida por competência' : 'Volume de Perfuração Direcional em Metros'}
+              {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita e Custo Operacional por competência' : 'Volume de Perfuração Direcional em Metros'}
             </span>
           </div>
 
@@ -1130,10 +1077,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                 <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#E74C3C' }} />
                 <span>Custo Operacional</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '14px', height: '3px', backgroundColor: '#F05A22', borderRadius: '2px' }} />
-                <span>Margem Líquida</span>
-              </div>
             </>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1160,54 +1103,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             ))}
           </div>
 
-          {/* SVG Overlay: Linha de Margem Líquida conectando os meses */}
-          {metricaEvolucao === 'FINANCEIRO' && (
-            <svg 
-              style={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: '55px', 
-                right: 0, 
-                bottom: '34px', 
-                width: 'calc(100% - 55px)', 
-                height: 'calc(100% - 34px)', 
-                pointerEvents: 'none', 
-                zIndex: 4 
-              }}
-            >
-              {dadosEvolucao.length > 1 && (
-                <polyline
-                  fill="none"
-                  stroke="#F05A22"
-                  strokeWidth="2.5"
-                  strokeDasharray="4 3"
-                  points={dadosEvolucao.map((d, i) => {
-                    const x = ((i + 0.5) / dadosEvolucao.length) * 100;
-                    const val = Math.max(0, d.margem);
-                    const y = 100 - Math.max(0, Math.min(100, (val / maxEvolucaoVal) * 100));
-                    return `${x}%,${y}%`;
-                  }).join(' ')}
-                />
-              )}
-              {dadosEvolucao.map((d, i) => {
-                if (d.receita <= 0 && d.custo <= 0) return null;
-                const x = ((i + 0.5) / dadosEvolucao.length) * 100;
-                const val = Math.max(0, d.margem);
-                const y = 100 - Math.max(0, Math.min(100, (val / maxEvolucaoVal) * 100));
-                return (
-                  <circle
-                    key={`dot-${i}`}
-                    cx={`${x}%`}
-                    cy={`${y}%`}
-                    r="4.5"
-                    fill="#F05A22"
-                    stroke="#FFFFFF"
-                    strokeWidth="1.5"
-                  />
-                );
-              })}
-            </svg>
-          )}
 
           {/* Container das Colunas dos Meses com Espaçamento Amplo */}
           <div style={{ marginLeft: '55px', flex: 1, display: 'flex', alignItems: 'flex-end', gap: '10px', zIndex: 2, paddingBottom: '32px' }}>
@@ -1277,10 +1172,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                             <span style={{ color: '#8BA6B5' }}>Custo:</span>
                             <span style={{ color: '#E74C3C', fontWeight: 700 }}>R$ {d.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', borderTop: '1px dashed #1B3645', paddingTop: '4px', marginTop: '2px' }}>
-                            <span style={{ color: '#8BA6B5' }}>Margem:</span>
-                            <span style={{ color: d.margem >= 0 ? '#10B981' : '#E74C3C', fontWeight: 800 }}>R$ {d.margem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                         </>
                       ) : (
@@ -1718,14 +1609,13 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                 <th style={{ padding: '12px' }}>Metros (Período)</th>
                 <th style={{ padding: '12px' }}>Receita (R$)</th>
                 <th style={{ padding: '12px' }}>Custo (R$)</th>
-                <th style={{ padding: '12px' }}>Margem (R$ / %)</th>
                 <th style={{ padding: '12px', textAlign: 'center' }}>Ação</th>
               </tr>
             </thead>
             <tbody>
               {servicosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
+                  <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
                     Nenhum serviço encontrado com os filtros selecionados.
                   </td>
                 </tr>
@@ -1809,22 +1699,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           </span>
                           <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                             2x R$ {s.custoMetro.toFixed(2)}/m (Nav/Op)
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Margem no Período */}
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ 
-                            fontFamily: 'var(--font-mono)', 
-                            fontWeight: 800, 
-                            color: s.margemPeriodo >= 0 ? '#10B981' : '#E74C3C' 
-                          }}>
-                            R$ {s.margemPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                            ({s.margemPercentual.toFixed(1)}%)
                           </span>
                         </div>
                       </td>
