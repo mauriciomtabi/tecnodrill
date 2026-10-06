@@ -442,6 +442,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           setStatusMessage('');
         }
       };
+      reader.onerror = () => {
+        setProcessingWatermark(false);
+        setStatusMessage('');
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -928,7 +932,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 {processingWatermark ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    <span>Processando e carimbando foto...</span>
+                    <span>{statusMessage || 'Processando e carimbando foto...'}</span>
                   </>
                 ) : (
                   <>
