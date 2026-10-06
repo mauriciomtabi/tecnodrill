@@ -106,8 +106,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     anos.add(currentYear);
     anos.add((Number(currentYear) - 1).toString());
 
-    Object.values(barrasPorServico).forEach(barras => {
-      barras.forEach(b => {
+    Object.values(barrasPorServico).forEach((barras: any) => {
+      barras.forEach((b: any) => {
         let mesRef = b.mes_referencia;
         let dataRef = b.data_referencia;
         if (!mesRef && !dataRef && b.observacao) {

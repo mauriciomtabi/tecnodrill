@@ -1065,7 +1065,7 @@ export const UsuariosPage: React.FC<UsuariosPageProps> = ({ setHeaderInfo }) => 
                   <input 
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
+                    onChange={(e: any) => setNewPassword(e.target.value)}
                     placeholder="Digite a nova senha..."
                     required
                     style={{ paddingRight: '38px', fontSize: '13px' }}

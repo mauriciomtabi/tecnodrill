@@ -47,7 +47,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   servico = null,
   onSubmit,
   loading = false
-}) => {
+}: RodEntryModalProps) => {
   // Step 0: Escolha Tipo (Canalização vs Caixa)
   // Step 1: Captura de Fotos (mínimo obrigatório + adicionais)
   // Step 2: Dados Técnicos (Canalização: diâmetro, metros, caixa, OS se saneamento)

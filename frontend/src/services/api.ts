@@ -334,7 +334,7 @@ export class ApiService {
           .order('criado_em', { ascending: false });
 
         if (!error && data && data.length > 0) {
-          return data.map(u => ({
+          return data.map((u: any) => ({
             id: u.id,
             nome: u.nome,
             perfil: u.perfil as PerfilUsuario,
@@ -839,11 +839,11 @@ export class ApiService {
       const { data: existing } = await supabase.from('tecnodrill_servicos').select('id');
       if (existing && existing.length > 0) {
         const nums = existing
-          .map(s => {
+          .map((s: any) => {
             const m = s.id?.match(/\d+/);
             return m ? parseInt(m[0], 10) : 0;
           })
-          .filter(n => !isNaN(n));
+          .filter((n: any) => !isNaN(n));
         if (nums.length > 0) {
           nextNum = Math.max(...nums) + 1;
         }
@@ -1188,7 +1188,7 @@ export class ApiService {
           }
           return [];
         }
-        return (data || []).map(f => ({
+        return (data || []).map((f: any) => ({
           id: f.id,
           servico_id: f.servico_id,
           data_furo: f.data_furo,
@@ -1290,7 +1290,7 @@ export class ApiService {
       return await this.resequenceBarras(furoId);
     }
 
-    return rawBarras.map(b => {
+    return rawBarras.map((b: any) => {
       const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
       const allFotos = (b.fotos && b.fotos.length > 0)
         ? b.fotos
@@ -1408,7 +1408,7 @@ export class ApiService {
     const isCaixaRegistro = data.tipo_registro === 'CAIXA' || Boolean(data.tem_caixa && !data.diametro);
 
     // Metros anteriores: desconsidera registros de caixa
-    const metrosAnteriores = currentBarras.reduce((acc, b) => {
+    const metrosAnteriores = currentBarras.reduce((acc: number, b: any) => {
       const { meta } = parseBarraObservacao(b.observacao);
       const isCaixa = b.tipo_registro === 'CAIXA' || meta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !meta.diametro);
       if (isCaixa) return acc;
@@ -1515,7 +1515,7 @@ export class ApiService {
           const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
           const { data: furosDoServico } = await supabase.from('tecnodrill_furos').select('id').eq('servico_id', servicoData.id);
-          const fIds = (furosDoServico || []).map(f => f.id);
+          const fIds = (furosDoServico || []).map((f: any) => f.id);
 
           let metrosPeriodoAntes = 0;
           if (fIds.length > 0) {
