@@ -1815,9 +1815,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           </div>
         )}
       </div>
+    </div>
 
-      {/* FULLSCREEN IN-APP CAMERA OVERLAY (100% no navegador, sem app externo, sem estouro de memória) */}
-      {showInAppCamera && (
+    {/* FULLSCREEN IN-APP CAMERA OVERLAY (100% no navegador, sem app externo, sem estouro de memória) */}
+    {showInAppCamera && (
         <div
           style={{
             position: 'fixed',
