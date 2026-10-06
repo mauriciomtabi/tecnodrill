@@ -30,8 +30,10 @@ export interface Servico {
   gestor_id?: string;
   navegador_id?: string;
   navegador_nome?: string;
+  navegadores?: Array<{ id: string; nome: string }>;
   operador_id?: string;
   operador_nome?: string;
+  operadores?: Array<{ id: string; nome: string }>;
   status: StatusServico;
   tipo_servico?: TipoServico;
   min_fotos_registro?: number;
@@ -107,6 +109,9 @@ export interface Barra {
   endereco?: string;
   horario_registro?: string;
   registrado_por?: string;
+  registrado_por_nome?: string;
+  mes_referencia?: string;
+  data_referencia?: string;
   created_at?: string;
   data_registro?: string;
 }
@@ -142,3 +147,20 @@ export interface DashboardGestorMetrics {
   servicos: ResumoFinanceiroServico[];
   evolucaoDiaria: Array<{ data: string; metros: number; retorno: number }>;
 }
+
+export interface TerceiroLancamento {
+  id: string;
+  data: string; // YYYY-MM-DD
+  mes_referencia: string; // YYYY-MM
+  terceiro_nome: string;
+  descricao: string;
+  categoria: string;
+  tipo_transacao: string;
+  valor: number;
+  metros_executados?: number;
+  obra_relacionada?: string;
+  status: 'PAGO' | 'PENDENTE' | 'A_COMPENSAR';
+  observacoes?: string;
+  criado_em?: string;
+}
+

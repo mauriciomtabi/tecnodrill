@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ApiService } from '../services/api';
+import { ApiService, parseBarraObservacao } from '../services/api';
 import { Servico, Furo, Barra } from '../types';
 import { 
   Trophy, 
@@ -71,18 +71,40 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({ setHeaderInfo 
     );
   }
 
+  const isGestor = user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN';
+
+  // Isolamento estrito de dados para Técnicos:
+  // - Apenas o que registrou no seu nome
+  // - Apenas a partir de Setembro de 2026 (meses anteriores ocultos)
+  const barrasValidas = isGestor
+    ? barras
+    : barras.filter(b => {
+        const { meta } = parseBarraObservacao(b.observacao);
+        const isMine = (user?.id && b.registrado_por && b.registrado_por === user.id) ||
+                       (user?.id && meta.registrado_por_id && meta.registrado_por_id === user.id) ||
+                       (user?.nome && b.registrado_por_nome && b.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
+                       (user?.nome && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
+                       (user?.username && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.username.toLowerCase().trim());
+        if (!isMine) return false;
+
+        const mesRef = b.mes_referencia || meta.mes_referencia || b.data_referencia?.slice(0, 7) || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
+        if (mesRef && mesRef < '2026-09') return false;
+
+        return true;
+      });
+
   // Cálculos de Produção
-  const totalMetros = barras.reduce((acc, b) => {
+  const totalMetros = barrasValidas.reduce((acc, b) => {
     if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) return acc;
     return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
   }, 0);
-  const totalRegistros = barras.length;
-  const totalCaixas = barras.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length;
+  const totalRegistros = barrasValidas.length;
+  const totalCaixas = barrasValidas.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length;
   const totalCanalizacao = totalRegistros - totalCaixas;
 
   // Filtrar produção de Hoje
   const todayStr = new Date().toISOString().split('T')[0];
-  const barrasHoje = barras.filter(b => {
+  const barrasHoje = barrasValidas.filter(b => {
     const d = b.created_at || b.data_registro || b.horario_registro;
     return d && d.startsWith(todayStr);
   });
@@ -288,7 +310,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({ setHeaderInfo 
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {servicos.map((s) => {
-              const barrasDaObra = barras.filter(b => b.furo_id && s.id);
+              const barrasDaObra = barrasValidas.filter(b => b.furo_id && s.id);
               const metrosObra = s.metragem_prevista_total || 1000;
               const metaDia = s.meta_metros || 100;
 

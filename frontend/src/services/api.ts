@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { supabase } from './supabaseClient';
-import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra } from '../types';
+import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra, TerceiroLancamento } from '../types';
 
 export interface ServicoMetaTag {
   tipo_servico?: TipoServico;
@@ -13,6 +13,8 @@ export interface ServicoMetaTag {
   custo_combustivel_diario?: number;
   custo_equipamento_diario?: number;
   custo_outros_diario?: number;
+  navegadores?: Array<{ id: string; nome: string }>;
+  operadores?: Array<{ id: string; nome: string }>;
 }
 
 export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
@@ -38,19 +40,48 @@ export interface BarraMetaTag {
   diametro?: string;
   numero_os?: string;
   fotos?: string[];
+  registrado_por_id?: string;
+  registrado_por_nome?: string;
+  usuario_perfil?: string;
+  mes_referencia?: string;
+  data_referencia?: string;
 }
 
 export function parseBarraObservacao(raw?: string | null): { observacao: string; meta: BarraMetaTag } {
   if (!raw) return { observacao: '', meta: {} };
+  let observacao = raw;
+  let meta: BarraMetaTag = {};
+
   const match = raw.match(/<!--BARRA_META:(.*?)-->/);
   if (match) {
     try {
-      const meta = JSON.parse(match[1]);
-      const observacao = raw.replace(/<!--BARRA_META:.*?-->\n?/, '').trim();
-      return { observacao, meta };
+      meta = JSON.parse(match[1]);
+      observacao = raw.replace(/<!--BARRA_META:.*?-->\n?/, '').trim();
     } catch (_) {}
   }
-  return { observacao: raw, meta: {} };
+
+  // Inferência automática de mês de referência retroativo se não estiver explícito na tag
+  if (!meta.mes_referencia) {
+    const upper = (raw + ' ' + observacao).toUpperCase();
+    const yearMatch = upper.match(/20\d\d/);
+    const year = yearMatch ? yearMatch[0] : '';
+    if (year) {
+      if (upper.includes('JAN')) meta.mes_referencia = `${year}-01`;
+      else if (upper.includes('FEV')) meta.mes_referencia = `${year}-02`;
+      else if (upper.includes('MAR')) meta.mes_referencia = `${year}-03`;
+      else if (upper.includes('ABR')) meta.mes_referencia = `${year}-04`;
+      else if (upper.includes('MAI')) meta.mes_referencia = `${year}-05`;
+      else if (upper.includes('JUN')) meta.mes_referencia = `${year}-06`;
+      else if (upper.includes('JUL')) meta.mes_referencia = `${year}-07`;
+      else if (upper.includes('AGO')) meta.mes_referencia = `${year}-08`;
+      else if (upper.includes('SET')) meta.mes_referencia = `${year}-09`;
+      else if (upper.includes('OUT')) meta.mes_referencia = `${year}-10`;
+      else if (upper.includes('NOV')) meta.mes_referencia = `${year}-11`;
+      else if (upper.includes('DEZ')) meta.mes_referencia = `${year}-12`;
+    }
+  }
+
+  return { observacao, meta };
 }
 
 export function buildBarraObservacao(cleanObs: string, meta: BarraMetaTag): string {
@@ -522,7 +553,7 @@ export class ApiService {
     try {
       const [furosRes, barrasRes] = await Promise.all([
         supabase.from('tecnodrill_furos').select('*'),
-        supabase.from('tecnodrill_barras').select('furo_id, metros, tipo_registro, tem_caixa')
+        supabase.from('tecnodrill_barras').select('furo_id, metros, tipo_registro, tem_caixa, diametro, observacao, registrado_por')
       ]);
       allFuros = furosRes.data || [];
       allBarras = barrasRes.data || [];
@@ -546,18 +577,23 @@ export class ApiService {
 
     for (const s of servicosData) {
       const furos = furosPorServico.get(s.id) || [];
+      const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
 
-      const navNome = s.navegador_nome || furos?.[0]?.navegador_nome || '';
+      const navList = meta.navegadores || [];
+      const opList = meta.operadores || [];
+
+      const navNome = (navList.length > 0) ? navList.map(n => n.nome).join(' / ') : (s.navegador_nome || furos?.[0]?.navegador_nome || '');
       const navId = s.navegador_id || furos?.[0]?.navegador_id || '';
-      const opNome = s.operador_nome || furos?.[0]?.operador_nome || '';
+      const opNome = (opList.length > 0) ? opList.map(o => o.nome).join(' / ') : (s.operador_nome || furos?.[0]?.operador_nome || '');
       const opId = s.operador_id || furos?.[0]?.operador_id || '';
 
       // Regra de Filtro Estrita por Perfil:
       // Se for NAVEGADOR ou OPERADOR, só aparece se estiver vinculado expressamente!
       if (usuarioAtual && usuarioAtual.perfil === 'NAVEGADOR') {
         const vinculadoNav = (navId && navId === usuarioAtual.id) ||
-          (navNome && navNome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
-          (navNome && navNome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim()) ||
+          (navNome && navNome.toLowerCase().includes(usuarioAtual.nome.toLowerCase().trim())) ||
+          (navNome && navNome.toLowerCase().includes(usuarioAtual.username.toLowerCase().trim())) ||
+          navList.some(n => n.id === usuarioAtual.id || n.nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
           furos.some(f => 
             (f.navegador_id && f.navegador_id === usuarioAtual.id) ||
             (f.navegador_nome && f.navegador_nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
@@ -566,8 +602,9 @@ export class ApiService {
         if (!vinculadoNav) continue;
       } else if (usuarioAtual && usuarioAtual.perfil === 'OPERADOR') {
         const vinculadoOp = (opId && opId === usuarioAtual.id) ||
-          (opNome && opNome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
-          (opNome && opNome.toLowerCase().trim() === usuarioAtual.username.toLowerCase().trim()) ||
+          (opNome && opNome.toLowerCase().includes(usuarioAtual.nome.toLowerCase().trim())) ||
+          (opNome && opNome.toLowerCase().includes(usuarioAtual.username.toLowerCase().trim())) ||
+          opList.some(o => o.id === usuarioAtual.id || o.nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
           furos.some(f => 
             (f.operador_id && f.operador_id === usuarioAtual.id) ||
             (f.operador_nome && f.operador_nome.toLowerCase().trim() === usuarioAtual.nome.toLowerCase().trim()) ||
@@ -588,7 +625,24 @@ export class ApiService {
       if (s.cenario_financeiro === 'VALOR_METRO') {
         retornoCalculado = metrosExecutados * (Number(s.valor_metro) || 0);
       } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-        retornoCalculado = metrosExecutados * (Number(s.fator_financeiro) || 0) * (Number(s.diametro_furo_mm) || 0);
+        const diamDefault = Number(s.diametro_furo_mm) || 150;
+        const fator = Number(s.fator_financeiro) || 0.8;
+        let somaRetornoBarras = 0;
+        let countBarras = 0;
+        for (const f of furos) {
+          const bList = allBarras.filter(b => b.furo_id === f.id);
+          for (const b of bList) {
+            const isCaixa = b.tipo_registro === 'CAIXA' || b.tem_caixa;
+            if (isCaixa) continue;
+            const m = Number(b.metros) || 3;
+            const { meta: bMeta } = parseBarraObservacao(b.observacao);
+            const rawDiam = b.diametro || bMeta.diametro;
+            const numDiam = parseFloat(String(rawDiam || '').replace(/[^\d.]/g, '')) || diamDefault;
+            somaRetornoBarras += m * fator * numDiam;
+            countBarras++;
+          }
+        }
+        retornoCalculado = countBarras > 0 ? somaRetornoBarras : (metrosExecutados * fator * diamDefault);
       } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
         retornoCalculado = percentual >= 100 ? (Number(s.valor_total_fechado) || 0) : (metrosExecutados / totalPrevisto) * (Number(s.valor_total_fechado) || 0);
       }
@@ -615,7 +669,6 @@ export class ApiService {
         }
       };
 
-      const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
       const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
       const minFotosFinal = Number(meta.min_fotos_registro) || Number(s.min_fotos_registro) || 2;
       const logoClienteFinal = s.logo_cliente || meta.logo_cliente || undefined;
@@ -635,8 +688,10 @@ export class ApiService {
         gestor_id: s.gestor_id,
         navegador_id: navId || s.navegador_id,
         navegador_nome: navNome || s.navegador_nome,
+        navegadores: navList.length > 0 ? navList : (navId && navNome ? [{ id: navId, nome: navNome }] : []),
         operador_id: opId || s.operador_id,
         operador_nome: opNome || s.operador_nome,
+        operadores: opList.length > 0 ? opList : (opId && opNome ? [{ id: opId, nome: opNome }] : []),
         status: s.status,
         cenario_financeiro: s.cenario_financeiro,
         valor_metro: Number(s.valor_metro) || 0,
@@ -734,9 +789,11 @@ export class ApiService {
       uf: s.uf || undefined,
       gestor_id: s.gestor_id,
       navegador_id: navId,
-      navegador_nome: navNome,
+      navegador_nome: (meta.navegadores && meta.navegadores.length > 0) ? meta.navegadores.map(n => n.nome).join(' / ') : navNome,
+      navegadores: meta.navegadores || (navId && navNome ? [{ id: navId, nome: navNome }] : []),
       operador_id: opId,
-      operador_nome: opNome,
+      operador_nome: (meta.operadores && meta.operadores.length > 0) ? meta.operadores.map(o => o.nome).join(' / ') : opNome,
+      operadores: meta.operadores || (opId && opNome ? [{ id: opId, nome: opNome }] : []),
       status: s.status,
       cenario_financeiro: s.cenario_financeiro,
       valor_metro: Number(s.valor_metro) || 0,
@@ -792,7 +849,9 @@ export class ApiService {
       custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
       custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
       custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
-      custo_outros_diario: Number(data.custo_outros_diario) || 0
+      custo_outros_diario: Number(data.custo_outros_diario) || 0,
+      navegadores: data.navegadores,
+      operadores: data.operadores
     });
 
     const supabasePayload: any = {
@@ -952,7 +1011,9 @@ export class ApiService {
       custo_equipe_diario: data.custo_equipe_diario !== undefined ? Number(data.custo_equipe_diario) : (existingMeta.custo_equipe_diario || 0),
       custo_combustivel_diario: data.custo_combustivel_diario !== undefined ? Number(data.custo_combustivel_diario) : (existingMeta.custo_combustivel_diario || 0),
       custo_equipamento_diario: data.custo_equipamento_diario !== undefined ? Number(data.custo_equipamento_diario) : (existingMeta.custo_equipamento_diario || 0),
-      custo_outros_diario: data.custo_outros_diario !== undefined ? Number(data.custo_outros_diario) : (existingMeta.custo_outros_diario || 0)
+      custo_outros_diario: data.custo_outros_diario !== undefined ? Number(data.custo_outros_diario) : (existingMeta.custo_outros_diario || 0),
+      navegadores: data.navegadores !== undefined ? data.navegadores : existingMeta.navegadores,
+      operadores: data.operadores !== undefined ? data.operadores : existingMeta.operadores
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -983,8 +1044,10 @@ export class ApiService {
           logo_escala: metaToSave.logo_escala,
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
+          navegadores: metaToSave.navegadores || [],
           operador_id: data.operador_id,
-          operador_nome: data.operador_nome
+          operador_nome: data.operador_nome,
+          operadores: metaToSave.operadores || []
         };
       } else if (error) {
         console.error('[Supabase updateServico error]:', error);
@@ -1044,6 +1107,44 @@ export class ApiService {
     }
 
     return updatedServico;
+  }
+
+  /**
+   * Adiciona um novo operador ou navegador à equipe da obra sem substituir os atuais (apenas acrescenta)
+   */
+  public static async addEquipeMembro(servicoId: string, membro: { id: string; nome: string; perfil: 'NAVEGADOR' | 'OPERADOR' }): Promise<Servico> {
+    const s = await this.getServico(servicoId);
+    const { meta } = parseServicoDescricao(s.descricao);
+    
+    let novosNavs: Array<{ id: string; nome: string }> = [...(meta.navegadores || s.navegadores || [])];
+    if (s.navegador_id && s.navegador_nome && !novosNavs.some(n => n.id === s.navegador_id)) {
+      novosNavs.push({ id: s.navegador_id, nome: s.navegador_nome });
+    }
+
+    let novosOps: Array<{ id: string; nome: string }> = [...(meta.operadores || s.operadores || [])];
+    if (s.operador_id && s.operador_nome && !novosOps.some(o => o.id === s.operador_id)) {
+      novosOps.push({ id: s.operador_id, nome: s.operador_nome });
+    }
+
+    if (membro.perfil === 'NAVEGADOR') {
+      if (!novosNavs.some(n => n.id === membro.id)) {
+        novosNavs.push({ id: membro.id, nome: membro.nome });
+      }
+    } else if (membro.perfil === 'OPERADOR') {
+      if (!novosOps.some(o => o.id === membro.id)) {
+        novosOps.push({ id: membro.id, nome: membro.nome });
+      }
+    }
+
+    const navNomeFormatted = novosNavs.map(n => n.nome).join(' / ');
+    const opNomeFormatted = novosOps.map(o => o.nome).join(' / ');
+
+    return await this.updateServico(servicoId, {
+      navegadores: novosNavs,
+      operadores: novosOps,
+      navegador_nome: navNomeFormatted,
+      operador_nome: opNomeFormatted
+    });
   }
 
   public static async deleteServico(id: string): Promise<{ success: boolean }> {
@@ -1198,7 +1299,13 @@ export class ApiService {
         longitude: b.longitude ? Number(b.longitude) : undefined,
         endereco: b.endereco || undefined,
         observacao: cleanObs,
-        horario_registro: b.horario_registro
+        horario_registro: b.horario_registro,
+        registrado_por: b.registrado_por || meta.registrado_por_id || undefined,
+        registrado_por_nome: meta.registrado_por_nome || undefined,
+        mes_referencia: meta.mes_referencia || (b.horario_registro ? b.horario_registro.slice(0, 7) : undefined),
+        data_referencia: meta.data_referencia || (b.horario_registro ? b.horario_registro.split('T')[0] : undefined),
+        data_registro: meta.data_referencia || (b.horario_registro ? b.horario_registro.split('T')[0] : undefined),
+        created_at: b.horario_registro
       };
     });
   }
@@ -1317,12 +1424,21 @@ export class ApiService {
       mainFotoUrl = uploadedFotos[0];
     }
 
+    const usuarioAtual = this.getUsuarioAtual();
     const { observacao: cleanObs } = parseBarraObservacao(data.observacao || '');
+    const defaultMesRef = data.mes_referencia || (data.data_registro ? data.data_registro.slice(0, 7) : new Date().toISOString().slice(0, 7));
+    const defaultDataRef = data.data_referencia || (data.data_registro ? data.data_registro.split('T')[0] : new Date().toISOString().split('T')[0]);
+
     const encodedObs = buildBarraObservacao(cleanObs, {
       tipo_registro: isCaixaRegistro ? 'CAIXA' : (data.tipo_registro || 'CANALIZACAO'),
       diametro: isCaixaRegistro ? '' : (data.diametro || ''),
       numero_os: data.numero_os || '',
-      fotos: uploadedFotos
+      fotos: uploadedFotos,
+      registrado_por_id: usuarioAtual?.id,
+      registrado_por_nome: usuarioAtual?.nome,
+      usuario_perfil: usuarioAtual?.perfil,
+      mes_referencia: defaultMesRef,
+      data_referencia: defaultDataRef
     });
 
     const supabaseBarraPayload: any = {
@@ -1331,6 +1447,10 @@ export class ApiService {
       metros: metrosDesteRegistro,
       metros_acumulados: metrosAcumulados,
       tem_caixa: Boolean(data.tem_caixa || isCaixaRegistro),
+      diametro: isCaixaRegistro ? '' : (data.diametro || null),
+      numero_os: data.numero_os || null,
+      endereco: data.endereco || null,
+      registrado_por: usuarioAtual?.id || null,
       angulo_pitch: data.angulo_pitch || '',
       profundidade_cm: Number(data.profundidade_cm) || 0,
       distancia_pista_cm: Number(data.distancia_pista_cm) || 0,
@@ -1351,7 +1471,14 @@ export class ApiService {
       console.error('[Add Barra Error]:', res1.error);
       throw new Error('Erro ao salvar apontamento.');
     } else {
-      created = res1.data;
+      created = {
+        ...res1.data,
+        diametro: res1.data.diametro || (isCaixaRegistro ? '' : (data.diametro || '')),
+        registrado_por: res1.data.registrado_por || usuarioAtual?.id,
+        registrado_por_nome: usuarioAtual?.nome,
+        mes_referencia: defaultMesRef,
+        data_referencia: defaultDataRef
+      };
     }
 
     // Atualizar comprimento total do furo
@@ -1462,6 +1589,54 @@ export class ApiService {
     return { success: true, furoId, remainingBarras };
   }
 
+  public static async updateBarra(barraId: string, updates: Partial<Barra>): Promise<Barra> {
+    const { data: current, error: fetchErr } = await supabase
+      .from('tecnodrill_barras')
+      .select('*')
+      .eq('id', barraId)
+      .single();
+    if (fetchErr || !current) throw new Error('Registro não encontrado.');
+
+    const { observacao: cleanObs, meta } = parseBarraObservacao(current.observacao);
+    const newMeta: BarraMetaTag = {
+      ...meta,
+      diametro: updates.diametro !== undefined ? updates.diametro : meta.diametro,
+      numero_os: updates.numero_os !== undefined ? updates.numero_os : meta.numero_os,
+      mes_referencia: updates.mes_referencia !== undefined ? updates.mes_referencia : meta.mes_referencia,
+      data_referencia: updates.data_referencia !== undefined ? updates.data_referencia : meta.data_referencia,
+      registrado_por_id: updates.registrado_por !== undefined ? updates.registrado_por : meta.registrado_por_id,
+      registrado_por_nome: updates.registrado_por_nome !== undefined ? updates.registrado_por_nome : meta.registrado_por_nome
+    };
+
+    const encodedObs = buildBarraObservacao(updates.observacao !== undefined ? updates.observacao : cleanObs, newMeta);
+    
+    const dbPayload: any = {
+      observacao: encodedObs
+    };
+    if (updates.diametro !== undefined) dbPayload.diametro = updates.diametro;
+    if (updates.metros !== undefined) dbPayload.metros = updates.metros;
+    if (updates.numero_os !== undefined) dbPayload.numero_os = updates.numero_os;
+    if (updates.endereco !== undefined) dbPayload.endereco = updates.endereco;
+    if (updates.registrado_por !== undefined) dbPayload.registrado_por = updates.registrado_por;
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('tecnodrill_barras')
+      .update(dbPayload)
+      .eq('id', barraId)
+      .select()
+      .single();
+
+    if (updateErr) throw new Error(updateErr.message || 'Erro ao atualizar registro.');
+    return {
+      ...updated,
+      diametro: updated.diametro || newMeta.diametro,
+      registrado_por: updated.registrado_por || newMeta.registrado_por_id,
+      registrado_por_nome: newMeta.registrado_por_nome,
+      mes_referencia: newMeta.mes_referencia,
+      data_referencia: newMeta.data_referencia
+    };
+  }
+
   // ============================================================================
   // DASHBOARD GESTOR
   // ============================================================================
@@ -1496,5 +1671,112 @@ export class ApiService {
 
   public static getExcelUrl(furoId: string): string {
     return `/api/relatorios/furo/${furoId}/excel`;
+  }
+
+  // ============================================================================
+  // TERCEIROS (PRODUTIVIDADE E CUSTOS COM TERCEIROS)
+  // ============================================================================
+  public static async getTerceirosLancamentos(): Promise<TerceiroLancamento[]> {
+    try {
+      const { data, error } = await supabase
+        .from('tecnodrill_logs')
+        .select('*')
+        .eq('acao', 'LANCAMENTO_TERCEIRO')
+        .order('criado_em', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => {
+          try {
+            const parsed = typeof row.detalhes === 'string' ? JSON.parse(row.detalhes) : (row.detalhes || {});
+            return {
+              ...parsed,
+              id: parsed.id || row.id,
+              log_id: row.id,
+              criado_em: row.criado_em || parsed.criado_em
+            } as TerceiroLancamento;
+          } catch {
+            return {
+              id: row.id,
+              data: row.criado_em?.split('T')[0] || '2026-09-01',
+              mes_referencia: row.criado_em?.slice(0, 7) || '2026-09',
+              terceiro_nome: 'Terceiro',
+              descricao: String(row.detalhes || ''),
+              categoria: 'Terceiros',
+              tipo_transacao: 'PIX',
+              valor: 0,
+              status: 'PAGO'
+            } as TerceiroLancamento;
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar terceiros do Supabase:', err);
+    }
+
+    // Fallback: carregar dados históricos do JSON
+    try {
+      const hist = await import('../data/terceirosHistorico.json');
+      return (hist.default || hist) as TerceiroLancamento[];
+    } catch {
+      return [];
+    }
+  }
+
+  public static async createTerceiroLancamento(payload: Omit<TerceiroLancamento, 'id'> & { id?: string }): Promise<TerceiroLancamento> {
+    const user = this.getUsuarioAtual();
+    const newId = payload.id || `TERC-${Date.now().toString(36).toUpperCase()}`;
+    const fullItem: TerceiroLancamento = {
+      ...payload,
+      id: newId,
+      criado_em: new Date().toISOString()
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('tecnodrill_logs')
+        .insert({
+          usuario_id: user?.id || null,
+          acao: 'LANCAMENTO_TERCEIRO',
+          detalhes: JSON.stringify(fullItem)
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          ...fullItem,
+          id: fullItem.id || data.id
+        };
+      }
+    } catch (err) {
+      console.error('Erro ao salvar lançamento de terceiro:', err);
+    }
+
+    return fullItem;
+  }
+
+  public static async deleteTerceiroLancamento(id: string): Promise<boolean> {
+    try {
+      // Tenta deletar tanto por id direto quanto buscando nos logs
+      const { data: logs } = await supabase
+        .from('tecnodrill_logs')
+        .select('id, detalhes')
+        .eq('acao', 'LANCAMENTO_TERCEIRO');
+
+      if (logs) {
+        for (const log of logs) {
+          try {
+            const parsed = typeof log.detalhes === 'string' ? JSON.parse(log.detalhes) : (log.detalhes || {});
+            if (parsed.id === id || log.id === id) {
+              await supabase.from('tecnodrill_logs').delete().eq('id', log.id);
+            }
+          } catch (_) {}
+        }
+      }
+      return true;
+    } catch (err) {
+      console.error('Erro ao deletar lançamento de terceiro:', err);
+      return false;
+    }
   }
 }

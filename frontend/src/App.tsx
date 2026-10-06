@@ -8,6 +8,7 @@ import { ObraDetalhes } from './pages/ObraDetalhes';
 import { UsuariosPage } from './pages/UsuariosPage';
 import { PerformancePage } from './pages/PerformancePage';
 import { ProdutividadePage } from './pages/ProdutividadePage';
+import { TerceirosPage } from './pages/TerceirosPage';
 import { NovoServicoModal } from './components/NovoServicoModal';
 import { RodEntryModal } from './components/RodEntryModal';
 import { MetaCelebration } from './components/MetaCelebration';
@@ -298,6 +299,14 @@ export const App: React.FC = () => {
           <ProdutividadePage
             setHeaderInfo={setHeaderInfo}
             onSelectServico={(id) => handleNavigate(`/app/obras/${id}`)}
+          />
+        );
+
+      case '/app/terceiros':
+        return (
+          <TerceirosPage
+            setHeaderInfo={setHeaderInfo}
+            user={user}
           />
         );
 

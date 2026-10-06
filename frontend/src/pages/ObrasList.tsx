@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Servico, Furo } from '../types';
-import { ApiService, sanitizeLocalidade } from '../services/api';
+import { Servico, Furo, Barra } from '../types';
+import { ApiService, sanitizeLocalidade, parseBarraObservacao } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
 import { 
   Plus, 
@@ -31,6 +32,7 @@ export const ObrasList: React.FC<ObrasListProps> = ({
   const { user, isOffline, showToast } = useAuth();
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [furos, setFuros] = useState<Furo[]>([]);
+  const [minhasBarrasPorServico, setMinhasBarrasPorServico] = useState<Record<string, Barra[]>>({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,6 +51,46 @@ export const ObrasList: React.FC<ObrasListProps> = ({
       ]);
       setServicos(data);
       setFuros(furosData);
+
+      // Se for técnico (Navegador ou Operador), busca apenas os registros feitos pelo próprio técnico
+      if (!isGestor && user) {
+        try {
+          const { data: bData } = await supabase
+            .from('tecnodrill_barras')
+            .select('*');
+          if (bData) {
+            const map: Record<string, Barra[]> = {};
+            for (const b of bData) {
+              const { meta } = parseBarraObservacao(b.observacao);
+              const isMine = (b.registrado_por && b.registrado_por === user.id) ||
+                (meta.registrado_por_id && meta.registrado_por_id === user.id) ||
+                (meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
+                (meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.username.toLowerCase().trim());
+
+              if (isMine) {
+                // Filtro a partir de Setembro de 2026 (meses anteriores ficam ocultos para técnicos)
+                const mesRef = b.mes_referencia || meta.mes_referencia || b.data_referencia?.slice(0, 7) || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
+                if (mesRef && mesRef < '2026-09') {
+                  continue;
+                }
+
+                const f = furosData.find(furo => furo.id === b.furo_id);
+                if (f) {
+                  const sId = f.servico_id;
+                  if (!map[sId]) map[sId] = [];
+                  map[sId].push({
+                    ...b,
+                    diametro: b.diametro || meta.diametro,
+                    registrado_por: b.registrado_por || meta.registrado_por_id,
+                    registrado_por_nome: meta.registrado_por_nome
+                  });
+                }
+              }
+            }
+            setMinhasBarrasPorServico(map);
+          }
+        } catch (_) {}
+      }
     } catch (err: any) {
       console.error('Erro ao buscar serviços:', err);
       setFetchError(err.message || 'Erro ao conectar ao banco de dados.');
@@ -63,7 +105,27 @@ export const ObrasList: React.FC<ObrasListProps> = ({
     fetchServicos();
   }, [setHeaderInfo]);
 
-  const renderProgressBar = (metrosExec: number, metrosTotal: number) => {
+  const renderProgressBar = (metrosExec: number, metrosTotal: number, servicoId?: string) => {
+    if (!isGestor) {
+      const userBarras = servicoId ? (minhasBarrasPorServico[servicoId] || []) : [];
+      const meusMetros = userBarras.reduce((acc, b) => {
+        const isCaixa = b.tipo_registro === 'CAIXA' || b.tem_caixa;
+        if (isCaixa) return acc;
+        return acc + (b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3);
+      }, 0);
+
+      return (
+        <div style={{ marginTop: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+            <span>Sua Produção</span>
+            <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>
+              {meusMetros}m registrados ({userBarras.length} fotos)
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     const percent = metrosTotal > 0 ? Math.min(Math.round((metrosExec / metrosTotal) * 100), 100) : 0;
     let barColor = 'var(--danger)';
     if (percent >= 70) {
@@ -76,25 +138,19 @@ export const ObrasList: React.FC<ObrasListProps> = ({
       <div style={{ marginTop: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
           <span>Progresso</span>
-          {isGestor ? (
-            <span>{metrosExec} de {metrosTotal} metros ({percent}%)</span>
-          ) : (
-            <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>{metrosExec} metros executados</span>
-          )}
+          <span>{metrosExec} de {metrosTotal} metros ({percent}%)</span>
         </div>
-        {isGestor && (
-          <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-            <div 
-              style={{
-                width: `${percent}%`,
-                height: '100%',
-                backgroundColor: barColor,
-                borderRadius: '4px',
-                transition: 'width 0.5s ease-out'
-              }}
-            />
-          </div>
-        )}
+        <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-app)', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+          <div 
+            style={{
+              width: `${percent}%`,
+              height: '100%',
+              backgroundColor: barColor,
+              borderRadius: '4px',
+              transition: 'width 0.5s ease-out'
+            }}
+          />
+        </div>
       </div>
     );
   };
@@ -379,37 +435,57 @@ export const ObrasList: React.FC<ObrasListProps> = ({
                     </span>
                   </div>
 
-                  {furoPrincipal && furoPrincipal.navegador_nome && (
+                  {(servico.navegador_nome || furoPrincipal?.navegador_nome) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Radio size={11} style={{ color: 'var(--primary-light)' }} />
+                      <Radio size={11} style={{ color: 'var(--primary-light)', flexShrink: 0 }} />
                       <span style={{ color: 'var(--text-muted)' }}>
-                        Navegador: <strong style={{ color: 'var(--text-main)' }}>{furoPrincipal.navegador_nome}</strong>
+                        Navegador: <strong style={{ color: 'var(--text-main)' }}>{servico.navegador_nome || furoPrincipal?.navegador_nome}</strong>
                       </span>
                     </div>
                   )}
 
-                  {furoPrincipal && furoPrincipal.operador_nome && (
+                  {(servico.operador_nome || furoPrincipal?.operador_nome) && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <User size={11} style={{ color: '#5DADE2' }} />
+                      <User size={11} style={{ color: '#5DADE2', flexShrink: 0 }} />
                       <span style={{ color: 'var(--text-muted)' }}>
-                        Operador: <strong style={{ color: 'var(--text-main)' }}>{furoPrincipal.operador_nome}</strong>
+                        Operador: <strong style={{ color: 'var(--text-main)' }}>{servico.operador_nome || furoPrincipal?.operador_nome}</strong>
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Financial indicator for Managers */}
-                {isGestor && retornoR$ !== undefined && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', marginBottom: '2px', color: 'var(--text-muted)' }}>
-                    <span>Retorno:</span>
-                    <strong style={{ color: 'var(--success)', fontSize: '12px' }}>
-                      R$ {retornoR$.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                {/* Diâmetro do Serviço */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10.5px', marginBottom: '4px', color: 'var(--text-muted)' }}>
+                  <span>Diâmetro:</span>
+                  <span style={{ color: '#5DADE2', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+                    {servico.diametro_furo_mm ? `DN ${servico.diametro_furo_mm}` : 'DN Variável'}
+                  </span>
+                </div>
+
+                {/* Valor / Retorno Financeiro na cara do serviço (EXCLUSIVO PARA GESTORES) */}
+                {isGestor && (
+                  <div 
+                    style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      fontSize: '11px', 
+                      marginBottom: '6px', 
+                      padding: '5px 8px',
+                      backgroundColor: 'rgba(39, 174, 96, 0.08)',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(39, 174, 96, 0.2)'
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Retorno:</span>
+                    <strong style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 800 }}>
+                      R$ {(retornoR$ || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </strong>
                   </div>
                 )}
 
-                {/* Progress Bar */}
-                {renderProgressBar(metrosExec, metrosPrevistos)}
+                {/* Progress Bar (Para técnicos mostra apenas a metragem individual) */}
+                {renderProgressBar(metrosExec, metrosPrevistos, servico.id)}
 
                 {/* Footer */}
                 <div 

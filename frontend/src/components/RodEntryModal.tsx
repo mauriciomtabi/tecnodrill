@@ -37,7 +37,7 @@ interface RodEntryModalProps {
   loading?: boolean;
 }
 
-const COMMON_DIAMETERS = ['63mm', '90mm', '110mm', '160mm', '200mm'];
+const COMMON_DIAMETERS = ['100mm', '150mm', '200mm', '250mm', '300mm'];
 
 export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   isOpen,
@@ -64,12 +64,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [rawPhotoBase64, setRawPhotoBase64] = useState<string | null>(null);
 
   // Dados Técnicos
-  const [diametro, setDiametro] = useState<string>('110mm');
+  const [diametro, setDiametro] = useState<string>(() => {
+    if (servico?.diametro_furo_mm) return `${servico.diametro_furo_mm}mm`;
+    return '150mm';
+  });
   const [customDiametro, setCustomDiametro] = useState<string>('');
   const [numeroOs, setNumeroOs] = useState<string>('');
   const [metros, setMetros] = useState<number>(3);
   const [temCaixa, setTemCaixa] = useState<boolean>(false);
   const [observacao, setObservacao] = useState<string>('');
+  const [mesReferencia, setMesReferencia] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   
   // GPS State
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -156,7 +163,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setFotosList([]);
       setRawPhotosList([]);
       setRawPhotoBase64(null);
-      setDiametro('110mm');
+      const defaultDiam = servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm';
+      setDiametro(defaultDiam);
       setCustomDiametro('');
       setNumeroOs('');
       setMetros(3);
@@ -326,7 +334,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         fotos: fotosList,
         latitude: latitude || undefined,
         longitude: longitude || undefined,
-        endereco: formattedAddress
+        endereco: formattedAddress,
+        mes_referencia: mesReferencia
       };
 
       await onSubmit(payload);
@@ -369,7 +378,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         fotos: fotosList,
         latitude: latitude || undefined,
         longitude: longitude || undefined,
-        endereco: formattedAddress
+        endereco: formattedAddress,
+        mes_referencia: mesReferencia
       };
 
       await onSubmit(payload);
@@ -836,6 +846,18 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   />
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--primary)', marginBottom: '4px' }}>
+                    MÊS DE REFERÊNCIA (COMPETÊNCIA)
+                  </label>
+                  <input
+                    type="month"
+                    value={mesReferencia}
+                    onChange={(e) => setMesReferencia(e.target.value)}
+                    style={{ fontSize: '12.5px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', width: '100%', color: '#FFFFFF', boxSizing: 'border-box' }}
+                  />
+                </div>
+
                 <button
                   type="button"
                   disabled={fotosList.length < minFotos || (isOsRequired && !numeroOs.trim()) || submitting}
@@ -977,7 +999,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   type="text"
                   value={customDiametro}
                   onChange={(e) => setCustomDiametro(e.target.value)}
-                  placeholder="Digite o diâmetro (ex: 250mm, 2 pol)"
+                  placeholder="Digite o diâmetro (ex: 400mm, 500mm, etc.)"
                   required
                   style={{ fontSize: '13px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', boxSizing: 'border-box' }}
                 />
@@ -1092,6 +1114,22 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </div>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                 Digite o valor ou utilize os botões +/-
+              </span>
+            </div>
+
+            {/* Mês de Referência (Retroativo) */}
+            <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
+              <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Mês de Referência (Competência / Produtividade)
+              </label>
+              <input
+                type="month"
+                value={mesReferencia}
+                onChange={(e) => setMesReferencia(e.target.value)}
+                style={{ fontSize: '12.5px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '9px', width: '100%', color: '#FFFFFF', boxSizing: 'border-box' }}
+              />
+              <span style={{ display: 'block', fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Indique a competência para histórico mensal de produtividade, receita e custo.
               </span>
             </div>
 

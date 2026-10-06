@@ -6,8 +6,10 @@ import {
   Camera, 
   Trophy,
   TrendingUp,
+  Briefcase,
   Plus
 } from 'lucide-react';
+
 
 interface BottomNavProps {
   currentPath: string;
@@ -143,7 +145,27 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <Trophy size={24} />
       </button>
 
-      {/* 4. SE FOR GESTOR: USUÁRIOS */}
+      {/* 4. SE FOR GESTOR: TERCEIROS */}
+      {isGestor && (
+        <button
+          onClick={() => onNavigate('/app/terceiros')}
+          title="Gestão de Terceiros"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: currentPath.includes('/app/terceiros') ? 'var(--primary)' : 'var(--text-muted)',
+            padding: '10px',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          <Briefcase size={24} />
+        </button>
+      )}
+
+      {/* 5. SE FOR GESTOR: USUÁRIOS */}
       {isGestor && (
         <button
           onClick={() => onNavigate('/app/usuarios')}
@@ -163,5 +185,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </button>
       )}
     </nav>
+
   );
 };

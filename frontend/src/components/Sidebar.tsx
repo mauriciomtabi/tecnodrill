@@ -5,6 +5,7 @@ import {
   Users, 
   Trophy,
   TrendingUp,
+  Briefcase,
   Sun, 
   Moon, 
   LogOut, 
@@ -33,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
         { path: '/app/produtividade', label: 'Produtividade', icon: TrendingUp },
+        { path: '/app/terceiros', label: 'Terceiros', icon: Briefcase },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
       ]
@@ -40,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
         { path: '/tecnico/obras', label: 'Serviços', icon: HardHat },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
       ];
+
 
   return (
     <aside

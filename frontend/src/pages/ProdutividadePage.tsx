@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ApiService } from '../services/api';
+import { ApiService, parseBarraObservacao } from '../services/api';
 import { Servico, Barra, TipoServico } from '../types';
 import * as XLSX from 'xlsx';
 import { 
@@ -109,11 +109,27 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
     Object.values(barrasPorServico).forEach(barras => {
       barras.forEach(b => {
-        const rawDate = b.horario_registro || b.data_registro || b.created_at;
-        if (rawDate) {
-          const y = new Date(rawDate).getFullYear();
-          if (!isNaN(y) && y > 2000 && y < 2100) {
-            anos.add(y.toString());
+        let mesRef = b.mes_referencia;
+        let dataRef = b.data_referencia;
+        if (!mesRef && !dataRef && b.observacao) {
+          const { meta } = parseBarraObservacao(b.observacao);
+          mesRef = meta.mes_referencia;
+          dataRef = meta.data_referencia;
+        }
+
+        if (mesRef) {
+          const y = mesRef.split('-')[0];
+          if (y && !isNaN(Number(y))) anos.add(y);
+        } else if (dataRef) {
+          const y = dataRef.split('-')[0];
+          if (y && !isNaN(Number(y))) anos.add(y);
+        } else {
+          const rawDate = b.horario_registro || b.data_registro || b.created_at;
+          if (rawDate) {
+            const y = new Date(rawDate).getFullYear();
+            if (!isNaN(y) && y > 2000 && y < 2100) {
+              anos.add(y.toString());
+            }
           }
         }
       });
@@ -121,6 +137,49 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
     return Array.from(anos).sort((a, b) => Number(b) - Number(a));
   }, [barrasPorServico, currentYear]);
+
+  // Helper date extractor
+  const getBarraDateInfo = (b: Barra): { year: string; month: number; day: number } | null => {
+    let dataRef = b.data_referencia;
+    let mesRef = b.mes_referencia;
+
+    if (!dataRef && !mesRef && b.observacao) {
+      const { meta } = parseBarraObservacao(b.observacao);
+      if (meta.data_referencia) dataRef = meta.data_referencia;
+      if (meta.mes_referencia) mesRef = meta.mes_referencia;
+    }
+
+    if (dataRef) {
+      const parts = dataRef.split('-');
+      if (parts.length === 3) {
+        return {
+          year: parts[0],
+          month: Number(parts[1]),
+          day: Number(parts[2])
+        };
+      }
+    }
+    if (mesRef) {
+      const parts = mesRef.split('-');
+      if (parts.length === 2) {
+        return {
+          year: parts[0],
+          month: Number(parts[1]),
+          day: 15
+        };
+      }
+    }
+
+    const raw = b.horario_registro || b.data_registro || b.created_at;
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return null;
+    return {
+      year: d.getFullYear().toString(),
+      month: d.getMonth() + 1,
+      day: d.getDate()
+    };
+  };
 
   // Datas de referência para períodos rápidos
   const now = useMemo(() => new Date(), []);
@@ -132,13 +191,14 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return d;
   }, [now]);
 
-  // Função para verificar se a barra pertence ao filtro ativo
+  // Função para verificar se a barra pertence ao filtro ativo (com suporte a mes_referencia retroativo)
   const isBarraInFilter = (b: Barra): boolean => {
-    const rawDate = b.horario_registro || b.data_registro || b.created_at;
-    if (!rawDate) return periodoRapido === 'GERAL';
+    const dateInfo = getBarraDateInfo(b);
+    if (!dateInfo) return periodoRapido === 'GERAL';
 
-    const bDate = new Date(rawDate);
-    if (isNaN(bDate.getTime())) return periodoRapido === 'GERAL';
+    const bYear = dateInfo.year;
+    const bMonth = String(dateInfo.month);
+    const bDate = new Date(Number(dateInfo.year), dateInfo.month - 1, dateInfo.day);
 
     // Filtro por Período Rápido
     if (periodoRapido === 'HOJE') {
@@ -156,9 +216,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     }
 
     // Filtro por Ano e Mês selecionados
-    const bYear = bDate.getFullYear().toString();
-    const bMonth = (bDate.getMonth() + 1).toString();
-
     if (filtroAno !== 'TODOS' && bYear !== filtroAno) {
       return false;
     }
@@ -217,16 +274,28 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       if (s.cenario_financeiro === 'VALOR_METRO') {
         receitaPeriodo = metrosPeriodo * (Number(s.valor_metro) || 0);
       } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-        const diam = Number(s.diametro_furo_mm) || 150;
-        receitaPeriodo = metrosPeriodo * (Number(s.fator_financeiro) || 0) * diam;
+        const diamDefault = Number(s.diametro_furo_mm) || 150;
+        const fator = Number(s.fator_financeiro) || 0.8;
+        let somaRetorno = 0;
+        let count = 0;
+        for (const b of barrasPeriodo) {
+          if (b.tipo_registro === 'CAIXA' || b.tem_caixa) continue;
+          const m = Number(b.metros) || 3;
+          const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+          somaRetorno += m * fator * numDiam;
+          count++;
+        }
+        receitaPeriodo = count > 0 ? somaRetorno : (metrosPeriodo * fator * diamDefault);
       } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
         const valFechado = Number(s.valor_total_fechado) || 0;
         receitaPeriodo = totalPrevisto > 0 ? (metrosPeriodo / totalPrevisto) * valFechado : 0;
       }
 
-      // Custo operacional baseado unicamente no valor por metro perfurado
+      // Regra Oficial de Custo: Multiplicado sempre por 2 (rateio 50% Navegador e 50% Operador)
       const custoMetro = Number(s.custo_metro) || 0;
-      const custoPeriodo = metrosPeriodo * custoMetro;
+      const custoPeriodo = metrosPeriodo * custoMetro * 2; // Ex: 0.5 * 100m * 2 = R$ 100 (50 Navegador + 50 Operador)
+      const custoNavegador = metrosPeriodo * custoMetro;
+      const custoOperador = metrosPeriodo * custoMetro;
       const margemPeriodo = receitaPeriodo - custoPeriodo;
       const margemPercentual = receitaPeriodo > 0 ? (margemPeriodo / receitaPeriodo) * 100 : 0;
 
@@ -242,6 +311,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         receitaPeriodo,
         custoMetro,
         custoPeriodo,
+        custoNavegador,
+        custoOperador,
         margemPeriodo,
         margemPercentual,
         qtdRegistrosPeriodo: barrasPeriodo.length,
@@ -300,16 +371,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
         servicosFiltrados.forEach(s => {
           const barras = barrasPorServico[s.id] || [];
+          const diamDefault = Number(s.diametro_furo_mm) || 150;
+          const fator = Number(s.fator_financeiro) || 0.8;
+          const custoMetro = Number(s.custo_metro) || 0;
+
           barras.forEach(b => {
-            const raw = b.horario_registro || b.data_registro || b.created_at;
-            if (!raw) return;
-            const d = new Date(raw);
-            if (isNaN(d.getTime())) return;
+            const dateInfo = getBarraDateInfo(b);
+            if (!dateInfo) return;
 
-            const bYear = d.getFullYear().toString();
-            const bMonth = d.getMonth() + 1;
-
-            if (bYear === targetYear && bMonth === monthNum) {
+            if (dateInfo.year === targetYear && dateInfo.month === monthNum) {
               const m = (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? 0 : (b.metros ?? 3);
               metros += m;
 
@@ -317,13 +387,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               if (s.cenario_financeiro === 'VALOR_METRO') {
                 rec = m * (Number(s.valor_metro) || 0);
               } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-                rec = m * (Number(s.fator_financeiro) || 0) * (Number(s.diametro_furo_mm) || 150);
+                const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+                rec = m * fator * numDiam;
               } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
                 const prev = Number(s.metragem_prevista_total) || 1000;
                 rec = prev > 0 ? (m / prev) * (Number(s.valor_total_fechado) || 0) : 0;
               }
               receita += rec;
-              custo += m * (Number(s.custo_metro) || 0);
+              // Custo multiplicado por 2 (50% Navegador, 50% Operador)
+              custo += m * custoMetro * 2;
             }
           });
         });
@@ -360,30 +432,30 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
         servicosFiltrados.forEach(s => {
           const barras = barrasPorServico[s.id] || [];
+          const diamDefault = Number(s.diametro_furo_mm) || 150;
+          const fator = Number(s.fator_financeiro) || 0.8;
+          const custoMetro = Number(s.custo_metro) || 0;
+
           barras.forEach(b => {
-            const raw = b.horario_registro || b.data_registro || b.created_at;
-            if (!raw) return;
-            const d = new Date(raw);
-            if (isNaN(d.getTime())) return;
+            const dateInfo = getBarraDateInfo(b);
+            if (!dateInfo) return;
 
-            const bYear = d.getFullYear().toString();
-            const bMonth = d.getMonth() + 1;
-            const bDay = d.getDate();
-
-            if (bYear === targetYear && bMonth === targetMonthNum && bDay >= sem.min && bDay <= sem.max) {
+            if (dateInfo.year === targetYear && dateInfo.month === targetMonthNum && dateInfo.day >= sem.min && dateInfo.day <= sem.max) {
               const m = (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? 0 : (b.metros ?? 3);
               metros += m;
+
               let rec = 0;
               if (s.cenario_financeiro === 'VALOR_METRO') {
                 rec = m * (Number(s.valor_metro) || 0);
               } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-                rec = m * (Number(s.fator_financeiro) || 0) * (Number(s.diametro_furo_mm) || 150);
+                const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+                rec = m * fator * numDiam;
               } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
                 const prev = Number(s.metragem_prevista_total) || 1000;
                 rec = prev > 0 ? (m / prev) * (Number(s.valor_total_fechado) || 0) : 0;
               }
               receita += rec;
-              custo += m * (Number(s.custo_metro) || 0);
+              custo += m * custoMetro * 2;
             }
           });
         });
@@ -413,30 +485,30 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
       servicosFiltrados.forEach(s => {
         const barras = barrasPorServico[s.id] || [];
+        const diamDefault = Number(s.diametro_furo_mm) || 150;
+        const fator = Number(s.fator_financeiro) || 0.8;
+        const custoMetro = Number(s.custo_metro) || 0;
+
         barras.forEach(b => {
-          const raw = b.horario_registro || b.data_registro || b.created_at;
-          if (!raw) return;
-          const d = new Date(raw);
-          if (isNaN(d.getTime())) return;
+          const dateInfo = getBarraDateInfo(b);
+          if (!dateInfo) return;
 
-          const bYear = d.getFullYear().toString();
-          const bMonth = d.getMonth() + 1;
-          const bDay = d.getDate();
-
-          if (bYear === targetYear && bMonth === targetMonthNum && bDay === day) {
+          if (dateInfo.year === targetYear && dateInfo.month === targetMonthNum && dateInfo.day === day) {
             const m = (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? 0 : (b.metros ?? 3);
             metros += m;
+
             let rec = 0;
             if (s.cenario_financeiro === 'VALOR_METRO') {
               rec = m * (Number(s.valor_metro) || 0);
             } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-              rec = m * (Number(s.fator_financeiro) || 0) * (Number(s.diametro_furo_mm) || 150);
+              const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+              rec = m * fator * numDiam;
             } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
               const prev = Number(s.metragem_prevista_total) || 1000;
               rec = prev > 0 ? (m / prev) * (Number(s.valor_total_fechado) || 0) : 0;
             }
             receita += rec;
-            custo += m * (Number(s.custo_metro) || 0);
+            custo += m * custoMetro * 2;
           }
         });
       });
@@ -924,343 +996,310 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       </div>
 
       {/* ────────────────────────────────────────────────────────────────
-          3. GRÁFICOS ANALÍTICOS (ESTILO BI JLE)
+          3. GRÁFICO 1: EVOLUÇÃO (LARGURA TOTAL / 100% EXTENSÃO LATERAL)
       ────────────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '20px' }}>
-        
-        {/* GRÁFICO 1: EVOLUÇÃO (MENSAL COM OS 12 MESES, SEMANAL OU DIÁRIO) */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: 'var(--shadow-sm)',
-            minHeight: '420px'
-          }}
-        >
-          {/* Header do Gráfico */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <BarChart3 size={18} color="var(--primary)" />
-                Evolução {granularidade === 'MENSAL' ? `Mensal (${filtroAno !== 'TODOS' ? filtroAno : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
-              </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita, Custo e Margem Líquida' : 'Volume de Perfuração em Metros'}
-              </span>
-            </div>
-
-            {/* Controles do Gráfico (Padrão BI JLE) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              
-              {/* Toggle Métrica */}
-              <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
-                <button
-                  type="button"
-                  onClick={() => setMetricaEvolucao('FINANCEIRO')}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: metricaEvolucao === 'FINANCEIRO' ? 'var(--primary)' : 'transparent',
-                    color: metricaEvolucao === 'FINANCEIRO' ? '#FFFFFF' : 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Receita × Custo (R$)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMetricaEvolucao('METROS')}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: metricaEvolucao === 'METROS' ? 'var(--primary)' : 'transparent',
-                    color: metricaEvolucao === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Metros (m)
-                </button>
-              </div>
-
-              {/* Toggle Granularidade */}
-              <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
-                <button
-                  type="button"
-                  onClick={() => setGranularidade('MENSAL')}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: granularidade === 'MENSAL' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                    color: granularidade === 'MENSAL' ? 'var(--text-main)' : 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Mensal (12 Meses)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGranularidade('SEMANAL')}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: granularidade === 'SEMANAL' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                    color: granularidade === 'SEMANAL' ? 'var(--text-main)' : 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Semanal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGranularidade('DIARIO')}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: '10.5px',
-                    fontWeight: 700,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: granularidade === 'DIARIO' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
-                    color: granularidade === 'DIARIO' ? 'var(--text-main)' : 'var(--text-muted)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Diário
-                </button>
-              </div>
-
-            </div>
+      <div 
+        style={{ 
+          width: '100%',
+          backgroundColor: 'var(--bg-card)', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: '14px', 
+          padding: '22px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '18px',
+          boxShadow: 'var(--shadow-sm)',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Header do Gráfico */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BarChart3 size={20} color="var(--primary)" />
+              Evolução {granularidade === 'MENSAL' ? `Mensal (${filtroAno !== 'TODOS' ? filtroAno : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
+            </h3>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita, Custo e Margem Líquida por competência' : 'Volume de Perfuração Direcional em Metros'}
+            </span>
           </div>
 
-          {/* Legenda do Gráfico de Evolução */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px', fontSize: '11px', color: 'var(--text-muted)' }}>
-            {metricaEvolucao === 'FINANCEIRO' ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2ECC71' }} />
-                  <span>Receita</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#E74C3C' }} />
-                  <span>Custo Operacional</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '12px', height: '3px', backgroundColor: '#F05A22' }} />
-                  <span>Margem Líquida</span>
-                </div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
-                <span>Metros Perfurados (m)</span>
-              </div>
-            )}
-          </div>
-
-          {/* Visualizador de Barras Analíticas SVG Customizado (Estilo BI JLE) */}
-          <div style={{ position: 'relative', width: '100%', height: '280px', display: 'flex', flexDirection: 'column' }}>
+          {/* Controles do Gráfico (Padrão BI JLE) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             
-            {/* Linhas de Grade de Fundo */}
-            <div style={{ position: 'absolute', top: 0, left: '45px', right: 0, bottom: '32px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
-              {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
-                <div key={idx} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '-45px', fontSize: '10px', color: '#8BA6B5', width: '40px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                    {metricaEvolucao === 'FINANCEIRO' 
-                      ? `R$ ${formatShortValue(maxEvolucaoVal * ratio)}` 
-                      : `${(maxEvolucaoVal * ratio).toFixed(0)}m`}
-                  </span>
-                  <div style={{ width: '100%', height: '1px', backgroundColor: '#1B3645' }} />
-                </div>
-              ))}
+            {/* Toggle Métrica */}
+            <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
+              <button
+                type="button"
+                onClick={() => setMetricaEvolucao('FINANCEIRO')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: metricaEvolucao === 'FINANCEIRO' ? 'var(--primary)' : 'transparent',
+                  color: metricaEvolucao === 'FINANCEIRO' ? '#FFFFFF' : 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Receita × Custo (R$)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetricaEvolucao('METROS')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: metricaEvolucao === 'METROS' ? 'var(--primary)' : 'transparent',
+                  color: metricaEvolucao === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Metros (m)
+              </button>
             </div>
 
-            {/* Container das Colunas dos Meses */}
-            <div style={{ marginLeft: '45px', flex: 1, display: 'flex', alignItems: 'flex-end', gap: '8px', zIndex: 2, paddingBottom: '30px' }}>
+            {/* Toggle Granularidade */}
+            <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
+              <button
+                type="button"
+                onClick={() => setGranularidade('MENSAL')}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: granularidade === 'MENSAL' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  color: granularidade === 'MENSAL' ? 'var(--text-main)' : 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Mensal (12 Meses)
+              </button>
+              <button
+                type="button"
+                onClick={() => setGranularidade('SEMANAL')}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: granularidade === 'SEMANAL' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  color: granularidade === 'SEMANAL' ? 'var(--text-main)' : 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Semanal
+              </button>
+              <button
+                type="button"
+                onClick={() => setGranularidade('DIARIO')}
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: '4px',
+                  border: 'none',
+                  backgroundColor: granularidade === 'DIARIO' ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  color: granularidade === 'DIARIO' ? 'var(--text-main)' : 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Diário
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Legenda do Gráfico de Evolução */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '18px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+          {metricaEvolucao === 'FINANCEIRO' ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2ECC71' }} />
+                <span>Receita</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#E74C3C' }} />
+                <span>Custo Operacional</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '14px', height: '3px', backgroundColor: '#F05A22', borderRadius: '2px' }} />
+                <span>Margem Líquida</span>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--primary)' }} />
+              <span>Metros Perfurados (m)</span>
+            </div>
+          )}
+        </div>
+
+        {/* Visualizador de Barras Analíticas com Largura Total (100% da Extensão Lateral) */}
+        <div style={{ position: 'relative', width: '100%', height: '310px', display: 'flex', flexDirection: 'column' }}>
+          
+          {/* Linhas de Grade de Fundo */}
+          <div style={{ position: 'absolute', top: 0, left: '55px', right: 0, bottom: '34px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+            {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+                <span style={{ position: 'absolute', left: '-55px', fontSize: '10.5px', color: '#8BA6B5', width: '50px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                  {metricaEvolucao === 'FINANCEIRO' 
+                    ? `R$ ${formatShortValue(maxEvolucaoVal * ratio)}` 
+                    : `${(maxEvolucaoVal * ratio).toFixed(0)}m`}
+                </span>
+                <div style={{ width: '100%', height: '1px', backgroundColor: '#1B3645' }} />
+              </div>
+            ))}
+          </div>
+
+          {/* SVG Overlay: Linha de Margem Líquida conectando os meses */}
+          {metricaEvolucao === 'FINANCEIRO' && (
+            <svg 
+              style={{ 
+                position: 'absolute', 
+                top: 0, 
+                left: '55px', 
+                right: 0, 
+                bottom: '34px', 
+                width: 'calc(100% - 55px)', 
+                height: 'calc(100% - 34px)', 
+                pointerEvents: 'none', 
+                zIndex: 4 
+              }}
+            >
+              {dadosEvolucao.length > 1 && (
+                <polyline
+                  fill="none"
+                  stroke="#F05A22"
+                  strokeWidth="2.5"
+                  strokeDasharray="4 3"
+                  points={dadosEvolucao.map((d, i) => {
+                    const x = ((i + 0.5) / dadosEvolucao.length) * 100;
+                    const val = Math.max(0, d.margem);
+                    const y = 100 - Math.max(0, Math.min(100, (val / maxEvolucaoVal) * 100));
+                    return `${x}%,${y}%`;
+                  }).join(' ')}
+                />
+              )}
               {dadosEvolucao.map((d, i) => {
-                const isHovered = hoveredMonthIdx === i;
-                const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
-                const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
-                const custoHeightPct = Math.min(100, (d.custo / maxEvolucaoVal) * 100);
-                const metrosHeightPct = Math.min(100, (d.metros / maxEvolucaoVal) * 100);
-
+                if (d.receita <= 0 && d.custo <= 0) return null;
+                const x = ((i + 0.5) / dadosEvolucao.length) * 100;
+                const val = Math.max(0, d.margem);
+                const y = 100 - Math.max(0, Math.min(100, (val / maxEvolucaoVal) * 100));
                 return (
-                  <div
-                    key={d.label}
-                    onMouseEnter={() => setHoveredMonthIdx(i)}
-                    onMouseLeave={() => setHoveredMonthIdx(null)}
-                    onClick={() => {
-                      if (granularidade === 'MENSAL') {
-                        setFiltroMes(d.mesNum.toString());
-                        setPeriodoRapido('CUSTOM');
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'flex-end',
-                      alignItems: 'center',
-                      position: 'relative',
-                      cursor: 'pointer',
-                      borderRadius: '6px',
-                      backgroundColor: isHovered || isSelectedMonth ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
-                      transition: 'background-color 0.2s ease'
-                    }}
-                  >
-                    {/* Tooltip Flutuante no Hover */}
-                    {isHovered && (
-                      <div 
-                        style={{
-                          position: 'absolute',
-                          bottom: '105%',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          backgroundColor: '#0D1C24',
-                          border: '1px solid #1B3645',
-                          borderRadius: '8px',
-                          padding: '8px 12px',
-                          boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
-                          zIndex: 10,
-                          pointerEvents: 'none',
-                          minWidth: '130px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '3px'
-                        }}
-                      >
-                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#FFFFFF', borderBottom: '1px solid #1B3645', paddingBottom: '3px', marginBottom: '2px' }}>
-                          {d.nomeMes}
-                        </span>
-                        {metricaEvolucao === 'FINANCEIRO' ? (
-                          <>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
-                              <span style={{ color: '#8BA6B5' }}>Receita:</span>
-                              <span style={{ color: '#2ECC71', fontWeight: 700 }}>R$ {d.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px' }}>
-                              <span style={{ color: '#8BA6B5' }}>Custo:</span>
-                              <span style={{ color: '#E74C3C', fontWeight: 700 }}>R$ {d.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', borderTop: '1px dashed #1B3645', paddingTop: '3px', marginTop: '2px' }}>
-                              <span style={{ color: '#8BA6B5' }}>Margem:</span>
-                              <span style={{ color: d.margem >= 0 ? '#10B981' : '#E74C3C', fontWeight: 800 }}>R$ {d.margem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                            <span style={{ color: '#8BA6B5' }}>Produção:</span>
-                            <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{d.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <circle
+                    key={`dot-${i}`}
+                    cx={`${x}%`}
+                    cy={`${y}%`}
+                    r="4.5"
+                    fill="#F05A22"
+                    stroke="#FFFFFF"
+                    strokeWidth="1.5"
+                  />
+                );
+              })}
+            </svg>
+          )}
 
-                    {/* Barras do Mês com Rótulos de Dados (Data Labels) */}
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '3px' }}>
+          {/* Container das Colunas dos Meses com Espaçamento Amplo */}
+          <div style={{ marginLeft: '55px', flex: 1, display: 'flex', alignItems: 'flex-end', gap: '10px', zIndex: 2, paddingBottom: '32px' }}>
+            {dadosEvolucao.map((d, i) => {
+              const isHovered = hoveredMonthIdx === i;
+              const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
+              const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
+              const custoHeightPct = Math.min(100, (d.custo / maxEvolucaoVal) * 100);
+              const metrosHeightPct = Math.min(100, (d.metros / maxEvolucaoVal) * 100);
+
+              return (
+                <div
+                  key={d.label}
+                  onMouseEnter={() => setHoveredMonthIdx(i)}
+                  onMouseLeave={() => setHoveredMonthIdx(null)}
+                  onClick={() => {
+                    if (granularidade === 'MENSAL') {
+                      setFiltroMes(d.mesNum.toString());
+                      setPeriodoRapido('CUSTOM');
+                    }
+                  }}
+                  style={{
+                    flex: 1,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    borderRadius: '8px',
+                    backgroundColor: isHovered || isSelectedMonth ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
+                    transition: 'background-color 0.2s ease',
+                    padding: '0 4px'
+                  }}
+                >
+                  {/* Tooltip Flutuante no Hover */}
+                  {isHovered && (
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        bottom: '105%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: '#0D1C24',
+                        border: '1px solid #1B3645',
+                        borderRadius: '8px',
+                        padding: '10px 14px',
+                        boxShadow: '0 10px 28px rgba(0,0,0,0.65)',
+                        zIndex: 10,
+                        pointerEvents: 'none',
+                        minWidth: '150px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}
+                    >
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#FFFFFF', borderBottom: '1px solid #1B3645', paddingBottom: '4px', marginBottom: '2px' }}>
+                        {d.nomeMes}
+                      </span>
                       {metricaEvolucao === 'FINANCEIRO' ? (
                         <>
-                          {/* Coluna Receita com Rótulo de Dados */}
-                          <div 
-                            style={{ 
-                              width: '44%', 
-                              height: '100%', 
-                              display: 'flex', 
-                              flexDirection: 'column', 
-                              justifyContent: 'flex-end', 
-                              alignItems: 'center' 
-                            }}
-                          >
-                            {/* Rótulo de Dado da Receita */}
-                            {d.receita > 0 && (
-                              <span 
-                                style={{ 
-                                  fontSize: '9.5px', 
-                                  fontWeight: 800, 
-                                  color: '#2ECC71', 
-                                  fontFamily: 'var(--font-mono)',
-                                  marginBottom: '3px',
-                                  whiteSpace: 'nowrap',
-                                  letterSpacing: '-0.3px',
-                                  lineHeight: 1
-                                }}
-                              >
-                                {formatDataLabel(d.receita, true)}
-                              </span>
-                            )}
-                            <div 
-                              style={{
-                                width: '100%',
-                                height: `${Math.max(receitaHeightPct, 2)}%`,
-                                backgroundColor: '#2ECC71',
-                                borderRadius: '3px 3px 0 0',
-                                transition: 'height 0.3s ease',
-                                opacity: d.receita > 0 ? 1 : 0.2
-                              }}
-                            />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                            <span style={{ color: '#8BA6B5' }}>Receita:</span>
+                            <span style={{ color: '#2ECC71', fontWeight: 700 }}>R$ {d.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
-
-                          {/* Coluna Custo com Rótulo de Dados */}
-                          <div 
-                            style={{ 
-                              width: '44%', 
-                              height: '100%', 
-                              display: 'flex', 
-                              flexDirection: 'column', 
-                              justifyContent: 'flex-end', 
-                              alignItems: 'center' 
-                            }}
-                          >
-                            {/* Rótulo de Dado do Custo */}
-                            {d.custo > 0 && (
-                              <span 
-                                style={{ 
-                                  fontSize: '9.5px', 
-                                  fontWeight: 800, 
-                                  color: '#E74C3C', 
-                                  fontFamily: 'var(--font-mono)',
-                                  marginBottom: '3px',
-                                  whiteSpace: 'nowrap',
-                                  letterSpacing: '-0.3px',
-                                  lineHeight: 1
-                                }}
-                              >
-                                {formatDataLabel(d.custo, true)}
-                              </span>
-                            )}
-                            <div 
-                              style={{
-                                width: '100%',
-                                height: `${Math.max(custoHeightPct, 2)}%`,
-                                backgroundColor: '#E74C3C',
-                                borderRadius: '3px 3px 0 0',
-                                transition: 'height 0.3s ease',
-                                opacity: d.custo > 0 ? 1 : 0.2
-                              }}
-                            />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                            <span style={{ color: '#8BA6B5' }}>Custo:</span>
+                            <span style={{ color: '#E74C3C', fontWeight: 700 }}>R$ {d.custo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', borderTop: '1px dashed #1B3645', paddingTop: '4px', marginTop: '2px' }}>
+                            <span style={{ color: '#8BA6B5' }}>Margem:</span>
+                            <span style={{ color: d.margem >= 0 ? '#10B981' : '#E74C3C', fontWeight: 800 }}>R$ {d.margem.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           </div>
                         </>
                       ) : (
-                        /* Coluna Metros com Rótulo de Dados */
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px' }}>
+                          <span style={{ color: '#8BA6B5' }}>Produção:</span>
+                          <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{d.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Barras do Mês com Rótulos de Dados (Data Labels) */}
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '4px' }}>
+                    {metricaEvolucao === 'FINANCEIRO' ? (
+                      <>
+                        {/* Coluna Receita com Rótulo de Dados */}
                         <div 
                           style={{ 
-                            width: '70%', 
+                            width: '46%', 
                             height: '100%', 
                             display: 'flex', 
                             flexDirection: 'column', 
@@ -1268,142 +1307,234 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                             alignItems: 'center' 
                           }}
                         >
-                          {/* Rótulo de Dado dos Metros */}
-                          {d.metros > 0 && (
+                          {/* Rótulo de Dado da Receita */}
+                          {d.receita > 0 && (
                             <span 
                               style={{ 
                                 fontSize: '10px', 
                                 fontWeight: 800, 
-                                color: 'var(--primary)', 
+                                color: '#2ECC71', 
                                 fontFamily: 'var(--font-mono)',
-                                marginBottom: '3px',
+                                marginBottom: '4px',
                                 whiteSpace: 'nowrap',
                                 letterSpacing: '-0.3px',
                                 lineHeight: 1
                               }}
                             >
-                              {formatDataLabel(d.metros, false)}
+                              {formatDataLabel(d.receita, true)}
                             </span>
                           )}
                           <div 
                             style={{
                               width: '100%',
-                              height: `${Math.max(metrosHeightPct, 2)}%`,
-                              backgroundColor: 'var(--primary)',
+                              height: `${Math.max(receitaHeightPct, 2)}%`,
+                              backgroundColor: '#2ECC71',
                               borderRadius: '4px 4px 0 0',
                               transition: 'height 0.3s ease',
-                              opacity: d.metros > 0 ? 1 : 0.2
+                              opacity: d.receita > 0 ? 1 : 0.2
                             }}
                           />
                         </div>
-                      )}
-                    </div>
 
-                    {/* Rótulo do Eixo X (Mês) */}
-                    <span 
-                      style={{
-                        position: 'absolute',
-                        bottom: '-24px',
-                        fontSize: '11px',
-                        fontWeight: isSelectedMonth ? 900 : isHovered ? 700 : 500,
-                        color: isSelectedMonth ? 'var(--primary)' : isHovered ? '#FFFFFF' : '#8BA6B5',
-                        textAlign: 'center'
-                      }}
-                    >
-                      {d.label}
-                    </span>
+                        {/* Coluna Custo com Rótulo de Dados */}
+                        <div 
+                          style={{ 
+                            width: '46%', 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            justifyContent: 'flex-end', 
+                            alignItems: 'center' 
+                          }}
+                        >
+                          {/* Rótulo de Dado do Custo */}
+                          {d.custo > 0 && (
+                            <span 
+                              style={{ 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                color: '#E74C3C', 
+                                fontFamily: 'var(--font-mono)',
+                                marginBottom: '4px',
+                                whiteSpace: 'nowrap',
+                                letterSpacing: '-0.3px',
+                                lineHeight: 1
+                              }}
+                            >
+                              {formatDataLabel(d.custo, true)}
+                            </span>
+                          )}
+                          <div 
+                            style={{
+                              width: '100%',
+                              height: `${Math.max(custoHeightPct, 2)}%`,
+                              backgroundColor: '#E74C3C',
+                              borderRadius: '4px 4px 0 0',
+                              transition: 'height 0.3s ease',
+                              opacity: d.custo > 0 ? 1 : 0.2
+                            }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      /* Coluna Metros com Rótulo de Dados */
+                      <div 
+                        style={{ 
+                          width: '65%', 
+                          height: '100%', 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          justifyContent: 'flex-end', 
+                          alignItems: 'center' 
+                        }}
+                      >
+                        {/* Rótulo de Dado dos Metros */}
+                        {d.metros > 0 && (
+                          <span 
+                            style={{ 
+                              fontSize: '10.5px', 
+                              fontWeight: 800, 
+                              color: 'var(--primary)', 
+                              fontFamily: 'var(--font-mono)',
+                              marginBottom: '4px',
+                              whiteSpace: 'nowrap',
+                              letterSpacing: '-0.3px',
+                              lineHeight: 1
+                            }}
+                          >
+                            {formatDataLabel(d.metros, false)}
+                          </span>
+                        )}
+                        <div 
+                          style={{
+                            width: '100%',
+                            height: `${Math.max(metrosHeightPct, 2)}%`,
+                            backgroundColor: 'var(--primary)',
+                            borderRadius: '5px 5px 0 0',
+                            transition: 'height 0.3s ease',
+                            opacity: d.metros > 0 ? 1 : 0.2
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
 
+                  {/* Rótulo do Eixo X (Mês) */}
+                  <span 
+                    style={{
+                      position: 'absolute',
+                      bottom: '-25px',
+                      fontSize: '11.5px',
+                      fontWeight: isSelectedMonth ? 900 : isHovered ? 800 : 600,
+                      color: isSelectedMonth ? 'var(--primary)' : isHovered ? '#FFFFFF' : '#8BA6B5',
+                      textAlign: 'center'
+                    }}
+                  >
+                    {d.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
         </div>
 
-        {/* GRÁFICO 2: DISTRIBUIÇÃO POR TIPO DE SERVIÇO (DONUT BI JLE) */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            boxShadow: 'var(--shadow-sm)',
-            minHeight: '420px'
-          }}
-        >
-          {/* Header do Gráfico */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <PieIcon size={18} color="var(--primary)" />
-                Distribuição por Segmento
-              </h3>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Participação de Saneamento, Rodovia e Telecom
-              </span>
-            </div>
+      </div>
 
-            {/* Toggle Métrica */}
-            <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
-              <button
-                type="button"
-                onClick={() => setMetricaSegmento('RECEITA')}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: metricaSegmento === 'RECEITA' ? 'var(--primary)' : 'transparent',
-                  color: metricaSegmento === 'RECEITA' ? '#FFFFFF' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Por Receita (R$)
-              </button>
-              <button
-                type="button"
-                onClick={() => setMetricaSegmento('METROS')}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: metricaSegmento === 'METROS' ? 'var(--primary)' : 'transparent',
-                  color: metricaSegmento === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Por Metros (m)
-              </button>
-            </div>
+      {/* ────────────────────────────────────────────────────────────────
+          4. GRÁFICO 2: DISTRIBUIÇÃO POR SEGMENTO (ADAPTADO EM NOVO LOCAL)
+      ────────────────────────────────────────────────────────────────── */}
+      <div 
+        style={{ 
+          width: '100%',
+          backgroundColor: 'var(--bg-card)', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: '14px', 
+          padding: '22px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '20px',
+          boxShadow: 'var(--shadow-sm)',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Header do Gráfico */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <PieIcon size={20} color="var(--primary)" />
+              Distribuição por Segmento
+            </h3>
+            <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Participação consolidada entre Saneamento, Rodovia e Telecom • Toque no card para filtrar
+            </span>
           </div>
 
-          {/* Gráfico Donut SVG + Legenda Lateral (Padrão BI JLE) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', alignItems: 'center', flex: 1 }}>
-            
-            {/* SVG Donut Ring */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-              <svg width="200" height="200" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
-                {/* Background Ring */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  fill="transparent"
-                  stroke="#1B3645"
-                  strokeWidth="12"
-                />
-                {/* Segments */}
-                {dadosSegmentos.map((item) => {
+          {/* Toggle Métrica */}
+          <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
+            <button
+              type="button"
+              onClick={() => setMetricaSegmento('RECEITA')}
+              style={{
+                padding: '5px 12px',
+                fontSize: '11px',
+                fontWeight: 700,
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: metricaSegmento === 'RECEITA' ? 'var(--primary)' : 'transparent',
+                color: metricaSegmento === 'RECEITA' ? '#FFFFFF' : 'var(--text-muted)',
+                cursor: 'pointer'
+              }}
+            >
+              Por Receita (R$)
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricaSegmento('METROS')}
+              style={{
+                padding: '5px 12px',
+                fontSize: '11px',
+                fontWeight: 700,
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: metricaSegmento === 'METROS' ? 'var(--primary)' : 'transparent',
+                color: metricaSegmento === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
+                cursor: 'pointer'
+              }}
+            >
+              Por Metros (m)
+            </button>
+          </div>
+        </div>
+
+        {/* Layout Panorâmico: Donut SVG na Esquerda + Cards Interativos na Direita */}
+        <div 
+          style={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: '28px', 
+            alignItems: 'center' 
+          }}
+        >
+          {/* Lado Esquerdo: Donut Ring Centralizado */}
+          <div style={{ flex: '0 0 auto', width: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: '210px', margin: '0 auto' }}>
+            <svg width="210" height="210" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}>
+              {/* Background Ring */}
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                fill="transparent"
+                stroke="#1B3645"
+                strokeWidth="11"
+              />
+              {/* Segments com offset calculado de forma segura e local */}
+              {(() => {
+                let runningPct = 0;
+                return dadosSegmentos.map((item) => {
                   const strokeDash = (item.pct / 100) * donutCircumference;
-                  const offset = -(accumulatedDonutPct / 100) * donutCircumference;
-                  accumulatedDonutPct += item.pct;
+                  const offset = -(runningPct / 100) * donutCircumference;
+                  runningPct += item.pct;
 
                   if (item.pct <= 0) return null;
 
@@ -1415,86 +1546,113 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       r="40"
                       fill="transparent"
                       stroke={item.color}
-                      strokeWidth="12"
+                      strokeWidth="11"
                       strokeDasharray={`${strokeDash} ${donutCircumference}`}
                       strokeDashoffset={offset}
                       style={{ transition: 'stroke-dasharray 0.5s ease' }}
                     />
                   );
-                })}
-              </svg>
+                });
+              })()}
+            </svg>
 
-              {/* Rótulo Central do Donut */}
-              <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                  Total Período
-                </span>
-                <span style={{ fontSize: '14px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)' }}>
-                  {metricaSegmento === 'RECEITA' 
-                    ? `R$ ${formatShortValue(totais.totalReceita)}` 
-                    : `${totais.totalMetros.toFixed(0)}m`}
-                </span>
-              </div>
+            {/* Rótulo Central do Donut */}
+            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
+              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                Total Período
+              </span>
+              <span style={{ fontSize: '16px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                {metricaSegmento === 'RECEITA' 
+                  ? `R$ ${formatShortValue(totais.totalReceita)}` 
+                  : `${totais.totalMetros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}m`}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, marginTop: '2px' }}>
+                {servicosFiltrados.length} obra(s)
+              </span>
             </div>
+          </div>
 
-            {/* Legenda Detalhada dos Segmentos (Padrão BI JLE) */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {dadosSegmentos.map(item => (
+          {/* Lado Direito: Cards dos 3 Segmentos em Grid Lateral */}
+          <div 
+            style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+              gap: '14px',
+              flex: '1 1 520px'
+            }}
+          >
+            {dadosSegmentos.map(item => {
+              const isFiltered = filtroSegmento === item.key;
+              return (
                 <div 
                   key={item.key}
+                  onClick={() => setFiltroSegmento(prev => prev === item.key ? 'TODOS' : item.key)}
                   style={{
-                    backgroundColor: 'var(--bg-app)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '8px',
-                    padding: '10px 12px',
+                    backgroundColor: isFiltered ? 'rgba(240, 90, 34, 0.08)' : 'var(--bg-app)',
+                    border: `1.5px solid ${isFiltered ? 'var(--primary)' : 'var(--border-color)'}`,
+                    borderRadius: '10px',
+                    padding: '14px 16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '6px'
+                    gap: '10px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isFiltered ? '0 0 12px rgba(240, 90, 34, 0.2)' : 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isFiltered) e.currentTarget.style.borderColor = item.color;
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isFiltered) e.currentTarget.style.borderColor = 'var(--border-color)';
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '13px' }}>{item.icon}</span>
-                      <strong style={{ fontSize: '12px', color: 'var(--text-main)' }}>{item.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>{item.icon}</span>
+                      <div>
+                        <strong style={{ fontSize: '13px', color: 'var(--text-main)', display: 'block' }}>{item.name}</strong>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{item.count} obra(s) ativa(s)</span>
+                      </div>
                     </div>
                     <span style={{ 
                       fontSize: '11px', 
                       fontWeight: 800, 
-                      padding: '2px 8px', 
+                      padding: '3px 8px', 
                       borderRadius: '10px', 
                       backgroundColor: `${item.color}22`, 
                       color: item.color,
-                      border: `1px solid ${item.color}44` 
+                      border: `1px solid ${item.color}55` 
                     }}>
                       {item.pct}%
                     </span>
                   </div>
 
                   {/* Barra de Progresso Horizontal Proporcional */}
-                  <div style={{ width: '100%', height: '4px', backgroundColor: '#1B3645', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ width: '100%', height: '5px', backgroundColor: '#1B3645', borderRadius: '3px', overflow: 'hidden' }}>
                     <div 
                       style={{ 
                         height: '100%', 
                         width: `${item.pct}%`, 
-                        backgroundColor: item.color,
-                        borderRadius: '2px',
+                        backgroundColor: item.color, 
+                        borderRadius: '3px',
                         transition: 'width 0.4s ease'
                       }} 
                     />
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    <span>{item.count} obra(s)</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-main)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', paddingTop: '2px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {metricaSegmento === 'RECEITA' ? 'Faturamento:' : 'Volume:'}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--text-main)' }}>
                       {metricaSegmento === 'RECEITA' 
                         ? `R$ ${item.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
                         : `${item.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m`}
                     </span>
                   </div>
                 </div>
-              ))}
-            </div>
-
+              );
+            })}
           </div>
 
         </div>
@@ -1649,8 +1807,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E74C3C' }}>
                             R$ {s.custoPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
-                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                            R$ {s.custoMetro.toFixed(2)}/m
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                            2x R$ {s.custoMetro.toFixed(2)}/m (Nav/Op)
                           </span>
                         </div>
                       </td>

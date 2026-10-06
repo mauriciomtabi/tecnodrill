@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
-import { parseBarraObservacao } from '../services/api';
+import { parseBarraObservacao, ApiService } from '../services/api';
 import { useModalBackButton } from '../hooks/useModalBackButton';
 import { decToDMSForWatermark, reverseGeocode, formatFullAddress, AddressDetails } from '../utils/watermark';
 import { 
@@ -23,7 +23,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Hash,
-  Layers
+  Layers,
+  Calendar,
+  DollarSign,
+  Save,
+  Check
 } from 'lucide-react';
 
 interface RegistroDetalhesModalProps {
@@ -33,6 +37,7 @@ interface RegistroDetalhesModalProps {
   servico?: Servico | null;
   isGestor?: boolean;
   onDelete?: (barraId: string) => void;
+  onBarraUpdated?: (updatedBarra: Barra) => void;
 }
 
 export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
@@ -41,13 +46,17 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   barra,
   servico,
   isGestor = false,
-  onDelete
+  onDelete,
+  onBarraUpdated
 }) => {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isPhotoFullscreen, setIsPhotoFullscreen] = useState(false);
   const [dynamicAddress, setDynamicAddress] = useState<string | null>(null);
   const [loadingAddress, setLoadingAddress] = useState<boolean>(false);
+  const [mesRef, setMesRef] = useState<string>('');
+  const [savingMesRef, setSavingMesRef] = useState(false);
+  const [mesRefSaved, setMesRefSaved] = useState(false);
 
   // Trata botão nativo de voltar do celular (se tela cheia, fecha fullscreen; senão fecha modal)
   useModalBackButton(
@@ -71,6 +80,8 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     setActivePhotoIndex(0);
     setZoom(1);
     setRotation(0);
+    setMesRef(barra?.mes_referencia || barraMeta.mes_referencia || '');
+    setMesRefSaved(false);
   }, [barra?.id]);
 
   // Dynamic reverse geocoding for existing records that don't have endereco pre-saved
@@ -143,7 +154,47 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     a.click();
   };
 
+  const handleSaveMesReferencia = async () => {
+    if (!barra) return;
+    setSavingMesRef(true);
+    try {
+      const updated = await ApiService.updateBarra(barra.id, {
+        mes_referencia: mesRef || undefined
+      });
+      setMesRefSaved(true);
+      setTimeout(() => setMesRefSaved(false), 2500);
+      if (onBarraUpdated) {
+        onBarraUpdated(updated);
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar mês de referência:', err);
+    } finally {
+      setSavingMesRef(false);
+    }
+  };
+
   const isBox = effectiveTipoRegistro === 'CAIXA' || (Boolean(barra.tem_caixa) && !effectiveDiametro);
+  const m = isBox ? 0 : (barra.metros !== undefined && barra.metros !== null ? Number(barra.metros) : 3);
+
+  let valorBarra = 0;
+  let custoBarra = 0;
+  if (servico) {
+    if (servico.cenario_financeiro === 'VALOR_METRO') {
+      valorBarra = m * (Number(servico.valor_metro) || 0);
+    } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+      const diamDefault = Number(servico.diametro_furo_mm) || 150;
+      const fator = Number(servico.fator_financeiro) || 0.8;
+      const numDiam = parseFloat(String(effectiveDiametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+      valorBarra = m * fator * numDiam;
+    } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
+      const prev = Number(servico.metragem_prevista_total) || 1000;
+      valorBarra = prev > 0 ? (m / prev) * (Number(servico.valor_total_fechado) || 0) : 0;
+    }
+    // Regra Oficial de Custo: Multiplicado sempre por 2 (50% Navegador / 50% Operador)
+    const custoMetro = Number(servico.custo_metro) || 0;
+    custoBarra = m * custoMetro * 2;
+  }
+
   const dataFormatada = barra.created_at || barra.data_registro || barra.horario_registro
     ? new Date(barra.created_at || barra.data_registro || barra.horario_registro!).toLocaleString('pt-BR')
     : new Date().toLocaleString('pt-BR');
@@ -553,7 +604,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                 <div>
                   <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>CADASTRADO POR</span>
                   <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
-                    {servico?.navegador_nome || servico?.operador_nome || 'Equipe TecnoDrill'}
+                    {barra.registrado_por_nome || barraMeta.registrado_por_nome || servico?.navegador_nome || servico?.operador_nome || 'Equipe TecnoDrill'}
                   </span>
                 </div>
               </div>
@@ -566,6 +617,90 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{dataFormatada}</span>
                 </div>
               </div>
+
+              {/* Mês de Referência (Competência Retroativa) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Calendar size={16} style={{ color: '#9B59B6', flexShrink: 0 }} />
+                  <div>
+                    <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>MÊS DE REFERÊNCIA (COMPETÊNCIA)</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      {mesRef ? mesRef : (barra.created_at ? barra.created_at.slice(0, 7) : 'Não definido')}
+                    </span>
+                  </div>
+                </div>
+
+                {isGestor && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="month"
+                      value={mesRef}
+                      onChange={(e) => setMesRef(e.target.value)}
+                      style={{
+                        fontSize: '11.5px',
+                        backgroundColor: 'var(--bg-app)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        color: '#FFFFFF'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={savingMesRef}
+                      onClick={handleSaveMesReferencia}
+                      title="Salvar alteração retroativa de mês"
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: mesRefSaved ? 'var(--success)' : 'var(--primary)',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: savingMesRef ? 'wait' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      {mesRefSaved ? <Check size={12} /> : <Save size={12} />}
+                      <span>{mesRefSaved ? 'Salvo!' : savingMesRef ? 'Salvando...' : 'Alterar'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Informações Financeiras (Apenas Gestores - Confidencial) */}
+              {isGestor && valorBarra > 0 && (
+                <div style={{
+                  backgroundColor: 'rgba(46, 204, 113, 0.08)',
+                  border: '1px solid rgba(46, 204, 113, 0.25)',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  marginTop: '2px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                      Retorno Financeiro deste Registro
+                    </span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#2ECC71', fontFamily: 'var(--font-mono)' }}>
+                      R$ {valorBarra.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '6px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      Custo Operacional Equipe (2x)
+                    </span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#E74C3C', fontFamily: 'var(--font-mono)' }}>
+                      R$ {custoBarra.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (50% Nav / 50% Op)
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Localização GPS (Coordenadas DMS) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
