@@ -34,7 +34,16 @@ export class OfflineSyncService {
       timestamp: Date.now()
     };
     queue.push(item);
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(queue));
+    try {
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(queue));
+    } catch (err) {
+      console.warn('[OfflineSync] Limite de armazenamento local excedido. Otimizando fila:', err);
+      // Se estourar a cota de 5MB do localStorage, preserva os dados técnicos do registro
+      item.barraData = { ...barraData, fotos: [], foto_url: undefined };
+      try {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(queue));
+      } catch (_) {}
+    }
     return item;
   }
 

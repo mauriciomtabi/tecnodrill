@@ -47,9 +47,6 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   onSubmit,
   loading = false
 }) => {
-  // Trata botão nativo de voltar do celular
-  useModalBackButton(isOpen, onClose, 'rodEntry');
-
   // Step 0: Escolha Tipo (Canalização vs Caixa)
   // Step 1: Captura de Fotos (mínimo obrigatório + adicionais)
   // Step 2: Dados Técnicos (Canalização: diâmetro, metros, caixa, OS se saneamento)
@@ -61,7 +58,6 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   // Fotos
   const [fotosList, setFotosList] = useState<string[]>([]);
-  const [rawPhotoBase64, setRawPhotoBase64] = useState<string | null>(null);
 
   // Dados Técnicos
   const [diametro, setDiametro] = useState<string>(() => {
@@ -88,8 +84,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
-  // Raw photos list for re-watermarking when address is edited
-  const [rawPhotosList, setRawPhotosList] = useState<string[]>([]);
+  // Ref para fotos brutas (evita duplicar megabytes em re-renderizações de estado do React)
+  const rawPhotosListRef = useRef<string[]>([]);
   const [showAddressEditModal, setShowAddressEditModal] = useState<boolean>(false);
   const [editRua, setEditRua] = useState<string>('');
   const [editNumero, setEditNumero] = useState<string>('');
@@ -140,8 +136,20 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     setStartingCamera(false);
   }, []);
 
-  // Hook para botão nativo voltar do celular fechar a câmera se estiver aberta
-  useModalBackButton(showInAppCamera, stopInAppCamera, 'inAppCamera');
+  // Trata botão nativo de voltar do celular de forma hierárquica e unificada (SEM conflito de popstate)
+  const handleModalCloseOrBack = useCallback(() => {
+    if (showInAppCamera) {
+      stopInAppCamera();
+      return;
+    }
+    if (step > 0 && step < 4) {
+      setStep((prev) => (prev - 1) as any);
+      return;
+    }
+    onClose();
+  }, [showInAppCamera, step, stopInAppCamera, onClose]);
+
+  useModalBackButton(isOpen, handleModalCloseOrBack, 'rodEntry');
 
   const minFotos = servico?.min_fotos_registro ? Math.max(1, servico.min_fotos_registro) : 2;
   const isSaneamento = servico?.tipo_servico === 'SANEAMENTO';
@@ -191,8 +199,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setCurrentBarraNumber(nextBarraNumber);
       setTipoRegistro('CANALIZACAO');
       setFotosList([]);
-      setRawPhotosList([]);
-      setRawPhotoBase64(null);
+      rawPhotosListRef.current = [];
       const defaultDiam = servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm';
       setDiametro(defaultDiam);
       setCustomDiametro('');
@@ -231,12 +238,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     setAddressDetails(updated);
     setShowAddressEditModal(false);
 
-    if (rawPhotosList.length > 0) {
+    if (rawPhotosListRef.current.length > 0) {
       setProcessingWatermark(true);
       setStatusMessage('Atualizando carimbo das fotos com o novo endereço...');
       try {
         const rewatermarked = await Promise.all(
-          rawPhotosList.map(raw => applyTecnodrillWatermark(
+          rawPhotosListRef.current.map(raw => applyTecnodrillWatermark(
             raw,
             latitude,
             longitude,
@@ -338,25 +345,27 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const processAndAddPhoto = async (rawBase64: string) => {
     setProcessingWatermark(true);
     setStatusMessage('Aplicando carimbo oficial e coordenadas...');
-    setRawPhotoBase64(rawBase64);
 
     try {
       let curLat = latitude;
       let curLon = longitude;
       let curAddr = addressDetails;
 
-      if (curLat === null || curLon === null || curAddr === null) {
-        setStatusMessage('Obtendo coordenadas GPS de alta precisão...');
+      if (curLat === null || curLon === null) {
+        setStatusMessage('Obtendo coordenadas GPS...');
         if (locationPromiseRef.current) {
           const locResult = await Promise.race([
             locationPromiseRef.current,
-            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 4500))
+            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
           ]);
           if (locResult.lat !== null) curLat = locResult.lat;
           if (locResult.lon !== null) curLon = locResult.lon;
           if (locResult.addr !== null) curAddr = locResult.addr;
         } else {
-          const locResult = await captureLocation();
+          const locResult = await Promise.race([
+            captureLocation(),
+            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
+          ]);
           if (locResult.lat !== null) curLat = locResult.lat;
           if (locResult.lon !== null) curLon = locResult.lon;
           if (locResult.addr !== null) curAddr = locResult.addr;
@@ -364,14 +373,16 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       }
 
       if (curLat !== null && curLon !== null && !curAddr) {
-        setStatusMessage('Identificando endereço oficial...');
-        curAddr = await reverseGeocode(curLat, curLon);
+        curAddr = await Promise.race([
+          reverseGeocode(curLat, curLon),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+        ]);
         if (curAddr) {
           setAddressDetails(curAddr);
         }
       }
 
-      setStatusMessage('Estampando carimbo com geolocalização...');
+      setStatusMessage('Estampando carimbo oficial...');
       const watermarked = await applyTecnodrillWatermark(
         rawBase64,
         curLat,
@@ -383,11 +394,11 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       );
 
       setFotosList((prev) => [...prev, watermarked]);
-      setRawPhotosList((prev) => [...prev, rawBase64]);
+      rawPhotosListRef.current.push(rawBase64);
     } catch (err) {
       console.error('[Watermark Error]:', err);
       setFotosList((prev) => [...prev, rawBase64]);
-      setRawPhotosList((prev) => [...prev, rawBase64]);
+      rawPhotosListRef.current.push(rawBase64);
     } finally {
       setProcessingWatermark(false);
       setStatusMessage('');
@@ -396,16 +407,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const takePhotoFromCamera = async () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      console.warn('[Camera] Vídeo ainda não está pronto ou sem dimensões');
+      return;
+    }
 
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       try { navigator.vibrate(50); } catch (_) {}
     }
 
-    const vWidth = video.videoWidth || 1280;
-    const vHeight = video.videoHeight || 720;
+    const vWidth = video.videoWidth;
+    const vHeight = video.videoHeight;
 
-    const maxDim = 1600;
+    const maxDim = 1280;
     let targetW = vWidth;
     let targetH = vHeight;
     if (targetW > maxDim || targetH > maxDim) {
@@ -430,7 +444,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     }
     ctx.drawImage(video, 0, 0, targetW, targetH);
 
-    const capturedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+    let capturedBase64 = '';
+    try {
+      capturedBase64 = canvas.toDataURL('image/jpeg', 0.80);
+    } catch (e) {
+      console.error('[Camera Canvas Error]:', e);
+      return;
+    }
 
     // Para o stream imediatamente para liberar RAM e hardware de câmera do celular
     stopInAppCamera();
@@ -439,7 +459,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     await processAndAddPhoto(capturedBase64);
   };
 
-  const compressImageFile = async (file: File, maxDim: number = 1600): Promise<string> => {
+  const compressImageFile = async (file: File, maxDim: number = 1280): Promise<string> => {
     if (typeof window !== 'undefined' && 'createImageBitmap' in window) {
       try {
         const bitmap = await createImageBitmap(file);
@@ -460,7 +480,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         if (ctx) {
           ctx.drawImage(bitmap, 0, 0, width, height);
           bitmap.close();
-          return canvas.toDataURL('image/jpeg', 0.85);
+          return canvas.toDataURL('image/jpeg', 0.80);
         }
         bitmap.close();
       } catch (err) {
@@ -489,7 +509,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.85));
+          resolve(canvas.toDataURL('image/jpeg', 0.80));
         } else {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target?.result as string);
@@ -519,7 +539,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     setStatusMessage('Otimizando imagem na memória...');
 
     try {
-      const compressedBase64 = await compressImageFile(file, 1600);
+      const compressedBase64 = await compressImageFile(file, 1280);
       await processAndAddPhoto(compressedBase64);
     } catch (err) {
       console.error('[Photo Compress Error]:', err);
@@ -538,7 +558,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   const handleRemovePhoto = (index: number) => {
     setFotosList(prev => prev.filter((_, i) => i !== index));
-    setRawPhotosList(prev => prev.filter((_, i) => i !== index));
+    rawPhotosListRef.current = rawPhotosListRef.current.filter((_, i) => i !== index);
   };
 
   const getEffectiveDiametro = () => {
@@ -547,6 +567,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handleSaveCaixaDireto = async () => {
+    if (submitting) return;
     if (fotosList.length < minFotos) return;
     if (isOsRequired && !numeroOs.trim()) return;
 
@@ -591,6 +612,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    if (submitting) return;
     if (isOsRequired && !numeroOs.trim()) return;
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     const finalDiametro = getEffectiveDiametro();
@@ -1089,10 +1111,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
                 <button
                   type="button"
-                  disabled={fotosList.length < minFotos || (isOsRequired && !numeroOs.trim()) || submitting}
+                  disabled={fotosList.length < minFotos || (isOsRequired && !numeroOs.trim()) || submitting || processingWatermark}
                   onClick={handleSaveCaixaDireto}
                   style={{
-                    backgroundColor: (fotosList.length >= minFotos && (!isOsRequired || numeroOs.trim())) ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)',
+                    backgroundColor: (fotosList.length >= minFotos && (!isOsRequired || numeroOs.trim()) && !processingWatermark) ? 'var(--success)' : 'rgba(255, 255, 255, 0.1)',
                     color: '#FFFFFF',
                     fontWeight: 800,
                     fontSize: '13.5px',
@@ -1124,11 +1146,11 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
                 <button
                   type="button"
-                  disabled={fotosList.length < minFotos}
+                  disabled={fotosList.length < minFotos || processingWatermark}
                   onClick={() => setStep(2)}
                   style={{
                     width: '100%',
-                    backgroundColor: fotosList.length >= minFotos ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)',
+                    backgroundColor: (fotosList.length >= minFotos && !processingWatermark) ? 'var(--primary)' : 'rgba(255, 255, 255, 0.1)',
                     color: '#FFFFFF',
                     fontWeight: 700,
                     fontSize: '13.5px',

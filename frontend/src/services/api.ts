@@ -160,29 +160,42 @@ export class ApiService {
       return base64Data || '';
     }
     try {
-      const mimeMatch = base64Data.match(/^data:(image\/[a-zA-Z0-9.+]+);base64,/);
-      const contentType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-      const base64Clean = base64Data.replace(/^data:image\/[a-zA-Z0-9.+]+;base64,/, '');
-      
-      const byteCharacters = atob(base64Clean);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Conversão nativa ultrarrápida (sem alocar milhões de elementos na heap do V8)
+      let blob: Blob;
+      try {
+        const res = await fetch(base64Data);
+        blob = await res.blob();
+      } catch {
+        const mimeMatch = base64Data.match(/^data:(image\/[a-zA-Z0-9.+]+);base64,/);
+        const contentType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const base64Clean = base64Data.replace(/^data:image\/[a-zA-Z0-9.+]+;base64,/, '');
+        const binaryStr = atob(base64Clean);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        blob = new Blob([bytes], { type: contentType });
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: contentType });
 
       const fileName = `furo_${furoId}/${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
 
-      const { error } = await supabase.storage
+      // Timeout de 7s para não travar caso a conexão 3G/4G no campo oscile
+      const uploadPromise = supabase.storage
         .from('tecnodrill-fotos')
         .upload(fileName, blob, {
-          contentType,
+          contentType: blob.type || 'image/jpeg',
           upsert: true
         });
 
-      if (error) {
-        console.warn('[UploadFoto Storage Error]:', error);
+      const timeoutPromise = new Promise<{ error: Error }>((resolve) =>
+        setTimeout(() => resolve({ error: new Error('Upload timeout') }), 7000)
+      );
+
+      const result: any = await Promise.race([uploadPromise, timeoutPromise]);
+
+      if (result?.error) {
+        console.warn('[UploadFoto Storage Error]:', result.error);
         return base64Data;
       }
 
