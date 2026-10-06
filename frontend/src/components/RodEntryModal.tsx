@@ -809,6 +809,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 <ImageIcon size={16} />
                 <span>Escolher da Galeria</span>
               </button>
+
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.35, padding: '0 4px' }}>
+                💡 Dica: Se o celular fechar por pouca memória ao abrir a câmera direta, tire a foto pela câmera do celular e use <strong>Escolher da Galeria</strong>.
+              </span>
             </div>
 
             {/* Fluxo Especial para INSTALAÇÃO DE CAIXA: só tira fotos e salva */}

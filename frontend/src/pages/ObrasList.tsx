@@ -57,7 +57,7 @@ export const ObrasList: React.FC<ObrasListProps> = ({
         try {
           const { data: bData } = await supabase
             .from('tecnodrill_barras')
-            .select('*');
+            .select('id, furo_id, metros, tipo_registro, tem_caixa, diametro, observacao, registrado_por, mes_referencia, data_referencia, horario_registro');
           if (bData) {
             const map: Record<string, Barra[]> = {};
             for (const b of bData) {
