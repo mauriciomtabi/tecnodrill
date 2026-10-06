@@ -45,6 +45,7 @@ export interface BarraMetaTag {
   usuario_perfil?: string;
   mes_referencia?: string;
   data_referencia?: string;
+  endereco?: string;
 }
 
 export function parseBarraObservacao(raw?: string | null): { observacao: string; meta: BarraMetaTag } {
@@ -1313,7 +1314,7 @@ export class ApiService {
         fotos: allFotos,
         latitude: b.latitude ? Number(b.latitude) : undefined,
         longitude: b.longitude ? Number(b.longitude) : undefined,
-        endereco: b.endereco || undefined,
+        endereco: (b as any).endereco || meta.endereco || undefined,
         observacao: cleanObs,
         horario_registro: b.horario_registro,
         registrado_por: b.registrado_por || meta.registrado_por_id || undefined,
@@ -1378,7 +1379,7 @@ export class ApiService {
         fotos: allFotos,
         latitude: b.latitude ? Number(b.latitude) : undefined,
         longitude: b.longitude ? Number(b.longitude) : undefined,
-        endereco: b.endereco || undefined,
+        endereco: (b as any).endereco || meta.endereco || undefined,
         observacao: cleanObs,
         horario_registro: b.horario_registro
       });
@@ -1454,7 +1455,8 @@ export class ApiService {
       registrado_por_nome: usuarioAtual?.nome,
       usuario_perfil: usuarioAtual?.perfil,
       mes_referencia: defaultMesRef,
-      data_referencia: defaultDataRef
+      data_referencia: defaultDataRef,
+      endereco: data.endereco || undefined
     });
 
     const supabaseBarraPayload: any = {
@@ -1465,7 +1467,6 @@ export class ApiService {
       tem_caixa: Boolean(data.tem_caixa || isCaixaRegistro),
       diametro: isCaixaRegistro ? '' : (data.diametro || null),
       numero_os: data.numero_os || null,
-      endereco: data.endereco || null,
       registrado_por: usuarioAtual?.id || null,
       angulo_pitch: data.angulo_pitch || '',
       profundidade_cm: Number(data.profundidade_cm) || 0,
@@ -1493,7 +1494,8 @@ export class ApiService {
         registrado_por: res1.data.registrado_por || usuarioAtual?.id,
         registrado_por_nome: usuarioAtual?.nome,
         mes_referencia: defaultMesRef,
-        data_referencia: defaultDataRef
+        data_referencia: defaultDataRef,
+        endereco: data.endereco || undefined
       };
     }
 
@@ -1621,7 +1623,8 @@ export class ApiService {
       mes_referencia: updates.mes_referencia !== undefined ? updates.mes_referencia : meta.mes_referencia,
       data_referencia: updates.data_referencia !== undefined ? updates.data_referencia : meta.data_referencia,
       registrado_por_id: updates.registrado_por !== undefined ? updates.registrado_por : meta.registrado_por_id,
-      registrado_por_nome: updates.registrado_por_nome !== undefined ? updates.registrado_por_nome : meta.registrado_por_nome
+      registrado_por_nome: updates.registrado_por_nome !== undefined ? updates.registrado_por_nome : meta.registrado_por_nome,
+      endereco: updates.endereco !== undefined ? updates.endereco : meta.endereco
     };
 
     const encodedObs = buildBarraObservacao(updates.observacao !== undefined ? updates.observacao : cleanObs, newMeta);
@@ -1632,7 +1635,6 @@ export class ApiService {
     if (updates.diametro !== undefined) dbPayload.diametro = updates.diametro;
     if (updates.metros !== undefined) dbPayload.metros = updates.metros;
     if (updates.numero_os !== undefined) dbPayload.numero_os = updates.numero_os;
-    if (updates.endereco !== undefined) dbPayload.endereco = updates.endereco;
     if (updates.registrado_por !== undefined) dbPayload.registrado_por = updates.registrado_por;
 
     const { data: updated, error: updateErr } = await supabase

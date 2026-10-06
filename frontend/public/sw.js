@@ -32,7 +32,7 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.url.includes('/api/')) {
+  if (!e.request.url.startsWith('http') || e.request.url.includes('/api/')) {
     return;
   }
   

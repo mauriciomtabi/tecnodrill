@@ -25,7 +25,8 @@ import {
   Wrench,
   Trash2,
   ArrowRight,
-  Edit3
+  Edit3,
+  AlertCircle
 } from 'lucide-react';
 
 interface RodEntryModalProps {
@@ -83,6 +84,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [processingWatermark, setProcessingWatermark] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Ref para fotos brutas (evita duplicar megabytes em re-renderizações de estado do React)
   const rawPhotosListRef = useRef<string[]>([]);
@@ -209,6 +211,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setObservacao('');
       setAddressDetails(null);
       setStatusMessage('');
+      setSubmitError(null);
       setSavedSuccessData(null);
       setShowAddressEditModal(false);
       captureLocation();
@@ -573,6 +576,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const payload: Partial<Barra> = {
@@ -604,8 +608,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       });
 
       setStep(4);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao enviar instalação de caixa:', err);
+      setSubmitError(err?.message || 'Erro ao transmitir registro para o servidor. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -617,6 +622,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     const finalDiametro = getEffectiveDiametro();
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const payload: Partial<Barra> = {
@@ -650,8 +656,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       });
 
       setStep(4);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao enviar apontamento:', err);
+      setSubmitError(err?.message || 'Erro ao transmitir registro para o servidor. Tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -662,7 +669,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     setCurrentBarraNumber(nextNum);
     setTipoRegistro('CANALIZACAO');
     setFotosList([]);
-    setRawPhotoBase64(null);
+    rawPhotosListRef.current = [];
+    setSubmitError(null);
     setMetros(3);
     setTemCaixa(false);
     setObservacao('');
@@ -1109,6 +1117,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                   />
                 </div>
 
+                {submitError && (
+                  <div style={{ backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '10px 14px', color: '#FF7675', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                    <span>{submitError}</span>
+                  </div>
+                )}
+
                 <button
                   type="button"
                   disabled={fotosList.length < minFotos || (isOsRequired && !numeroOs.trim()) || submitting || processingWatermark}
@@ -1503,6 +1518,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {submitError && (
+              <div style={{ backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '10px 14px', color: '#FF7675', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{submitError}</span>
+              </div>
+            )}
 
             {/* Confirm and Submit Button */}
             <button

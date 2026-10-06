@@ -134,7 +134,6 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
         };
         setBarras(prev => [...prev, novaBarraLocal]);
         showToast('Apontamento salvo em cache offline.', 'info');
-        setShowAddBarraModal(false);
         return;
       }
 
