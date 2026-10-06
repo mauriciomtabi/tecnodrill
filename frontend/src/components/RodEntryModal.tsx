@@ -109,9 +109,39 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     fotos: string[];
   } | null>(null);
 
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const locationPromiseRef = useRef<Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> | null>(null);
+
+  // Câmera Integrada In-App (getUserMedia) para evitar crash de memória / LMK no Android
+  const [showInAppCamera, setShowInAppCamera] = useState<boolean>(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [startingCamera, setStartingCamera] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopInAppCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn('[Camera] erro ao interromper track:', e);
+        }
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraStream(null);
+    setShowInAppCamera(false);
+    setStartingCamera(false);
+  }, []);
+
+  // Hook para botão nativo voltar do celular fechar a câmera se estiver aberta
+  useModalBackButton(showInAppCamera, stopInAppCamera, 'inAppCamera');
 
   const minFotos = servico?.min_fotos_registro ? Math.max(1, servico.min_fotos_registro) : 2;
   const isSaneamento = servico?.tipo_servico === 'SANEAMENTO';
@@ -226,6 +256,258 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     }
   };
 
+  const startInAppCamera = async (facing: 'environment' | 'user' = cameraFacingMode) => {
+    // Se o navegador não suportar getUserMedia (ou não for contexto seguro)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      galleryInputRef.current?.click();
+      return;
+    }
+
+    // Interrompe stream anterior se houver
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+
+    setShowInAppCamera(true);
+    setStartingCamera(true);
+    setCameraError(null);
+    setCameraFacingMode(facing);
+
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 }
+          }
+        });
+      } catch {
+        // Fallback com restrições mínimas
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: facing }
+        });
+      }
+
+      streamRef.current = stream;
+      setCameraStream(stream);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch((e) => console.warn('Video play error:', e));
+      }
+    } catch (err: any) {
+      console.error('[InAppCamera Error]:', err);
+      setCameraError('Permissão para acessar a câmera negada ou não disponível no dispositivo.');
+    } finally {
+      setStartingCamera(false);
+    }
+  };
+
+  const toggleCameraFacing = () => {
+    const nextFacing = cameraFacingMode === 'environment' ? 'user' : 'environment';
+    startInAppCamera(nextFacing);
+  };
+
+  useEffect(() => {
+    if (showInAppCamera && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch((e) => console.warn('Video play error in effect:', e));
+    }
+  }, [showInAppCamera, cameraStream]);
+
+  // Limpa streams se o modal for fechado ou ao desmontar
+  useEffect(() => {
+    if (!isOpen && showInAppCamera) {
+      stopInAppCamera();
+    }
+  }, [isOpen, showInAppCamera, stopInAppCamera]);
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  const processAndAddPhoto = async (rawBase64: string) => {
+    setProcessingWatermark(true);
+    setStatusMessage('Aplicando carimbo oficial e coordenadas...');
+    setRawPhotoBase64(rawBase64);
+
+    try {
+      let curLat = latitude;
+      let curLon = longitude;
+      let curAddr = addressDetails;
+
+      if (curLat === null || curLon === null || curAddr === null) {
+        setStatusMessage('Obtendo coordenadas GPS de alta precisão...');
+        if (locationPromiseRef.current) {
+          const locResult = await Promise.race([
+            locationPromiseRef.current,
+            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 4500))
+          ]);
+          if (locResult.lat !== null) curLat = locResult.lat;
+          if (locResult.lon !== null) curLon = locResult.lon;
+          if (locResult.addr !== null) curAddr = locResult.addr;
+        } else {
+          const locResult = await captureLocation();
+          if (locResult.lat !== null) curLat = locResult.lat;
+          if (locResult.lon !== null) curLon = locResult.lon;
+          if (locResult.addr !== null) curAddr = locResult.addr;
+        }
+      }
+
+      if (curLat !== null && curLon !== null && !curAddr) {
+        setStatusMessage('Identificando endereço oficial...');
+        curAddr = await reverseGeocode(curLat, curLon);
+        if (curAddr) {
+          setAddressDetails(curAddr);
+        }
+      }
+
+      setStatusMessage('Estampando carimbo com geolocalização...');
+      const watermarked = await applyTecnodrillWatermark(
+        rawBase64,
+        curLat,
+        curLon,
+        curAddr,
+        new Date(),
+        servico?.logo_cliente || null,
+        servico?.logo_escala || 1.0
+      );
+
+      setFotosList((prev) => [...prev, watermarked]);
+      setRawPhotosList((prev) => [...prev, rawBase64]);
+    } catch (err) {
+      console.error('[Watermark Error]:', err);
+      setFotosList((prev) => [...prev, rawBase64]);
+      setRawPhotosList((prev) => [...prev, rawBase64]);
+    } finally {
+      setProcessingWatermark(false);
+      setStatusMessage('');
+    }
+  };
+
+  const takePhotoFromCamera = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(50); } catch (_) {}
+    }
+
+    const vWidth = video.videoWidth || 1280;
+    const vHeight = video.videoHeight || 720;
+
+    const maxDim = 1600;
+    let targetW = vWidth;
+    let targetH = vHeight;
+    if (targetW > maxDim || targetH > maxDim) {
+      if (targetW > targetH) {
+        targetH = Math.round((targetH * maxDim) / targetW);
+        targetW = maxDim;
+      } else {
+        targetW = Math.round((targetW * maxDim) / targetH);
+        targetH = maxDim;
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (cameraFacingMode === 'user') {
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, targetW, targetH);
+
+    const capturedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+    // Para o stream imediatamente para liberar RAM e hardware de câmera do celular
+    stopInAppCamera();
+
+    // Processa carimbo oficial e salva na lista
+    await processAndAddPhoto(capturedBase64);
+  };
+
+  const compressImageFile = async (file: File, maxDim: number = 1600): Promise<string> => {
+    if (typeof window !== 'undefined' && 'createImageBitmap' in window) {
+      try {
+        const bitmap = await createImageBitmap(file);
+        let { width, height } = bitmap;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(bitmap, 0, 0, width, height);
+          bitmap.close();
+          return canvas.toDataURL('image/jpeg', 0.85);
+        }
+        bitmap.close();
+      } catch (err) {
+        console.warn('[compressImageFile] fallback to standard image loader:', err);
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } else {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      };
+      img.src = objectUrl;
+    });
+  };
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -234,74 +516,24 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     e.target.value = '';
 
     setProcessingWatermark(true);
-    setStatusMessage('Carregando foto e aplicando carimbo oficial...');
+    setStatusMessage('Otimizando imagem na memória...');
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const rawBase64 = event.target?.result as string;
-      if (!rawBase64) {
-        setProcessingWatermark(false);
-        setStatusMessage('');
-        return;
-      }
-
-      setRawPhotoBase64(rawBase64);
-
-      try {
-        let curLat = latitude;
-        let curLon = longitude;
-        let curAddr = addressDetails;
-
-        if (curLat === null || curLon === null || curAddr === null) {
-          setStatusMessage('Obtendo coordenadas GPS de alta precisão...');
-          if (locationPromiseRef.current) {
-            const locResult = await Promise.race([
-              locationPromiseRef.current,
-              new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 4500))
-            ]);
-            if (locResult.lat !== null) curLat = locResult.lat;
-            if (locResult.lon !== null) curLon = locResult.lon;
-            if (locResult.addr !== null) curAddr = locResult.addr;
-          } else {
-            const locResult = await captureLocation();
-            if (locResult.lat !== null) curLat = locResult.lat;
-            if (locResult.lon !== null) curLon = locResult.lon;
-            if (locResult.addr !== null) curAddr = locResult.addr;
-          }
+    try {
+      const compressedBase64 = await compressImageFile(file, 1600);
+      await processAndAddPhoto(compressedBase64);
+    } catch (err) {
+      console.error('[Photo Compress Error]:', err);
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const raw = ev.target?.result as string;
+        if (raw) await processAndAddPhoto(raw);
+        else {
+          setProcessingWatermark(false);
+          setStatusMessage('');
         }
-
-        if (curLat !== null && curLon !== null && !curAddr) {
-          setStatusMessage('Identificando endereço oficial...');
-          curAddr = await reverseGeocode(curLat, curLon);
-          if (curAddr) {
-            setAddressDetails(curAddr);
-          }
-        }
-
-        setStatusMessage('Estampando carimbo oficial...');
-        const watermarked = await applyTecnodrillWatermark(
-          rawBase64,
-          curLat,
-          curLon,
-          curAddr,
-          new Date(),
-          servico?.logo_cliente || null,
-          servico?.logo_escala || 1.0
-        );
-
-        setFotosList(prev => [...prev, watermarked]);
-        setRawPhotosList(prev => [...prev, rawBase64]);
-      } catch (err) {
-        console.error('[Watermark Error]:', err);
-        setFotosList(prev => [...prev, rawBase64]);
-        setRawPhotosList(prev => [...prev, rawBase64]);
-      } finally {
-        setProcessingWatermark(false);
-        setStatusMessage('');
-      }
-    };
-
-    reader.readAsDataURL(file);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemovePhoto = (index: number) => {
@@ -418,8 +650,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   return createPortal(
-    <div 
-      style={{
+    <>
+      <div 
+        style={{
         position: 'fixed',
         inset: 0,
         top: 0,
@@ -436,15 +669,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         boxSizing: 'border-box'
       }}
     >
-      {/* Hidden File Inputs */}
-      <input
-        type="file"
-        ref={cameraInputRef}
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handlePhotoUpload}
-      />
+      {/* Hidden File Input (sem capture="environment" para nunca acionar o app de câmera pesado do Android) */}
       <input
         type="file"
         ref={galleryInputRef}
@@ -757,7 +982,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               <button
                 type="button"
                 disabled={processingWatermark}
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => startInAppCamera('environment')}
                 style={{
                   backgroundColor: 'var(--primary)',
                   color: '#FFFFFF',
@@ -782,7 +1007,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 ) : (
                   <>
                     <Camera size={18} />
-                    <span>{fotosList.length === 0 ? 'Tirar Foto (Câmera)' : '+ Tirar Outra Foto'}</span>
+                    <span>{fotosList.length === 0 ? 'Tirar Foto (Câmera Integrada)' : '+ Tirar Outra Foto'}</span>
                   </>
                 )}
               </button>
@@ -810,8 +1035,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 <span>Escolher da Galeria</span>
               </button>
 
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.35, padding: '0 4px' }}>
-                💡 Dica: Se o celular fechar por pouca memória ao abrir a câmera direta, tire a foto pela câmera do celular e use <strong>Escolher da Galeria</strong>.
+              <span style={{ fontSize: '11px', color: '#27AE60', textAlign: 'center', lineHeight: 1.35, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <CheckCircle2 size={12} /> Câmera integrada do sistema: fotos instantâneas e sem sobrecarregar a memória do celular.
               </span>
             </div>
 
@@ -1546,7 +1771,338 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           </div>
         )}
       </div>
-    </div>,
+
+      {/* FULLSCREEN IN-APP CAMERA OVERLAY (100% no navegador, sem app externo, sem estouro de memória) */}
+      {showInAppCamera && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: '#000000',
+            zIndex: 10000000,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            overflow: 'hidden'
+          }}
+        >
+          {/* Top Bar */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '74px',
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 16px',
+              zIndex: 20
+            }}
+          >
+            <button
+              type="button"
+              onClick={stopInAppCamera}
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Fechar câmera"
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', letterSpacing: '0.8px', textTransform: 'uppercase' }}>
+                Câmera TecnoDrill
+              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>
+                {tipoRegistro === 'CANALIZACAO' ? `Barra Nº ${currentBarraNumber}` : 'Instalação de Caixa'} • Foto {fotosList.length + 1} de {minFotos}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleCameraFacing}
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Alternar Câmera Frontal / Traseira"
+            >
+              <RefreshCw size={18} />
+            </button>
+          </div>
+
+          {/* Viewport Center Area */}
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#050B10'
+            }}
+          >
+            {startingCamera && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: '#FFFFFF', zIndex: 10 }}>
+                <Loader2 size={36} className="animate-spin" style={{ color: 'var(--primary)' }} />
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>Iniciando câmera integrada...</span>
+              </div>
+            )}
+
+            {cameraError && (
+              <div
+                style={{
+                  maxWidth: '340px',
+                  padding: '24px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  border: '1px solid rgba(231, 76, 60, 0.4)',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  color: '#FFFFFF',
+                  zIndex: 10
+                }}
+              >
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#FF7675' }}>
+                  Acesso à Câmera Não Disponível
+                </div>
+                <div style={{ fontSize: '12.5px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.4 }}>
+                  {cameraError}
+                </div>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => startInAppCamera(cameraFacingMode)}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      backgroundColor: 'var(--primary)',
+                      color: '#FFF',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Tentar Novamente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopInAppCamera();
+                      galleryInputRef.current?.click();
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      backgroundColor: 'rgba(255,255,255,0.1)',
+                      color: '#FFF',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Usar Galeria
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: cameraError ? 'none' : 'block'
+              }}
+            />
+
+            {/* Viewfinder Target Reticle Overlay */}
+            {!cameraError && !startingCamera && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '85px 28px 145px 28px',
+                  pointerEvents: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ width: '28px', height: '28px', borderTop: '3px solid rgba(240, 90, 34, 0.85)', borderLeft: '3px solid rgba(240, 90, 34, 0.85)', borderRadius: '4px 0 0 0' }} />
+                  <div style={{ width: '28px', height: '28px', borderTop: '3px solid rgba(240, 90, 34, 0.85)', borderRight: '3px solid rgba(240, 90, 34, 0.85)', borderRadius: '0 4px 0 0' }} />
+                </div>
+                {/* GPS Badge in Viewfinder */}
+                <div style={{ textAlign: 'center', pointerEvents: 'none' }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      backgroundColor: 'rgba(0,0,0,0.65)',
+                      backdropFilter: 'blur(6px)',
+                      color: '#27AE60',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      border: '1px solid rgba(39, 174, 96, 0.4)'
+                    }}
+                  >
+                    <MapPin size={11} />
+                    {latitude && longitude ? `GPS Conectado (±${precisao || 5}m)` : 'Obtendo GPS...'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ width: '28px', height: '28px', borderBottom: '3px solid rgba(240, 90, 34, 0.85)', borderLeft: '3px solid rgba(240, 90, 34, 0.85)', borderRadius: '0 0 0 4px' }} />
+                  <div style={{ width: '28px', height: '28px', borderBottom: '3px solid rgba(240, 90, 34, 0.85)', borderRight: '3px solid rgba(240, 90, 34, 0.85)', borderRadius: '0 0 4px 0' }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Controls Bar */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: '135px',
+              background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 70%, transparent 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-around',
+              padding: '0 24px',
+              zIndex: 20
+            }}
+          >
+            {/* Gallery shortcut */}
+            <button
+              type="button"
+              onClick={() => {
+                stopInAppCamera();
+                galleryInputRef.current?.click();
+              }}
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(255,255,255,0.12)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+              title="Escolher foto da Galeria"
+            >
+              <ImageIcon size={20} />
+            </button>
+
+            {/* Shutter Trigger Button */}
+            <button
+              type="button"
+              disabled={startingCamera || !!cameraError}
+              onClick={takePhotoFromCamera}
+              style={{
+                width: '78px',
+                height: '78px',
+                borderRadius: '50%',
+                border: '4px solid #FFFFFF',
+                backgroundColor: 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: startingCamera || !!cameraError ? 'not-allowed' : 'pointer',
+                transition: 'transform 0.15s ease',
+                padding: '4px',
+                boxShadow: '0 0 24px rgba(240, 90, 34, 0.6)'
+              }}
+              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.92)')}
+              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              onTouchStart={(e) => (e.currentTarget.style.transform = 'scale(0.92)')}
+              onTouchEnd={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+              title="Disparar Foto"
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Camera size={28} color="#FFFFFF" />
+              </div>
+            </button>
+
+            {/* Photo Counter Pill */}
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: fotosList.length >= minFotos ? 'rgba(39, 174, 96, 0.25)' : 'rgba(255,255,255,0.08)',
+                border: `1px solid ${fotosList.length >= minFotos ? 'var(--success)' : 'rgba(255,255,255,0.2)'}`,
+                color: fotosList.length >= minFotos ? 'var(--success)' : '#FFFFFF',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '11px',
+                fontWeight: 800
+              }}
+              title="Fotos já capturadas"
+            >
+              <span>{fotosList.length}</span>
+              <span style={{ fontSize: '8.5px', opacity: 0.7 }}>de {minFotos}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </>,
     document.body
   );
 };
