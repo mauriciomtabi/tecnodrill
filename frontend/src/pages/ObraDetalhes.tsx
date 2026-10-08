@@ -927,6 +927,12 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                     valorCard = prev > 0 ? (mBarra / prev) * (Number(servico.valor_total_fechado) || 0) : 0;
                   }
 
+                  const { meta: bMeta } = parseBarraObservacao(b.observacao);
+                  const rawOs = (b.numero_os || bMeta.numero_os || '').trim();
+                  const osDisplay = rawOs 
+                    ? (rawOs.toUpperCase().startsWith('OS') ? rawOs : `OS: ${rawOs}`) 
+                    : '';
+
                   return (
                     <div
                       key={b.id}
@@ -1001,25 +1007,30 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                           </div>
                         )}
 
-                        {/* Tag Superior Direita Metros / Caixa */}
-                        {(!b.tem_caixa && b.tipo_registro !== 'CAIXA') ? (
+                        {/* Tag Superior Direita: Número da OS no lugar da metragem */}
+                        {osDisplay ? (
                           <div 
                             style={{
                               position: 'absolute',
                               top: '6px',
                               right: '6px',
-                              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                              backgroundColor: 'rgba(0, 0, 0, 0.82)',
+                              border: '1px solid rgba(255, 255, 255, 0.25)',
                               color: '#FFFFFF',
-                              padding: '2px 6px',
+                              padding: '2px 7px',
                               borderRadius: '4px',
                               fontSize: '10px',
                               fontWeight: 800,
-                              fontFamily: 'var(--font-mono)'
+                              fontFamily: 'var(--font-mono)',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px'
                             }}
                           >
-                            +{b.metros || 3}m
+                            <span>{(b.tem_caixa || b.tipo_registro === 'CAIXA') ? `📦 ${osDisplay}` : osDisplay}</span>
                           </div>
-                        ) : (
+                        ) : (b.tem_caixa || b.tipo_registro === 'CAIXA') ? (
                           <div 
                             style={{
                               position: 'absolute',
@@ -1030,12 +1041,13 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                               padding: '2px 6px',
                               borderRadius: '4px',
                               fontSize: '10px',
-                              fontWeight: 800
+                              fontWeight: 800,
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.5)'
                             }}
                           >
                             📦 CAIXA
                           </div>
-                        )}
+                        ) : null}
                       </div>
 
                       {/* Card Footer Info (Idêntico ao App JLE) */}
