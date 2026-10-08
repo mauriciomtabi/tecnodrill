@@ -284,47 +284,63 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
 
 
-  const processAndAddPhoto = async (rawBase64: string) => {
-    setProcessingWatermark(true);
-    setStatusMessage('Aplicando carimbo oficial e coordenadas...');
+  const ensureLocationAndAddress = async (): Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> => {
+    let curLat = latitude;
+    let curLon = longitude;
+    let curAddr = addressDetails;
 
-    try {
-      let curLat = latitude;
-      let curLon = longitude;
-      let curAddr = addressDetails;
-
-      if (curLat === null || curLon === null) {
-        setStatusMessage('Obtendo coordenadas GPS...');
-        if (locationPromiseRef.current) {
-          const locResult = await Promise.race([
-            locationPromiseRef.current,
-            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
-          ]);
-          if (locResult.lat !== null) curLat = locResult.lat;
-          if (locResult.lon !== null) curLon = locResult.lon;
-          if (locResult.addr !== null) curAddr = locResult.addr;
-        } else {
-          const locResult = await Promise.race([
-            captureLocation(),
-            new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
-          ]);
-          if (locResult.lat !== null) curLat = locResult.lat;
-          if (locResult.lon !== null) curLon = locResult.lon;
-          if (locResult.addr !== null) curAddr = locResult.addr;
-        }
-      }
-
-      if (curLat !== null && curLon !== null && !curAddr) {
-        curAddr = await Promise.race([
-          reverseGeocode(curLat, curLon),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+    if (curLat === null || curLon === null) {
+      setStatusMessage('Obtendo coordenadas GPS...');
+      if (locationPromiseRef.current) {
+        const locResult = await Promise.race([
+          locationPromiseRef.current,
+          new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
         ]);
-        if (curAddr) {
-          setAddressDetails(curAddr);
-        }
+        if (locResult.lat !== null) curLat = locResult.lat;
+        if (locResult.lon !== null) curLon = locResult.lon;
+        if (locResult.addr !== null) curAddr = locResult.addr;
+      } else {
+        const locResult = await Promise.race([
+          captureLocation(),
+          new Promise<{ lat: null; lon: null; addr: null }>((resolve) => setTimeout(() => resolve({ lat: null, lon: null, addr: null }), 2500))
+        ]);
+        if (locResult.lat !== null) curLat = locResult.lat;
+        if (locResult.lon !== null) curLon = locResult.lon;
+        if (locResult.addr !== null) curAddr = locResult.addr;
       }
+    }
 
-      setStatusMessage('Estampando carimbo oficial...');
+    if (curLat !== null && curLon !== null && !curAddr) {
+      curAddr = await Promise.race([
+        reverseGeocode(curLat, curLon),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000))
+      ]);
+      if (curAddr) {
+        setAddressDetails(curAddr);
+      }
+    }
+
+    return { lat: curLat, lon: curLon, addr: curAddr };
+  };
+
+  const processAndAddPhoto = async (
+    rawBase64: string,
+    locationInfo?: { lat: number | null; lon: number | null; addr: AddressDetails | null },
+    statusPrefix: string = ''
+  ) => {
+    let curLat = locationInfo ? locationInfo.lat : latitude;
+    let curLon = locationInfo ? locationInfo.lon : longitude;
+    let curAddr = locationInfo ? locationInfo.addr : addressDetails;
+
+    if (curLat === null || curLon === null) {
+      const resolved = await ensureLocationAndAddress();
+      curLat = resolved.lat;
+      curLon = resolved.lon;
+      curAddr = resolved.addr;
+    }
+
+    setStatusMessage(`${statusPrefix}Estampando carimbo oficial...`);
+    try {
       const watermarked = await applyTecnodrillWatermark(
         rawBase64,
         curLat,
@@ -341,9 +357,6 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       console.error('[Watermark Error]:', err);
       setFotosList((prev) => [...prev, rawBase64]);
       rawPhotosListRef.current.push(rawBase64);
-    } finally {
-      setProcessingWatermark(false);
-      setStatusMessage('');
     }
   };
 
@@ -419,34 +432,46 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length === 0) return;
 
-    // Reset input so same photo can be reselected if needed
+    // Reset input so same photos can be reselected if needed
     e.target.value = '';
 
     setProcessingWatermark(true);
-    setStatusMessage('Otimizando imagem na memória...');
 
     try {
-      const compressedBase64 = await compressImageFile(file, 1280);
-      await processAndAddPhoto(compressedBase64);
-    } catch (err) {
-      console.error('[Photo Compress Error]:', err);
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const raw = ev.target?.result as string;
-        if (raw) await processAndAddPhoto(raw);
-        else {
-          setProcessingWatermark(false);
-          setStatusMessage('');
+      const total = files.length;
+      // Garante que GPS e endereço sejam resolvidos uma única vez antes do loop do lote
+      const locInfo = await ensureLocationAndAddress();
+
+      for (let i = 0; i < total; i++) {
+        const file = files[i];
+        const countPrefix = total > 1 ? `Foto ${i + 1} de ${total}: ` : '';
+        setStatusMessage(`${countPrefix}Otimizando imagem na memória...`);
+
+        let compressedBase64: string | null = null;
+        try {
+          compressedBase64 = await compressImageFile(file, 1280);
+        } catch (err) {
+          console.error('[Photo Compress Error]:', err);
+          compressedBase64 = await new Promise<string | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve((ev.target?.result as string) || null);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(file);
+          });
         }
-      };
-      reader.onerror = () => {
-        setProcessingWatermark(false);
-        setStatusMessage('');
-      };
-      reader.readAsDataURL(file);
+
+        if (compressedBase64) {
+          await processAndAddPhoto(compressedBase64, locInfo, countPrefix);
+        }
+      }
+    } catch (batchErr) {
+      console.error('[Batch Photo Upload Error]:', batchErr);
+    } finally {
+      setProcessingWatermark(false);
+      setStatusMessage('');
     }
   };
 
@@ -599,11 +624,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         onChange={handlePhotoUpload}
       />
 
-      {/* Input para Galeria de Fotos */}
+      {/* Input para Galeria de Fotos (seleção única ou múltipla) */}
       <input
         type="file"
         ref={galleryInputRef}
         accept="image/*"
+        multiple
         style={{ display: 'none' }}
         onChange={handlePhotoUpload}
       />
@@ -962,12 +988,17 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 }}
               >
                 <ImageIcon size={16} />
-                <span>Escolher da Galeria</span>
+                <span>Escolher da Galeria (uma ou várias fotos)</span>
               </button>
 
-              <span style={{ fontSize: '11px', color: '#27AE60', textAlign: 'center', lineHeight: 1.35, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                <CheckCircle2 size={12} /> Câmera integrada do sistema: fotos instantâneas e sem sobrecarregar a memória do celular.
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', color: '#27AE60', textAlign: 'center', lineHeight: 1.35, padding: '0 4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                  <CheckCircle2 size={12} /> Câmera integrada do sistema: fotos instantâneas e sem sobrecarregar a memória do celular.
+                </span>
+                <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  💡 Você pode selecionar e carregar várias fotos de uma só vez da galeria.
+                </span>
+              </div>
             </div>
 
             {/* Fluxo Especial para INSTALAÇÃO DE CAIXA: só tira fotos e salva */}
