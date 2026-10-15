@@ -6,6 +6,7 @@ import { ApiService, parseBarraObservacao } from '../services/api';
 import { Servico, Barra, TipoServico } from '../types';
 import * as XLSX from 'xlsx';
 import { 
+  Eraser,
   TrendingUp, 
   Download, 
   HardHat, 
@@ -243,25 +244,17 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return true;
   };
 
-  // Manipuladores de Filtros Rápidos (Estilo BI JLE)
-  const handleSelectPeriodoRapido = (p: PeriodoRapido) => {
-    setPeriodoRapido(p);
-    if (p === 'HOJE') {
-      setFiltroAno(currentYear);
-      setFiltroMes(currentMonth);
-    } else if (p === 'SEMANA') {
-      setFiltroAno(currentYear);
-      setFiltroMes('TODOS');
-    } else if (p === 'MES') {
-      setFiltroAno(currentYear);
-      setFiltroMes(currentMonth);
-    } else if (p === 'ANO') {
-      setFiltroAno(currentYear);
-      setFiltroMes('TODOS');
-    } else if (p === 'GERAL') {
-      setFiltroAno('TODOS');
-      setFiltroMes('TODOS');
-    }
+  // Limpa os filtros e qualquer seleção de detalhe.
+  const limparFiltros = () => {
+    setFiltroAno('TODOS');
+    setFiltroMes('TODOS');
+    setFiltroSegmento('TODOS');
+    setFiltroServico('TODOS');
+    setFiltroTerceiro('TODOS');
+    setSearchTerm('');
+    setPeriodoRapido('GERAL');
+    setServicoExpandido(null);
+    setHoveredMonthIdx(null);
   };
 
   // Cálculos consolidados por serviço
@@ -839,39 +832,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </select>
           </div>
 
-          {/* Atalhos de Período Rápido (Pills BI JLE) */}
-          <div style={{ gridColumn: 'span 1' }}>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
-              Atalhos Rápidos
-            </label>
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-              {[
-                { key: 'HOJE', label: 'Hoje' },
-                { key: 'SEMANA', label: 'Semana' },
-                { key: 'MES', label: 'Este Mês' },
-                { key: 'ANO', label: 'Ano Inteiro' },
-                { key: 'GERAL', label: 'Geral' }
-              ].map(item => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => handleSelectPeriodoRapido(item.key as PeriodoRapido)}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    fontSize: '11.5px',
-                    fontWeight: periodoRapido === item.key ? 800 : 500,
-                    backgroundColor: periodoRapido === item.key ? 'var(--primary)' : 'rgba(255, 255, 255, 0.04)',
-                    color: periodoRapido === item.key ? '#FFFFFF' : 'var(--text-muted)',
-                    border: periodoRapido === item.key ? '1px solid var(--primary)' : '1px solid var(--border-color)',
-                    cursor: 'pointer',
-                    transition: 'var(--transition)'
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+          <div style={{ alignSelf: 'end' }}>
+            <button type="button" onClick={limparFiltros} title="Limpar todos os filtros" aria-label="Limpar todos os filtros" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 38, padding: '9px 14px', border: '1px solid var(--border-color)', borderRadius: 8, backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontWeight: 700, cursor: 'pointer' }}>
+              <Eraser size={18} aria-hidden="true" /> Limpar filtros
+            </button>
           </div>
 
         </div>
