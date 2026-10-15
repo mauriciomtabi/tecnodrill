@@ -1,3 +1,4 @@
+import { summarizeAuthorRevenue } from './produtividadeAuthors';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiService, parseBarraObservacao } from '../services/api';
@@ -47,6 +48,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   const [filtroAno, setFiltroAno] = useState<string>(currentYear);
   const [filtroMes, setFiltroMes] = useState<string>('TODOS');
+  const [filtroTerceiro, setFiltroTerceiro] = useState('TODOS');
+  const [filtroServico, setFiltroServico] = useState<string>('TODOS');
   const [filtroSegmento, setFiltroSegmento] = useState<string>('TODOS');
   const [periodoRapido, setPeriodoRapido] = useState<PeriodoRapido>('ANO');
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,6 +101,19 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   useEffect(() => {
     loadData();
   }, []);
+
+  const terceirosDisponiveis = useMemo(() => {
+    const autores = new Map<string, string>();
+    Object.values(barrasPorServico).flat().forEach(b => {
+      const id = b.registrado_por || 'SEM_AUTOR';
+      const nome = b.registrado_por_nome || (id === 'SEM_AUTOR' ? 'Sem autor identificado' : `Técnico ${id.slice(0, 8)}`);
+      if (!autores.has(id) || b.registrado_por_nome) autores.set(id, nome);
+    });
+    return [...autores].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [barrasPorServico]);
+  const barrasSelecionadas = useMemo(() => Object.fromEntries(Object.entries(barrasPorServico).map(([id, barras]) => [id,
+    barras.filter(b => filtroTerceiro === 'TODOS' || (b.registrado_por || 'SEM_AUTOR') === filtroTerceiro)
+  ])), [barrasPorServico, filtroTerceiro]);
 
   // Anos disponíveis nos dados
   const anosDisponiveis = useMemo(() => {
@@ -249,7 +265,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   // Cálculos consolidados por serviço
   const servicosCalculados = useMemo(() => {
     return servicos.map(s => {
-      const allBarras = barrasPorServico[s.id] || [];
+      const allBarras = barrasSelecionadas[s.id] || [];
       const barrasPeriodo = allBarras.filter(b => isBarraInFilter(b));
 
       // Metros acumulados no período filtrado
@@ -317,7 +333,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         qtdCaixasPeriodo: barrasPeriodo.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length
       };
     });
-  }, [servicos, barrasPorServico, periodoRapido, filtroAno, filtroMes, sevenDaysAgo, now]);
+  }, [servicos, barrasSelecionadas, periodoRapido, filtroAno, filtroMes, sevenDaysAgo, now]);
 
   // Filtragem por busca e por segmento
   const servicosFiltrados = useMemo(() => {
@@ -328,9 +344,13 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         s.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (s.cidade && s.cidade.toLowerCase().includes(searchTerm.toLowerCase()));
-      return matchTipo && matchSearch;
+      return matchTipo && matchSearch && (filtroServico === 'TODOS' || s.id === filtroServico);
     });
-  }, [servicosCalculados, filtroSegmento, searchTerm]);
+  }, [servicosCalculados, filtroSegmento, searchTerm, filtroServico]);
+
+  const receitaPorTerceiro = useMemo(() => {
+    return summarizeAuthorRevenue(servicosFiltrados, barrasSelecionadas, isBarraInFilter, terceirosDisponiveis);
+  }, [servicosFiltrados, barrasSelecionadas, terceirosDisponiveis, periodoRapido, filtroAno, filtroMes]);
 
   // Totais consolidados dos KPIs
   const totais = useMemo(() => {
@@ -368,7 +388,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         let custo = 0;
 
         servicosFiltrados.forEach(s => {
-          const barras = barrasPorServico[s.id] || [];
+          const barras = barrasSelecionadas[s.id] || [];
           const diamDefault = Number(s.diametro_furo_mm) || 150;
           const fator = Number(s.fator_financeiro) || 0.8;
           const custoMetro = Number(s.custo_metro) || 0;
@@ -429,7 +449,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         let custo = 0;
 
         servicosFiltrados.forEach(s => {
-          const barras = barrasPorServico[s.id] || [];
+          const barras = barrasSelecionadas[s.id] || [];
           const diamDefault = Number(s.diametro_furo_mm) || 150;
           const fator = Number(s.fator_financeiro) || 0.8;
           const custoMetro = Number(s.custo_metro) || 0;
@@ -482,7 +502,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       let custo = 0;
 
       servicosFiltrados.forEach(s => {
-        const barras = barrasPorServico[s.id] || [];
+        const barras = barrasSelecionadas[s.id] || [];
         const diamDefault = Number(s.diametro_furo_mm) || 150;
         const fator = Number(s.fator_financeiro) || 0.8;
         const custoMetro = Number(s.custo_metro) || 0;
@@ -522,7 +542,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         margem: Number((receita - custo).toFixed(2))
       };
     });
-  }, [servicosFiltrados, barrasPorServico, filtroAno, filtroMes, granularidade, currentYear, currentMonth]);
+  }, [servicosFiltrados, barrasSelecionadas, filtroAno, filtroMes, granularidade, currentYear, currentMonth]);
 
   // Escala máxima do gráfico de evolução para desenhar as barras com precisão e espaço para rótulos de dados
   const maxEvolucaoVal = useMemo(() => {
@@ -604,6 +624,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Produtividade TecnoDrill');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(receitaPorTerceiro.map(t => ({
+      'Terceiro / Autor': t.nome, 'ID Autor': t.id, 'Receita Estimada (R$)': Number(t.receita.toFixed(2)), 'Metros': t.metros, 'Registros': t.registros, 'Serviços': t.servicos.size
+    }))), 'Receita por Terceiro');
 
     const dataHojeFormatada = new Date().toISOString().split('T')[0];
     const fileName = `Produtividade_TecnoDrill_${filtroAno}_${filtroMes !== 'TODOS' ? `Mes${filtroMes}` : 'AnoInteiro'}_${dataHojeFormatada}.xlsx`;
@@ -798,6 +821,22 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </select>
           </div>
 
+          <div>
+            <label htmlFor="produtividade-servico" style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>Serviço / Obra</label>
+            <select id="produtividade-servico" value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={{ width: '100%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <option value="TODOS">Todos os Serviços</option>
+              {servicos.map(s => <option key={s.id} value={s.id}>{s.id} — {s.nome}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="produtividade-terceiro" style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>Terceiro / Autor da produção</label>
+            <select id="produtividade-terceiro" value={filtroTerceiro} onChange={e => setFiltroTerceiro(e.target.value)} style={{ width: '100%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+              <option value="TODOS">Todos os Terceiros</option>
+              {terceirosDisponiveis.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </div>
+
           {/* Atalhos de Período Rápido (Pills BI JLE) */}
           <div style={{ gridColumn: 'span 1' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
@@ -936,6 +975,28 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         </div>
 
       </div>
+
+      <section aria-labelledby="receita-autores" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 24 }}>
+        <h3 id="receita-autores" style={{ margin: '0 0 6px', color: 'var(--text-main)' }}>Receita por Terceiro — Autor da produção</h3>
+        <p style={{ color: 'var(--text-muted)', margin: '0 0 18px', fontSize: 13 }}>Receita estimada da produção registrada por cada autor, conforme o preço da obra e os filtros acima. Cada registro é contado uma vez.</p>
+        {receitaPorTerceiro.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhuma produção encontrada para os filtros selecionados.</p> : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 14 }}>
+              <thead><tr>{['Terceiro / Autor', 'Receita estimada', 'Participação', 'Metros', 'Registros', 'Serviços'].map(label => <th key={label} scope="col" style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
+              <tbody>{receitaPorTerceiro.map(t => {
+                const pct = totais.totalReceita > 0 ? t.receita / totais.totalReceita * 100 : 0;
+                return <tr key={t.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: 12 }}><button onClick={() => setFiltroTerceiro(t.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 700, textAlign: 'left', padding: 0 }} title="Filtrar por este autor">{t.nome}</button></td>
+                  <td style={{ padding: 12, color: '#2ECC71', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                  <td style={{ padding: 12, minWidth: 100 }}>{pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%<div style={{ height: 5, background: 'var(--bg-app)', borderRadius: 5, marginTop: 6 }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: '#2ECC71', borderRadius: 5 }} /></div></td>
+                  <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{t.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                  <td style={{ padding: 12 }}>{t.registros}</td><td style={{ padding: 12 }}>{t.servicos.size}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* ────────────────────────────────────────────────────────────────
           3. GRÁFICO 1: EVOLUÇÃO (LARGURA TOTAL / 100% EXTENSÃO LATERAL)
