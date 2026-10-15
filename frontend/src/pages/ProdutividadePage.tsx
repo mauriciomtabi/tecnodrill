@@ -1,6 +1,6 @@
 import { summarizeDiameterRevenue } from './produtividadeDiameters';
 import { summarizeAuthorRevenue } from './produtividadeAuthors';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiService, parseBarraObservacao } from '../services/api';
 import { Servico, Barra, TipoServico } from '../types';
@@ -60,6 +60,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   // Controles de Gráficos (Estilo BI JLE)
   const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>('FINANCEIRO');
   const [granularidade, setGranularidade] = useState<GranularidadeEvolucao>('MENSAL');
+  const evolutionPlotRef = useRef<HTMLDivElement>(null);
+  const [evolutionPlotWidth, setEvolutionPlotWidth] = useState(0);
+  useEffect(() => {
+    const plot = evolutionPlotRef.current;
+    if (!plot) return;
+    const observer = new ResizeObserver(([entry]) => setEvolutionPlotWidth(entry.contentRect.width));
+    observer.observe(plot);
+    return () => observer.disconnect();
+  }, [loading]);
   const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
 
   useEffect(() => {
@@ -1109,7 +1118,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         </div>
 
         {/* Visualizador de Barras Analíticas com Largura Total (100% da Extensão Lateral) */}
-        <div style={{ position: 'relative', width: '100%', height: '310px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', width: '100%', minWidth: 0, height: '310px', display: 'flex', flexDirection: 'column' }}>
           
           {/* Linhas de Grade de Fundo */}
           <div style={{ position: 'absolute', top: 0, left: '55px', right: 0, bottom: '34px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
@@ -1127,8 +1136,12 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
 
           {/* Container das Colunas dos Meses com Espaçamento Amplo */}
-          <div style={{ marginLeft: '55px', flex: 1, display: 'flex', alignItems: 'flex-end', gap: '10px', zIndex: 2, paddingBottom: '32px' }}>
+          <div ref={evolutionPlotRef} style={{ marginLeft: '55px', minWidth: 0, flex: 1, display: 'grid', gridTemplateColumns: `repeat(${dadosEvolucao.length || 1}, minmax(0, 1fr))`, alignItems: 'end', gap: granularidade === 'DIARIO' ? '2px' : '6px', zIndex: 2, paddingBottom: '32px' }}>
             {dadosEvolucao.map((d, i) => {
+              const cellWidth = evolutionPlotWidth / Math.max(1, dadosEvolucao.length);
+              const tickStep = Math.max(1, Math.ceil(32 / Math.max(1, cellWidth)));
+              const showTick = i === dadosEvolucao.length - 1 || (i % tickStep === 0 && (i === 0 || i <= dadosEvolucao.length - 1 - tickStep));
+              const showDataLabels = cellWidth >= (metricaEvolucao === 'FINANCEIRO' ? 100 : 55);
               const isHovered = hoveredMonthIdx === i;
               const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
               const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
@@ -1147,7 +1160,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     }
                   }}
                   style={{
-                    flex: 1,
+                    minWidth: 0,
+                    width: '100%',
+                    boxSizing: 'border-box',
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1158,7 +1173,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     borderRadius: '8px',
                     backgroundColor: isHovered || isSelectedMonth ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
                     transition: 'background-color 0.2s ease',
-                    padding: '0 4px'
+                    padding: granularidade === 'DIARIO' ? '0 1px' : '0 4px'
                   }}
                 >
                   {/* Tooltip Flutuante no Hover */}
@@ -1167,8 +1182,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       style={{
                         position: 'absolute',
                         bottom: '105%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
+                        left: i < dadosEvolucao.length / 2 ? 0 : 'auto',
+                        right: i < dadosEvolucao.length / 2 ? 'auto' : 0,
                         backgroundColor: '#0D1C24',
                         border: '1px solid #1B3645',
                         borderRadius: '8px',
@@ -1206,13 +1221,14 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   )}
 
                   {/* Barras do Mês com Rótulos de Dados (Data Labels) */}
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '4px' }}>
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: granularidade === 'DIARIO' ? '1px' : '4px', minWidth: 0 }}>
                     {metricaEvolucao === 'FINANCEIRO' ? (
                       <>
                         {/* Coluna Receita com Rótulo de Dados */}
                         <div 
                           style={{ 
-                            width: '46%', 
+                            width: '46%',
+                            minWidth: 0,
                             height: '100%', 
                             display: 'flex', 
                             flexDirection: 'column', 
@@ -1221,7 +1237,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           }}
                         >
                           {/* Rótulo de Dado da Receita */}
-                          {d.receita > 0 && (
+                          {d.receita > 0 && showDataLabels && (
                             <span 
                               style={{ 
                                 fontSize: '10px', 
@@ -1252,7 +1268,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                         {/* Coluna Custo com Rótulo de Dados */}
                         <div 
                           style={{ 
-                            width: '46%', 
+                            width: '46%',
+                            minWidth: 0,
                             height: '100%', 
                             display: 'flex', 
                             flexDirection: 'column', 
@@ -1261,7 +1278,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           }}
                         >
                           {/* Rótulo de Dado do Custo */}
-                          {d.custo > 0 && (
+                          {d.custo > 0 && showDataLabels && (
                             <span 
                               style={{ 
                                 fontSize: '10px', 
@@ -1302,7 +1319,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                         }}
                       >
                         {/* Rótulo de Dado dos Metros */}
-                        {d.metros > 0 && (
+                        {d.metros > 0 && showDataLabels && (
                           <span 
                             style={{ 
                               fontSize: '10.5px', 
@@ -1337,7 +1354,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     style={{
                       position: 'absolute',
                       bottom: '-25px',
-                      fontSize: '11.5px',
+                      fontSize: granularidade === 'DIARIO' ? '10px' : '11.5px',
+                      visibility: showTick ? 'visible' : 'hidden',
+                      whiteSpace: 'nowrap',
+                      maxWidth: '100%',
                       fontWeight: isSelectedMonth ? 900 : isHovered ? 800 : 600,
                       color: isSelectedMonth ? 'var(--primary)' : isHovered ? '#FFFFFF' : '#8BA6B5',
                       textAlign: 'center'
