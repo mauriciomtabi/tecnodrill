@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import './TerceirosPage.css';
 import { 
   Users, DollarSign, TrendingUp, Calendar, Filter, Search, 
   Plus, Download, FileSpreadsheet, FileText, CheckCircle2, 
@@ -332,7 +333,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
 
   if (!isGestor) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900/60 rounded-2xl border border-red-500/20 backdrop-blur-md">
+      <div className="terceiros-page flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-slate-900/60 rounded-2xl border border-red-500/20 backdrop-blur-md">
         <ShieldAlert className="w-16 h-16 text-red-400 mb-4 animate-pulse" />
         <h2 className="text-2xl font-bold text-white mb-2">Acesso Restrito à Gestão</h2>
         <p className="text-slate-400 max-w-md">
@@ -343,7 +344,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   }
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-300">
+    <div className="terceiros-page space-y-6 pb-12 animate-in fade-in duration-300">
       {/* Top Banner de Ações */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 p-5 rounded-2xl border border-cyan-800/30 shadow-xl backdrop-blur-md">
         <div className="flex items-center gap-3">
