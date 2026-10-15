@@ -1,3 +1,4 @@
+import { canReadRegistro } from '../services/registroAccess';
 import React, { useState, useEffect } from 'react';
 import { Servico, Furo, Barra } from '../types';
 import { ApiService, sanitizeLocalidade, parseBarraObservacao } from '../services/api';
@@ -57,19 +58,16 @@ export const ObrasList: React.FC<ObrasListProps> = ({
         try {
           const { data: bData } = await supabase
             .from('tecnodrill_barras')
-            .select('id, furo_id, metros, tipo_registro, tem_caixa, diametro, observacao, registrado_por, mes_referencia, data_referencia, horario_registro');
+            .select('id, furo_id, numero_barra, metros, metros_acumulados, tipo_registro, tem_caixa, diametro, observacao, registrado_por, horario_registro');
           if (bData) {
             const map: Record<string, Barra[]> = {};
             for (const b of bData) {
               const { meta } = parseBarraObservacao(b.observacao);
-              const isMine = (b.registrado_por && b.registrado_por === user.id) ||
-                (meta.registrado_por_id && meta.registrado_por_id === user.id) ||
-                (meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
-                (meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.username.toLowerCase().trim());
+              const isMine = canReadRegistro(user, b);
 
               if (isMine) {
                 // Filtro a partir de Setembro de 2026 (meses anteriores ficam ocultos para técnicos)
-                const mesRef = b.mes_referencia || meta.mes_referencia || b.data_referencia?.slice(0, 7) || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
+                const mesRef = meta.mes_referencia || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
                 if (mesRef && mesRef < '2026-09') {
                   continue;
                 }

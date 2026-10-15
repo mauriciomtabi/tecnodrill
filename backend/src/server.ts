@@ -7,6 +7,7 @@ import furosRoutes from './routes/furos';
 import barrasRoutes from './routes/barras';
 import relatoriosRoutes from './routes/relatorios';
 import geocodeRoutes from './routes/geocode';
+import { requireManager } from './requireManager';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -37,6 +38,10 @@ app.get('/api/health', (_req, res) => {
 });
 
 // Mount Routes
+app.use('/api', (req, res, next) => {
+  if (req.path === '/geocode' || req.path.startsWith('/geocode/')) return next();
+  return requireManager(req, res, next);
+});
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);
 app.use('/api/servicos', servicosRoutes);

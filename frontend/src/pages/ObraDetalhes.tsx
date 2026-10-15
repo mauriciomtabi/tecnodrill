@@ -1,3 +1,4 @@
+import { canReadRegistro } from '../services/registroAccess';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Servico, Furo, Barra } from '../types';
@@ -323,11 +324,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
     ? barras
     : barras.filter(b => {
         const { meta } = parseBarraObservacao(b.observacao);
-        const isMine = (user?.id && b.registrado_por && b.registrado_por === user.id) ||
-                       (user?.id && meta.registrado_por_id && meta.registrado_por_id === user.id) ||
-                       (user?.nome && b.registrado_por_nome && b.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
-                       (user?.nome && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
-                       (user?.username && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.username.toLowerCase().trim());
+        const isMine = canReadRegistro(user, b);
         if (!isMine) return false;
 
         // Visualização permitida apenas a partir de Setembro de 2026

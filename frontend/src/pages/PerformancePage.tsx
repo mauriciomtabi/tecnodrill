@@ -1,3 +1,4 @@
+import { canReadRegistro } from '../services/registroAccess';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiService, parseBarraObservacao } from '../services/api';
@@ -80,11 +81,7 @@ export const PerformancePage: React.FC<PerformancePageProps> = ({ setHeaderInfo 
     ? barras
     : barras.filter(b => {
         const { meta } = parseBarraObservacao(b.observacao);
-        const isMine = (user?.id && b.registrado_por && b.registrado_por === user.id) ||
-                       (user?.id && meta.registrado_por_id && meta.registrado_por_id === user.id) ||
-                       (user?.nome && b.registrado_por_nome && b.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
-                       (user?.nome && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.nome.toLowerCase().trim()) ||
-                       (user?.username && meta.registrado_por_nome && meta.registrado_por_nome.toLowerCase().trim() === user.username.toLowerCase().trim());
+        const isMine = canReadRegistro(user, b);
         if (!isMine) return false;
 
         const mesRef = b.mes_referencia || meta.mes_referencia || b.data_referencia?.slice(0, 7) || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);

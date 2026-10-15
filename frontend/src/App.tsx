@@ -322,7 +322,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
+    <div className="app-container" key={user.id}>
       {/* 1. DESKTOP SIDEBAR (Layout Idêntico ao App JLE) */}
       <Sidebar
         currentPath={currentPath}

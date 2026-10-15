@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { Furo, Barra, Servico } from '../types';
 import { ApiService } from '../services/api';
+import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import { Download, Printer, FileSpreadsheet, CheckSquare, Square, ArrowLeft } from 'lucide-react';
 
 interface PhysicalReportPreviewProps {
@@ -17,13 +19,25 @@ export const PhysicalReportPreview: React.FC<PhysicalReportPreviewProps> = ({
   onBack
 }) => {
   const printRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useAuth();
 
   const handlePrint = () => {
     window.print();
   };
 
-  const handleDownloadExcel = () => {
-    window.location.href = ApiService.getExcelUrl(furo.id);
+  const handleDownloadExcel = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Entre novamente para exportar.');
+      const response = await fetch(ApiService.getExcelUrl(furo.id), { headers: { Authorization: `Bearer ${session.access_token}` } });
+      if (!response.ok) throw new Error('Não foi possível exportar. Confira sua permissão de gestão.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Tecnodrill_${furo.id}.xlsx`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: any) { showToast(error.message || 'Erro ao exportar.', 'error'); }
   };
 
   const totalMetros = barras.reduce((acc, b) => {

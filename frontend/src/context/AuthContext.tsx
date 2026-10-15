@@ -59,20 +59,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('tecnodrill_token');
-    const savedUser = localStorage.getItem('tecnodrill_usuario');
     const savedTheme = (localStorage.getItem('tecnodrill_theme') as 'light' | 'dark') || 'dark';
-
-    if (savedToken && savedUser) {
-      try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
-      } catch {}
-    }
+    let cancelled = false;
+    // Never trust a locally edited role/ID as a session or authorization source.
+    ApiService.restoreSession().then(session => {
+      if (cancelled) return;
+      setToken(session?.token || null);
+      setUser(session?.usuario || null);
+      if (!session) {
+        localStorage.removeItem('tecnodrill_token');
+        localStorage.removeItem('tecnodrill_usuario');
+      }
+    }).catch(() => {
+      if (!cancelled) { setToken(null); setUser(null); }
+    }).finally(() => { if (!cancelled) setIsLoading(false); });
 
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
-    setIsLoading(false);
 
     const handleOnline = () => {
       setIsOffline(false);
@@ -89,6 +92,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };

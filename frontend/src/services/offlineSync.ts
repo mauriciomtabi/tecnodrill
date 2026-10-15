@@ -9,14 +9,20 @@ export interface PendingBarra {
 }
 
 export class OfflineSyncService {
-  private static STORAGE_KEY = 'tecnodrill_offline_barras_queue';
+  private static storageKey(): string {
+    const user = ApiService.getUsuarioAtual();
+    if (!user?.id) throw new Error('Entre novamente antes de registrar produção.');
+    // Keep the old unowned queue untouched for management to reconcile safely.
+    return `tecnodrill_offline_barras_queue_${user.id}`;
+  }
 
   public static isOnline(): boolean {
     return typeof navigator !== 'undefined' && navigator.onLine;
   }
 
   public static getQueue(): PendingBarra[] {
-    const raw = localStorage.getItem(this.STORAGE_KEY);
+    if (!ApiService.getUsuarioAtual()?.id) return [];
+    const raw = localStorage.getItem(this.storageKey());
     if (!raw) return [];
     try {
       return JSON.parse(raw);
@@ -35,13 +41,13 @@ export class OfflineSyncService {
     };
     queue.push(item);
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(queue));
+      localStorage.setItem(this.storageKey(), JSON.stringify(queue));
     } catch (err) {
       console.warn('[OfflineSync] Limite de armazenamento local excedido. Otimizando fila:', err);
       // Se estourar a cota de 5MB do localStorage, preserva os dados técnicos do registro
       item.barraData = { ...barraData, fotos: [], foto_url: undefined };
       try {
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(queue));
+        localStorage.setItem(this.storageKey(), JSON.stringify(queue));
       } catch (_) {}
     }
     return item;
@@ -52,6 +58,8 @@ export class OfflineSyncService {
     
     const queue = this.getQueue();
     if (queue.length === 0) return { syncedCount: 0, errors: 0 };
+    const ownerId = ApiService.getUsuarioAtual()?.id;
+    const storageKey = this.storageKey();
 
     let syncedCount = 0;
     let errors = 0;
@@ -59,6 +67,10 @@ export class OfflineSyncService {
 
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
+      if (ApiService.getUsuarioAtual()?.id !== ownerId) {
+        remainingQueue.push(...queue.slice(i));
+        break;
+      }
       try {
         await ApiService.addBarra(item.furoId, item.barraData);
         syncedCount++;
@@ -70,7 +82,7 @@ export class OfflineSyncService {
       }
     }
 
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(remainingQueue));
+    localStorage.setItem(storageKey, JSON.stringify(remainingQueue));
     return { syncedCount, errors };
   }
 }

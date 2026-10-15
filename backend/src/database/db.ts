@@ -1,3 +1,4 @@
+import { requestAuth } from './requestAuth';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -24,8 +25,16 @@ const loadEnv = () => {
 loadEnv();
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkscchjzztwyjzjpllob.supabase.co';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrc2NjaGp6enR3eWp6anBsbG9iIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTI0NDcwMCwiZXhwIjoyMDk2ODIwNzAwfQ.QDco_35MhHsnHWDMrtcAsQyRXKJOntO1otClAWTA5KU';
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+const PUBLIC_KEY = 'sb_publishable_vAiCBdEioA9vqF6dzHjADQ_TkVsFWuj';
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, PUBLIC_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  global: { fetch: (input, init) => {
+    const headers = new Headers(init?.headers);
+    const token = requestAuth.getStore();
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+    return fetch(input, { ...init, headers });
+  } }
+});
 
 // Types
 export interface TecnodrillUsuario {

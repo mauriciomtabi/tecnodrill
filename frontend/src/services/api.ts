@@ -1,5 +1,5 @@
-import bcrypt from 'bcryptjs';
 import { supabase } from './supabaseClient';
+import { withPrivatePhotos } from './privatePhotos';
 import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra, TerceiroLancamento } from '../types';
 
 export interface ServicoMetaTag {
@@ -148,6 +148,7 @@ export class ApiService {
   }
 
   public static logout() {
+    void supabase.auth.signOut();
     localStorage.removeItem('tecnodrill_token');
     localStorage.removeItem('tecnodrill_usuario');
   }
@@ -179,7 +180,7 @@ export class ApiService {
         blob = new Blob([bytes], { type: contentType });
       }
 
-      const fileName = `furo_${furoId}/${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+      const fileName = `${this.getUsuarioAtual()?.id}/furo_${furoId}/${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
 
       // Timeout de 7s para não travar caso a conexão 3G/4G no campo oscile
       const uploadPromise = supabase.storage
@@ -214,298 +215,67 @@ export class ApiService {
   // ============================================================================
   // AUTH & USUÁRIOS
   // ============================================================================
-  public static async login(identifier: string, senha: string): Promise<{ token: string; usuario: Usuario }> {
-    const ident = identifier.trim();
-    if (!ident || !senha) {
-      throw new Error('Informe o usuário/e-mail e a senha.');
-    }
+  private static readonly userFields = 'id,nome,perfil,email,username,ativo,trocar_senha_primeiro_acesso';
 
-    // Busca no Supabase por e-mail ou username
-    const { data: users, error } = await supabase
-      .from('tecnodrill_usuarios')
-      .select('*')
-      .or(`email.ilike.${ident},username.ilike.${ident}`);
+  public static async restoreSession(): Promise<{ token: string; usuario: Usuario } | null> {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return null;
+    const { data: usuario, error: profileError } = await supabase.from('tecnodrill_usuarios').select(this.userFields).eq('id', user.id).single();
+    if (profileError || !usuario?.ativo) { await supabase.auth.signOut(); return null; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    this.setAuth(session.access_token, usuario as Usuario);
+    return { token: session.access_token, usuario: usuario as Usuario };
+  }
 
+  private static async authAction(body: Record<string, unknown>): Promise<any> {
+    const { data, error } = await supabase.functions.invoke('tecnodrill-auth', { body });
     if (error) {
-      console.error('[Supabase Auth Error]:', error);
-      throw new Error('Erro ao conectar ao banco de dados.');
+      let message = 'Não foi possível concluir a operação. Confira seus dados e tente novamente.';
+      try { message = (await error.context.json()).error || message; } catch {}
+      throw new Error(message);
     }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
 
-    if (!users || users.length === 0) {
-      throw new Error('Usuário ou e-mail não encontrado.');
-    }
-
-    const user = users[0];
-
-    if (!user.ativo) {
-      throw new Error('Este usuário está inativo no sistema TecnoDrill.');
-    }
-
-    // Validação de senha por bcrypt ou senha mestra do gestor
-    let senhaValida = false;
-    try {
-      senhaValida = bcrypt.compareSync(senha, user.senha_hash);
-    } catch (e) {
-      senhaValida = false;
-    }
-
-    const allowedMasterPasswords = ['@speni190868', 'admin@123', 'gestor@123', 'tecno@123'];
-    if (!senhaValida && !allowedMasterPasswords.includes(senha.toLowerCase())) {
-      throw new Error('Senha incorreta.');
-    }
-
-    const isFirstAccess = user.trocar_senha_primeiro_acesso === true || 
-      localStorage.getItem('tecnodrill_first_access_' + user.id) === 'true' || 
-      localStorage.getItem('tecnodrill_first_access_' + user.username?.toLowerCase()) === 'true';
-
-    const usuario: Usuario = {
-      id: user.id,
-      nome: user.nome,
-      perfil: user.perfil as PerfilUsuario,
-      username: user.username,
-      email: user.email || '',
-      ativo: Boolean(user.ativo),
-      trocar_senha_primeiro_acesso: isFirstAccess
-    };
-
-    const token = `td_token_${user.id}_${Date.now()}`;
-    this.setAuth(token, usuario);
-
-    return { token, usuario };
+  public static async login(identifier: string, senha: string): Promise<{ token: string; usuario: Usuario }> {
+    const res = await this.authAction({ action: 'login', identifier: identifier.trim(), password: senha });
+    const { error } = await supabase.auth.setSession({ access_token: res.session.access_token, refresh_token: res.session.refresh_token });
+    if (error) throw new Error('Não foi possível iniciar a sessão.');
+    this.setAuth(res.session.access_token, res.usuario);
+    return { token: res.session.access_token, usuario: res.usuario };
   }
 
   public static async trocarSenhaPrimeiroAcesso(usuarioId: string, novaSenha: string): Promise<Usuario> {
-    if (!novaSenha || novaSenha.length < 6) {
-      throw new Error('A nova senha deve possuir pelo menos 6 caracteres.');
-    }
-    const senhaHash = bcrypt.hashSync(novaSenha, 10);
-
-    // Limpa a flag de primeiro acesso em cache
-    localStorage.removeItem('tecnodrill_first_access_' + usuarioId);
-
-    try {
-      await supabase
-        .from('tecnodrill_usuarios')
-        .update({
-          senha_hash: senhaHash
-        })
-        .eq('id', usuarioId);
-    } catch (err) {
-      console.warn('[Supabase trocarSenhaPrimeiroAcesso]:', err);
-    }
-
-    try {
-      await fetch('/api/auth/trocar-senha-primeiro-acesso', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario_id: usuarioId, nova_senha: novaSenha })
-      });
-    } catch (_) {}
-
-    const usuarioAtual = this.getUsuarioAtual();
-    if (usuarioAtual) {
-      localStorage.removeItem('tecnodrill_first_access_' + usuarioAtual.username?.toLowerCase());
-    }
-
-    const atualizado: Usuario = {
-      ...(usuarioAtual || {
-        id: usuarioId,
-        nome: 'Colaborador',
-        perfil: 'OPERADOR',
-        username: 'user',
-        email: '',
-        ativo: true
-      }),
-      trocar_senha_primeiro_acesso: false
-    };
-
-    localStorage.setItem('tecnodrill_usuario', JSON.stringify(atualizado));
-    return atualizado;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || user.id !== usuarioId) throw new Error('Acesso negado.');
+    if (novaSenha.length < 6) throw new Error('A senha deve possuir pelo menos 6 caracteres.');
+    const { error } = await supabase.auth.updateUser({ password: novaSenha });
+    if (error) throw new Error('Não foi possível alterar a senha.');
+    const { error: flagError } = await supabase.rpc('tecnodrill_complete_first_access');
+    if (flagError) throw new Error('Senha alterada. Entre novamente para concluir o primeiro acesso.');
+    const restored = await this.restoreSession();
+    if (!restored) throw new Error('Entre novamente para continuar.');
+    return restored.usuario;
   }
 
   public static async getUsuarios(): Promise<Usuario[]> {
-    let lastError: any = null;
-
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const { data, error } = await supabase
-          .from('tecnodrill_usuarios')
-          .select('*')
-          .order('criado_em', { ascending: false });
-
-        if (!error && data && data.length > 0) {
-          return data.map((u: any) => ({
-            id: u.id,
-            nome: u.nome,
-            perfil: u.perfil as PerfilUsuario,
-            username: u.username,
-            email: u.email || '',
-            ativo: Boolean(u.ativo),
-            trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
-          }));
-        }
-
-        if (error) {
-          lastError = error;
-          console.warn(`[Supabase getUsuarios attempt ${attempt} error]:`, error);
-        }
-      } catch (err) {
-        lastError = err;
-        console.warn(`[Supabase getUsuarios attempt ${attempt} catch]:`, err);
-      }
-
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 600 * attempt));
-      }
-    }
-
-    // Fallback via API backend local
-    try {
-      const res = await fetch('/api/auth/usuarios');
-      if (res.ok) {
-        const data = await res.json();
-        return data.map((u: any) => ({
-          id: u.id,
-          nome: u.nome,
-          perfil: u.perfil as PerfilUsuario,
-          username: u.username,
-          email: u.email || '',
-          ativo: Boolean(u.ativo),
-          trocar_senha_primeiro_acesso: Boolean(u.trocar_senha_primeiro_acesso)
-        }));
-      }
-    } catch (_) {}
-
-    if (lastError) {
-      throw new Error(lastError.message || 'Erro ao carregar usuários do banco de dados.');
-    }
-
-    return [];
+    const { data, error } = await supabase.from('tecnodrill_usuarios').select(this.userFields).order('criado_em', { ascending: false });
+    if (error) throw new Error('Erro ao carregar usuários.');
+    return (data || []) as Usuario[];
   }
 
   public static async createUsuario(data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
-    const senhaFinal = data.senha || 'Tecno@123';
-    const senhaHash = bcrypt.hashSync(senhaFinal, 10);
-
-    const payload: any = {
-      nome: data.nome,
-      perfil: data.perfil,
-      username: data.username || data.nome?.toLowerCase().replace(/\s+/g, '.'),
-      email: data.email || null,
-      senha_hash: senhaHash,
-      ativo: data.ativo !== undefined ? data.ativo : true
-    };
-
-    let createdUser: any = null;
-
-    try {
-      const { data: created, error } = await supabase
-        .from('tecnodrill_usuarios')
-        .insert(payload)
-        .select('*')
-        .single();
-
-      if (!error && created) {
-        createdUser = created;
-      }
-    } catch (err) {
-      console.warn('[Supabase createUsuario warn]:', err);
-    }
-
-    // Sincroniza também no backend local
-    try {
-      const res = await fetch('/api/auth/usuarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, senha: senhaFinal })
-      });
-      if (res.ok && !createdUser) {
-        createdUser = await res.json();
-      }
-    } catch (_) {}
-
-    const result: Usuario = {
-      id: createdUser?.id || crypto.randomUUID(),
-      nome: data.nome || 'Novo Usuário',
-      perfil: (data.perfil as PerfilUsuario) || 'OPERADOR',
-      username: payload.username,
-      email: data.email || '',
-      ativo: payload.ativo,
-      trocar_senha_primeiro_acesso: true
-    };
-
-    localStorage.setItem('tecnodrill_first_access_' + result.username.toLowerCase(), 'true');
-    localStorage.setItem('tecnodrill_first_access_' + result.id, 'true');
-
-    return result;
+    return this.authAction({ action: 'create', data });
   }
 
   public static async updateUsuario(id: string, data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
-    const payload: any = {};
-    if (data.nome) payload.nome = data.nome;
-    if (data.perfil) payload.perfil = data.perfil;
-    if (data.username) payload.username = data.username;
-    if (data.email !== undefined) payload.email = data.email || null;
-    if (data.ativo !== undefined) payload.ativo = data.ativo;
-    if (data.senha && data.senha.trim()) {
-      payload.senha_hash = bcrypt.hashSync(data.senha.trim(), 10);
-      localStorage.setItem('tecnodrill_first_access_' + id, 'true');
-      if (data.username) {
-        localStorage.setItem('tecnodrill_first_access_' + data.username.toLowerCase(), 'true');
-      }
-    }
-
-    let updatedUser: any = null;
-
-    try {
-      const { data: updated, error } = await supabase
-        .from('tecnodrill_usuarios')
-        .update(payload)
-        .eq('id', id)
-        .select('*')
-        .single();
-
-      if (!error && updated) {
-        updatedUser = updated;
-      }
-    } catch (err) {
-      console.warn('[Supabase updateUsuario warn]:', err);
-    }
-
-    try {
-      const res = await fetch(`/api/auth/usuarios/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok && !updatedUser) {
-        updatedUser = await res.json();
-      }
-    } catch (_) {}
-
-    return {
-      id: id,
-      nome: updatedUser?.nome || data.nome || 'Usuário',
-      perfil: (updatedUser?.perfil || data.perfil || 'OPERADOR') as PerfilUsuario,
-      username: updatedUser?.username || data.username || '',
-      email: updatedUser?.email || data.email || '',
-      ativo: updatedUser?.ativo !== undefined ? Boolean(updatedUser.ativo) : true,
-      trocar_senha_primeiro_acesso: updatedUser?.trocar_senha_primeiro_acesso !== undefined ? Boolean(updatedUser.trocar_senha_primeiro_acesso) : false
-    };
+    return this.authAction({ action: 'update', id, data });
   }
 
   public static async deleteUsuario(id: string): Promise<{ success: boolean; message: string }> {
-    const { error } = await supabase
-      .from('tecnodrill_usuarios')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('[Delete Usuario Error]:', error);
-      throw new Error('Erro ao remover usuário.');
-    }
-
-    return { success: true, message: 'Usuário removido com sucesso.' };
+    return this.authAction({ action: 'delete', id });
   }
 
   // ============================================================================
@@ -1286,11 +1056,12 @@ export class ApiService {
       }
     }
 
-    if (needsRecalculation) {
+    const gestor = ['ADMIN', 'GESTOR'].includes(this.getUsuarioAtual()?.perfil || '');
+    if (needsRecalculation && gestor) {
       return await this.resequenceBarras(furoId);
     }
 
-    return rawBarras.map((b: any) => {
+    return withPrivatePhotos(rawBarras.map((b: any) => {
       const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
       const allFotos = (b.fotos && b.fotos.length > 0)
         ? b.fotos
@@ -1324,10 +1095,11 @@ export class ApiService {
         data_registro: meta.data_referencia || (b.horario_registro ? b.horario_registro.split('T')[0] : undefined),
         created_at: b.horario_registro
       };
-    });
+    }));
   }
 
   public static async resequenceBarras(furoId: string): Promise<Barra[]> {
+    if (!['ADMIN', 'GESTOR'].includes(this.getUsuarioAtual()?.perfil || '')) return this.getBarras(furoId);
     const { data: existing, error } = await supabase
       .from('tecnodrill_barras')
       .select('*')
@@ -1388,7 +1160,7 @@ export class ApiService {
     // Atualizar comprimento total do furo
     await supabase.from('tecnodrill_furos').update({ comprimento_furo: runningTotal }).eq('id', furoId);
 
-    return updatedList;
+    return withPrivatePhotos(updatedList);
   }
 
   public static async addBarra(furoId: string, data: Partial<Barra>): Promise<{
@@ -1396,6 +1168,8 @@ export class ApiService {
     celebrarMeta: boolean;
     mensagem: string;
   }> {
+    const creatorId = this.getUsuarioAtual()?.id;
+    if (!creatorId) throw new Error('Entre novamente antes de registrar produção.');
     const { data: existingList } = await supabase
       .from('tecnodrill_barras')
       .select('id, metros, metros_acumulados, horario_registro, tem_caixa, observacao, tipo_registro, diametro')
@@ -1477,6 +1251,10 @@ export class ApiService {
       observacao: encodedObs
     };
 
+    const { data: { user: authenticatedCreator } } = await supabase.auth.getUser();
+    if (authenticatedCreator?.id !== creatorId || usuarioAtual?.id !== creatorId) {
+      throw new Error('A sessão mudou durante o registro. Entre novamente na conta de origem.');
+    }
     let created: any = null;
     const res1 = await supabase
       .from('tecnodrill_barras')
@@ -1567,15 +1345,16 @@ export class ApiService {
       horario_registro: created.horario_registro
     };
 
+    const [privateBarra] = await withPrivatePhotos([barra]);
     // Disparar evento para atualização em tempo real sem precisar de reload
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tecnodrill:barra_added', {
-        detail: { barra, furoId }
+        detail: { barra: privateBarra, furoId }
       }));
     }
 
     return {
-      barra,
+      barra: privateBarra,
       celebrarMeta: metaAtingidaAgora,
       mensagem: isCaixaRegistro
         ? `Instalação de Caixa #${nextNum} registrada com sucesso!`

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --port 3005 --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:security": "node --test scripts/test-registro-security.cjs scripts/test-auth-edge.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -24,6 +25,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
     "@types/canvas-confetti": "^1.6.4",
     "@types/leaflet": "^1.9.22",
     "@types/react": "^18.3.3",
