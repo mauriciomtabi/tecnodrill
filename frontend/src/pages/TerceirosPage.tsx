@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend, ComposedChart, Area
+  PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend, ComposedChart, Area, LabelList
 } from 'recharts';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -201,8 +201,8 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
     return Object.entries(mesesMap).map(([key, item]) => ({
       key,
       mes: item.mes,
-      custo: Math.round(item.custo),
-      metros: Math.round(item.metros),
+      custo: item.custo,
+      metros: item.metros,
       qtdTerceiros: item.terceiros.size
     }));
   }, [lancamentos, barras]);
@@ -217,12 +217,16 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
 
     const arr = Object.entries(mapa).map(([nome, valor]) => ({
       nome,
-      valor: Math.round(valor)
+      valor
     }));
 
     arr.sort((a, b) => b.valor - a.valor);
     return arr.slice(0, 8); // Top 8 terceiros
   }, [lancamentosFiltrados]);
+
+  const totalTopTerceiros = dadosTopTerceiros.reduce((total, item) => total + item.valor, 0);
+  const formatarPercentualTop = (valor: number) =>
+    `${(totalTopTerceiros > 0 ? valor / totalTopTerceiros * 100 : 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
 
   // Exclusão de Lançamento
   const handleDeleteLancamento = async (id: string, nome: string) => {
@@ -552,21 +556,27 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
 
           <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={dadosEvolucaoMensal} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <ComposedChart data={dadosEvolucaoMensal} margin={{ top: 30, right: 20, left: 20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
                 <XAxis dataKey="mes" stroke="#94A3B8" fontSize={11} tickLine={false} />
                 <YAxis yAxisId="custo" stroke="#38BDF8" fontSize={11} tickLine={false} tickFormatter={v => `R$ ${(v / 1000).toFixed(0)}k`} />
                 <YAxis yAxisId="metros" orientation="right" stroke="#10B981" fontSize={11} tickLine={false} tickFormatter={v => `${v}m`} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
+                  contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px', color: '#F8FAFC' }}
+                  labelStyle={{ color: '#F8FAFC' }}
+                  itemStyle={{ color: '#F8FAFC' }}
                   formatter={(value: any, name: string) => {
                     if (name === 'custo') return [`R$ ${Number(value).toLocaleString('pt-BR')}`, 'Custo Terceiros'];
                     if (name === 'metros') return [`${Number(value).toLocaleString('pt-BR')} m`, 'Metros MND'];
                     return [value, name];
                   }}
                 />
-                <Bar yAxisId="custo" dataKey="custo" fill="#38BDF8" radius={[6, 6, 0, 0]} maxBarSize={36} />
-                <Line yAxisId="metros" type="monotone" dataKey="metros" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981' }} />
+                <Bar yAxisId="custo" dataKey="custo" fill="#38BDF8" radius={[6, 6, 0, 0]} maxBarSize={36}>
+                  <LabelList dataKey="custo" position="top" fill="#F8FAFC" fontSize={10} formatter={(value: number) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
+                </Bar>
+                <Line yAxisId="metros" type="monotone" dataKey="metros" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981' }}>
+                  <LabelList dataKey="metros" position="top" offset={10} fill="#34D399" fontSize={10} formatter={(value: number) => `${Number(value).toLocaleString('pt-BR')} m`} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -579,7 +589,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
               <Users className="w-4 h-4 text-emerald-400" />
               Top Prestadores & Terceiros
             </h2>
-            <p className="text-xs text-slate-400 mb-4">Concentração de custos no período filtrado</p>
+            <p className="text-xs text-slate-400 mb-4">Participação no total dos {dadosTopTerceiros.length} maiores prestadores do período</p>
 
             <div className="h-[210px] w-full relative">
               <ResponsiveContainer width="100%" height="100%">
@@ -592,29 +602,41 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
                     outerRadius={85}
                     paddingAngle={3}
                     dataKey="valor"
+                    labelLine={false}
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, value }) => {
+                      const radius = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) / 2;
+                      const angle = -Number(midAngle) * Math.PI / 180;
+                      return (
+                        <text x={Number(cx) + radius * Math.cos(angle)} y={Number(cy) + radius * Math.sin(angle)} textAnchor="middle" dominantBaseline="central" fill="#FFFFFF" stroke="#0F172A" strokeWidth={3} paintOrder="stroke" fontSize={10} fontWeight={700}>
+                          {formatarPercentualTop(Number(value))}
+                        </text>
+                      );
+                    }}
                   >
                     {dadosTopTerceiros.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={CORES_PALETA[index % CORES_PALETA.length]} />
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '11px' }}
-                    formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR')}`, 'Total Pago']}
+                    contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#F8FAFC' }}
+                    labelStyle={{ color: '#F8FAFC' }}
+                    itemStyle={{ color: '#F8FAFC' }}
+                    formatter={(value: any, _name: string, item: any) => [`R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${formatarPercentualTop(Number(value))})`, item.payload.nome]}
                   />
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-xs text-slate-400 font-medium">Top 8</span>
+                <span className="text-xs text-slate-400 font-medium">Top {dadosTopTerceiros.length}</span>
                 <span className="text-sm font-bold text-white">Prestadores</span>
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-1.5 mt-2 max-h-[90px] overflow-y-auto pr-1">
-            {dadosTopTerceiros.slice(0, 6).map((item, idx) => (
+            {dadosTopTerceiros.map((item, idx) => (
               <div key={idx} className="flex items-center gap-1.5 text-[11px] text-slate-300 truncate">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: CORES_PALETA[idx % CORES_PALETA.length] }} />
-                <span className="truncate">{item.nome}</span>
+                <span className="truncate" title={item.nome}>{item.nome} — {formatarPercentualTop(item.valor)}</span>
               </div>
             ))}
           </div>
