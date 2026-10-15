@@ -649,9 +649,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const formatDataLabel = (val: number, isMoney: boolean): string => {
     if (!val || val <= 0) return '';
     if (isMoney) {
-      if (val >= 1000000) return `R$ ${(val / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
-      if (val >= 1000) return `R$ ${(val / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
-      return `R$ ${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
+      if (val >= 1000000) return `${(val / 1000000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`;
+      if (val >= 1000) return `${(val / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+      return `${val.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`;
     }
     if (val >= 1000) return `${(val / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}km`;
     return `${val.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}m`;
@@ -1141,7 +1141,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               const cellWidth = evolutionPlotWidth / Math.max(1, dadosEvolucao.length);
               const tickStep = Math.max(1, Math.ceil(32 / Math.max(1, cellWidth)));
               const showTick = i === dadosEvolucao.length - 1 || (i % tickStep === 0 && (i === 0 || i <= dadosEvolucao.length - 1 - tickStep));
-              const showDataLabels = cellWidth >= (metricaEvolucao === 'FINANCEIRO' ? 100 : 55);
+              const verticalLabels = cellWidth < (metricaEvolucao === 'FINANCEIRO' ? 85 : 45);
               const isHovered = hoveredMonthIdx === i;
               const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
               const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
@@ -1225,24 +1225,31 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     {metricaEvolucao === 'FINANCEIRO' ? (
                       <>
                         {/* Coluna Receita com Rótulo de Dados */}
-                        <div 
-                          style={{ 
+                        <div
+                          style={{
                             width: '46%',
                             minWidth: 0,
-                            height: '100%', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            justifyContent: 'flex-end', 
-                            alignItems: 'center' 
+                            height: '100%',
+                            position: 'relative',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'flex-end',
+                            alignItems: 'center'
                           }}
                         >
                           {/* Rótulo de Dado da Receita */}
-                          {d.receita > 0 && showDataLabels && (
-                            <span 
-                              style={{ 
-                                fontSize: '10px', 
-                                fontWeight: 800, 
-                                color: '#2ECC71', 
+                          {d.receita > 0 && (
+                            <span
+                              style={{
+                                fontWeight: 800,
+                                color: '#2ECC71',
+                                position: 'absolute',
+                                bottom: `calc(${Math.max(receitaHeightPct, 2)}% + 6px)`,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                writingMode: verticalLabels ? 'vertical-rl' : 'horizontal-tb',
+                                textOrientation: 'mixed',
+                                fontSize: verticalLabels ? '9px' : '10px',
                                 fontFamily: 'var(--font-mono)',
                                 marginBottom: '4px',
                                 whiteSpace: 'nowrap',
@@ -1253,7 +1260,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                               {formatDataLabel(d.receita, true)}
                             </span>
                           )}
-                          <div 
+                          <div
                             style={{
                               width: '100%',
                               height: `${Math.max(receitaHeightPct, 2)}%`,
@@ -1266,24 +1273,31 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                         </div>
 
                         {/* Coluna Custo com Rótulo de Dados */}
-                        <div 
-                          style={{ 
+                        <div
+                          style={{
                             width: '46%',
                             minWidth: 0,
-                            height: '100%', 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            justifyContent: 'flex-end', 
-                            alignItems: 'center' 
+                            height: '100%',
+                            position: 'relative',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'flex-end',
+                            alignItems: 'center'
                           }}
                         >
                           {/* Rótulo de Dado do Custo */}
-                          {d.custo > 0 && showDataLabels && (
-                            <span 
-                              style={{ 
-                                fontSize: '10px', 
-                                fontWeight: 800, 
-                                color: '#E74C3C', 
+                          {d.custo > 0 && (
+                            <span
+                              style={{
+                                fontWeight: 800,
+                                color: '#E74C3C',
+                                position: 'absolute',
+                                bottom: `calc(${Math.max(custoHeightPct, 2)}% + 6px)`,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                writingMode: verticalLabels ? 'vertical-rl' : 'horizontal-tb',
+                                textOrientation: 'mixed',
+                                fontSize: verticalLabels ? '9px' : '10px',
                                 fontFamily: 'var(--font-mono)',
                                 marginBottom: '4px',
                                 whiteSpace: 'nowrap',
@@ -1294,7 +1308,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                               {formatDataLabel(d.custo, true)}
                             </span>
                           )}
-                          <div 
+                          <div
                             style={{
                               width: '100%',
                               height: `${Math.max(custoHeightPct, 2)}%`,
@@ -1308,23 +1322,30 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       </>
                     ) : (
                       /* Coluna Metros com Rótulo de Dados */
-                      <div 
-                        style={{ 
-                          width: '65%', 
-                          height: '100%', 
-                          display: 'flex', 
-                          flexDirection: 'column', 
-                          justifyContent: 'flex-end', 
-                          alignItems: 'center' 
+                      <div
+                        style={{
+                          width: '65%',
+                          height: '100%',
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'flex-end',
+                          alignItems: 'center'
                         }}
                       >
                         {/* Rótulo de Dado dos Metros */}
-                        {d.metros > 0 && showDataLabels && (
-                          <span 
-                            style={{ 
-                              fontSize: '10.5px', 
-                              fontWeight: 800, 
-                              color: 'var(--primary)', 
+                        {d.metros > 0 && (
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              color: 'var(--primary)',
+                                position: 'absolute',
+                                bottom: `calc(${Math.max(metrosHeightPct, 2)}% + 6px)`,
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                writingMode: verticalLabels ? 'vertical-rl' : 'horizontal-tb',
+                                textOrientation: 'mixed',
+                                fontSize: verticalLabels ? '9px' : '10px',
                               fontFamily: 'var(--font-mono)',
                               marginBottom: '4px',
                               whiteSpace: 'nowrap',
@@ -1335,7 +1356,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                             {formatDataLabel(d.metros, false)}
                           </span>
                         )}
-                        <div 
+                        <div
                           style={{
                             width: '100%',
                             height: `${Math.max(metrosHeightPct, 2)}%`,
