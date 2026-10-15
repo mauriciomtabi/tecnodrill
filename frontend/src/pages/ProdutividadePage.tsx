@@ -54,7 +54,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   // Controles de Gráficos (Estilo BI JLE)
   const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>('FINANCEIRO');
   const [granularidade, setGranularidade] = useState<GranularidadeEvolucao>('MENSAL');
-  const [metricaSegmento, setMetricaSegmento] = useState<'RECEITA' | 'METROS'>('RECEITA');
   const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
 
   useEffect(() => {
@@ -556,11 +555,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     const totalValMetros = Object.values(tipos).reduce((acc, curr) => acc + curr.metros, 0);
     const totalValReceita = Object.values(tipos).reduce((acc, curr) => acc + curr.receita, 0);
 
-    const baseTotal = metricaSegmento === 'RECEITA' ? totalValReceita : totalValMetros;
-
     return Object.entries(tipos).map(([key, val]) => {
-      const currentVal = metricaSegmento === 'RECEITA' ? val.receita : val.metros;
-      const pct = baseTotal > 0 ? Math.round((currentVal / baseTotal) * 100) : 0;
       return {
         key,
         name: val.nome,
@@ -570,11 +565,11 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         metros: Number(val.metros.toFixed(1)),
         receita: Number(val.receita.toFixed(2)),
         custo: Number(val.custo.toFixed(2)),
-        value: currentVal,
-        pct
+        pctReceita: totalValReceita > 0 ? val.receita / totalValReceita * 100 : 0,
+        pctMetros: totalValMetros > 0 ? val.metros / totalValMetros * 100 : 0
       };
     });
-  }, [servicosFiltrados, metricaSegmento]);
+  }, [servicosFiltrados]);
 
   // Exportação para Excel (.xlsx) no padrão executivo BI JLE
   const handleExportExcel = () => {
@@ -1361,115 +1356,86 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </span>
           </div>
 
-          {/* Toggle Métrica */}
-          <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
-            <button
-              type="button"
-              onClick={() => setMetricaSegmento('RECEITA')}
-              style={{
-                padding: '5px 12px',
-                fontSize: '11px',
-                fontWeight: 700,
-                borderRadius: '4px',
-                border: 'none',
-                backgroundColor: metricaSegmento === 'RECEITA' ? 'var(--primary)' : 'transparent',
-                color: metricaSegmento === 'RECEITA' ? '#FFFFFF' : 'var(--text-muted)',
-                cursor: 'pointer'
-              }}
-            >
-              Por Receita (R$)
-            </button>
-            <button
-              type="button"
-              onClick={() => setMetricaSegmento('METROS')}
-              style={{
-                padding: '5px 12px',
-                fontSize: '11px',
-                fontWeight: 700,
-                borderRadius: '4px',
-                border: 'none',
-                backgroundColor: metricaSegmento === 'METROS' ? 'var(--primary)' : 'transparent',
-                color: metricaSegmento === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
-                cursor: 'pointer'
-              }}
-            >
-              Por Metros (m)
-            </button>
-          </div>
         </div>
 
         {/* Layout Panorâmico: Donut SVG na Esquerda + Cards Interativos na Direita */}
-        <div 
-          style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap', 
-            gap: '28px', 
-            alignItems: 'center' 
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '28px',
+            alignItems: 'center'
           }}
         >
-          {/* Lado Esquerdo: Donut Ring Centralizado */}
-          <div style={{ flex: '0 0 auto', width: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: '210px', margin: '0 auto' }}>
-            <svg width="210" height="210" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}>
-              {/* Background Ring */}
-              <circle
-                cx="50"
-                cy="50"
-                r="40"
-                fill="transparent"
-                stroke="#1B3645"
-                strokeWidth="11"
-              />
-              {/* Segments com offset calculado de forma segura e local */}
-              {(() => {
-                let runningPct = 0;
-                return dadosSegmentos.map((item) => {
-                  const strokeDash = (item.pct / 100) * donutCircumference;
-                  const offset = -(runningPct / 100) * donutCircumference;
-                  runningPct += item.pct;
-
-                  if (item.pct <= 0) return null;
-
-                  return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', flex: '1 1 390px', minWidth: 0 }}>
+            {(['RECEITA', 'METROS'] as const).map(metricaSegmento => (
+              <React.Fragment key={metricaSegmento}>
+                {/* Lado Esquerdo: Donut Ring Centralizado */}
+                <div style={{ flex: '0 0 auto', width: '190px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: '210px', margin: '0 auto' }}>
+                  <svg width="180" height="180" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}>
+                    {/* Background Ring */}
                     <circle
-                      key={item.key}
                       cx="50"
                       cy="50"
                       r="40"
                       fill="transparent"
-                      stroke={item.color}
+                      stroke="#1B3645"
                       strokeWidth="11"
-                      strokeDasharray={`${strokeDash} ${donutCircumference}`}
-                      strokeDashoffset={offset}
-                      style={{ transition: 'stroke-dasharray 0.5s ease' }}
                     />
-                  );
-                });
-              })()}
-            </svg>
+                    {/* Segments com offset calculado de forma segura e local */}
+                    {(() => {
+                      let runningPct = 0;
+                      return dadosSegmentos.map((item) => {
+                        const strokeDash = ((metricaSegmento === 'RECEITA' ? item.pctReceita : item.pctMetros) / 100) * donutCircumference;
+                        const offset = -(runningPct / 100) * donutCircumference;
+                        runningPct += (metricaSegmento === 'RECEITA' ? item.pctReceita : item.pctMetros);
 
-            {/* Rótulo Central do Donut */}
-            <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
-              <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                Total Período
-              </span>
-              <span style={{ fontSize: '16px', fontWeight: 900, color: '#FFFFFF', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                {metricaSegmento === 'RECEITA' 
-                  ? `R$ ${formatShortValue(totais.totalReceita)}` 
-                  : `${totais.totalMetros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}m`}
-              </span>
-              <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, marginTop: '2px' }}>
-                {servicosFiltrados.length} obra(s)
-              </span>
-            </div>
+                        if ((metricaSegmento === 'RECEITA' ? item.pctReceita : item.pctMetros) <= 0) return null;
+
+                        return (
+                          <circle
+                            key={item.key}
+                            cx="50"
+                            cy="50"
+                            r="40"
+                            fill="transparent"
+                            stroke={item.color}
+                            strokeWidth="11"
+                            strokeDasharray={`${strokeDash} ${donutCircumference}`}
+                            strokeDashoffset={offset}
+                            style={{ transition: 'stroke-dasharray 0.5s ease' }}
+                          />
+                        );
+                      });
+                    })()}
+                  </svg>
+
+                  {/* Rótulo Central do Donut */}
+                  <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
+                    <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
+                      {metricaSegmento === 'RECEITA' ? 'Receita do período' : 'Metros do período'}
+                    </span>
+                    <span style={{ fontSize: '16px', fontWeight: 900, color: 'var(--text-main)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                      {metricaSegmento === 'RECEITA'
+                        ? `R$ ${formatShortValue(totais.totalReceita)}`
+                        : `${totais.totalMetros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}m`}
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 700, marginTop: '2px' }}>
+                      {servicosFiltrados.length} obra(s)
+                    </span>
+                  </div>
+                </div>
+              </React.Fragment>
+            ))}
           </div>
 
           {/* Lado Direito: Cards dos 3 Segmentos em Grid Lateral */}
           <div 
             style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))',
               gap: '14px',
-              flex: '1 1 520px'
+              flex: '3 1 660px', minWidth: 0
             }}
           >
             {dadosSegmentos.map(item => {
@@ -1505,42 +1471,28 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                         <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{item.count} obra(s) ativa(s)</span>
                       </div>
                     </div>
-                    <span style={{ 
-                      fontSize: '11px', 
-                      fontWeight: 800, 
-                      padding: '3px 8px', 
-                      borderRadius: '10px', 
-                      backgroundColor: `${item.color}22`, 
-                      color: item.color,
-                      border: `1px solid ${item.color}55` 
-                    }}>
-                      {item.pct}%
-                    </span>
                   </div>
 
-                  {/* Barra de Progresso Horizontal Proporcional */}
-                  <div style={{ width: '100%', height: '5px', backgroundColor: '#1B3645', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div 
-                      style={{ 
-                        height: '100%', 
-                        width: `${item.pct}%`, 
-                        backgroundColor: item.color, 
-                        borderRadius: '3px',
-                        transition: 'width 0.4s ease'
-                      }} 
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', paddingTop: '2px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      {metricaSegmento === 'RECEITA' ? 'Faturamento:' : 'Volume:'}
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 800, color: 'var(--text-main)' }}>
-                      {metricaSegmento === 'RECEITA' 
-                        ? `R$ ${item.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
-                        : `${item.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m`}
-                    </span>
-                  </div>
+                  {(['RECEITA', 'METROS'] as const).map(metrica => {
+                    const receita = metrica === 'RECEITA';
+                    const percentual = receita ? item.pctReceita : item.pctMetros;
+                    return (
+                      <div key={metrica} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px', fontSize: '11.5px' }}>
+                          <span style={{ color: 'var(--text-muted)' }}>{receita ? 'Receita:' : 'Metros:'}</span>
+                          <strong style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>
+                            {receita ? 'R$ ' + item.receita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : item.metros.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' m'}
+                          </strong>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1, height: '5px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: percentual + '%', backgroundColor: item.color, borderRadius: '3px' }} />
+                          </div>
+                          <span style={{ fontSize: '11px', fontWeight: 800, color: item.color, minWidth: '38px', textAlign: 'right' }}>{percentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
