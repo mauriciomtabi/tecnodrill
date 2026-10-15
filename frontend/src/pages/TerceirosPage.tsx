@@ -198,9 +198,11 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   // Exclusão de Lançamento
   const handleDeleteLancamento = async (id: string, nome: string) => {
     if (!window.confirm(`Tem certeza que deseja excluir o lançamento de "${nome}"?`)) return;
-    const ok = await ApiService.deleteTerceiroLancamento(id);
-    if (ok) {
-      setLancamentos(prev => prev.filter(l => l.id !== id));
+    try {
+      const ok = await ApiService.deleteTerceiroLancamento(id);
+      if (ok) setLancamentos(prev => prev.filter(l => l.id !== id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao excluir lançamento.');
     }
   };
 
@@ -243,7 +245,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
       });
     } catch (err) {
       console.error(err);
-      alert('Erro ao criar lançamento.');
+      alert(err instanceof Error ? err.message : 'Erro ao criar lançamento.');
     } finally {
       setSalvando(false);
     }

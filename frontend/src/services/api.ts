@@ -662,17 +662,12 @@ export class ApiService {
       meta_metros: Number(data.meta_metros) || 100
     };
 
-    let createdServico: any = null;
-
-    try {
-      const { data: created, error } = await supabase
-        .from('tecnodrill_servicos')
-        .insert(supabasePayload)
-        .select()
-        .single();
-      
-      if (!error && created) {
-        createdServico = {
+    const { data: created, error } = await supabase.from('tecnodrill_servicos')
+      .insert(supabasePayload).select().single();
+    if (error || !created) throw new Error(error?.code === '23505'
+      ? 'O código desta obra já existe. Atualize a lista e tente novamente.'
+      : 'Não foi possível salvar a obra. Verifique sua sessão e tente novamente.');
+    const createdServico = {
           ...created,
           descricao: cleanDesc,
           tipo_servico: data.tipo_servico || 'TELECOM',
@@ -690,73 +685,16 @@ export class ApiService {
           operador_id: data.operador_id,
           operador_nome: data.operador_nome
         };
-      } else if (error) {
-        console.warn('[Supabase createServico error]:', error);
-      }
-    } catch (err) {
-      console.warn('[Supabase createServico catch]:', err);
-    }
 
-    // Sincroniza também no backend local
-    try {
-      const res = await fetch('/api/servicos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...supabasePayload,
-          navegador_id: data.navegador_id,
-          navegador_nome: data.navegador_nome,
-          operador_id: data.operador_id,
-          operador_nome: data.operador_nome,
-          tipo_servico: data.tipo_servico || 'TELECOM',
-          min_fotos_registro: Number(data.min_fotos_registro) || 2,
-          os_obrigatoria: !!data.os_obrigatoria,
-          custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
-          custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
-          custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
-          custo_outros_diario: Number(data.custo_outros_diario) || 0
-        })
-      });
-      if (res.ok && !createdServico) {
-        createdServico = await res.json();
-      }
-    } catch (_) {}
-
-    if (!createdServico) {
-      createdServico = {
-        ...supabasePayload,
-        descricao: cleanDesc,
-        tipo_servico: data.tipo_servico || 'TELECOM',
-        min_fotos_registro: Number(data.min_fotos_registro) || 2,
-        os_obrigatoria: !!data.os_obrigatoria,
-        logo_cliente: data.logo_cliente || undefined,
-        logo_escala: data.logo_escala ? Number(data.logo_escala) : 1.0,
-        custo_metro: Number(data.custo_metro) || 0,
-        custo_equipe_diario: Number(data.custo_equipe_diario) || 0,
-        custo_combustivel_diario: Number(data.custo_combustivel_diario) || 0,
-        custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
-        custo_outros_diario: Number(data.custo_outros_diario) || 0,
-        navegador_id: data.navegador_id,
-        navegador_nome: data.navegador_nome,
-        operador_id: data.operador_id,
-        operador_nome: data.operador_nome,
-        criado_em: new Date().toISOString()
-      };
-    }
-
-    // Cria o primeiro furo vinculando a equipe selecionada
-    try {
-      await supabase.from('tecnodrill_furos').insert({
-        servico_id: servicoId,
-        navegador_id: data.navegador_id || null,
-        navegador_nome: data.navegador_nome || 'Navegador',
-        operador_id: data.operador_id || null,
-        operador_nome: data.operador_nome || 'Operador',
-        status: 'EM_EXECUCAO'
-      });
-    } catch (e) {
-      console.warn('[Supabase createFuro inicial]:', e);
-    }
+    const { error: furoError } = await supabase.from('tecnodrill_furos').insert({
+      servico_id: servicoId,
+      navegador_id: data.navegador_id || null,
+      navegador_nome: data.navegador_nome || 'Navegador',
+      operador_id: data.operador_id || null,
+      operador_nome: data.operador_nome || 'Operador',
+      status: 'EM_EXECUCAO'
+    });
+    if (furoError) throw new Error('A obra foi salva, mas o furo inicial não foi criado. Abra a obra para adicionar o furo; não cadastre a obra novamente.');
 
     return createdServico;
   }
@@ -1277,8 +1215,7 @@ export class ApiService {
       };
     }
 
-    // Atualizar comprimento total do furo
-    await supabase.from('tecnodrill_furos').update({ comprimento_furo: metrosAcumulados }).eq('id', furoId);
+    // O trigger do banco calcula o total com todos os registros, inclusive os de outros autores.
 
     // Validação estrita e precisa de Meta Diária / Semanal
     let metaAtingidaAgora = false;
@@ -1544,7 +1481,8 @@ export class ApiService {
         .select()
         .single();
 
-      if (!error && data) {
+      if (error || !data) throw new Error('Não foi possível salvar o lançamento. Verifique sua sessão e tente novamente.');
+      if (data) {
         return {
           ...fullItem,
           id: fullItem.id || data.id
@@ -1552,33 +1490,27 @@ export class ApiService {
       }
     } catch (err) {
       console.error('Erro ao salvar lançamento de terceiro:', err);
+      throw err;
     }
 
-    return fullItem;
+    throw new Error('Não foi possível confirmar o lançamento.');
   }
 
   public static async deleteTerceiroLancamento(id: string): Promise<boolean> {
-    try {
-      // Tenta deletar tanto por id direto quanto buscando nos logs
-      const { data: logs } = await supabase
-        .from('tecnodrill_logs')
-        .select('id, detalhes')
-        .eq('acao', 'LANCAMENTO_TERCEIRO');
-
-      if (logs) {
-        for (const log of logs) {
-          try {
-            const parsed = typeof log.detalhes === 'string' ? JSON.parse(log.detalhes) : (log.detalhes || {});
-            if (parsed.id === id || log.id === id) {
-              await supabase.from('tecnodrill_logs').delete().eq('id', log.id);
-            }
-          } catch (_) {}
-        }
+    const { data: logs, error } = await supabase.from('tecnodrill_logs')
+      .select('id, detalhes').eq('acao', 'LANCAMENTO_TERCEIRO');
+    if (error) throw new Error('Não foi possível consultar o lançamento para exclusão.');
+    for (const log of logs || []) {
+      let parsed: any;
+      try { parsed = typeof log.detalhes === 'string' ? JSON.parse(log.detalhes) : (log.detalhes || {}); }
+      catch { continue; }
+      if (parsed.id === id || log.id === id) {
+        const { data: removed, error: deleteError } = await supabase.from('tecnodrill_logs')
+          .delete().eq('id', log.id).select('id');
+        if (deleteError || !removed?.length) throw new Error('Não foi possível excluir o lançamento.');
+        return true;
       }
-      return true;
-    } catch (err) {
-      console.error('Erro ao deletar lançamento de terceiro:', err);
-      return false;
     }
+    throw new Error('Lançamento não encontrado para exclusão.');
   }
 }

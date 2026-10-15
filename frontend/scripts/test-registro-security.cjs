@@ -36,10 +36,10 @@ test('actual PostgreSQL RLS, grants, triggers and photo policies', async t => {
   `.replace("select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub'", "select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid"));
   await db.exec(`
     grant usage on schema auth,storage,public to authenticated,anon;
-    create table public.tecnodrill_usuarios(id uuid primary key,nome text,perfil text,email text,username text,senha_hash text,ativo boolean,criado_em timestamptz default now());
+    create table public.tecnodrill_usuarios(id uuid primary key,nome text,perfil text,email text unique,username text unique,senha_hash text,ativo boolean,criado_em timestamptz default now());
     create table public.tecnodrill_servicos(id text primary key,descricao text);
     create table public.tecnodrill_furos(id uuid primary key,servico_id text,navegador_id uuid,operador_id uuid,comprimento_furo numeric default 0);
-    create table public.tecnodrill_barras(id uuid primary key default gen_random_uuid(), furo_id uuid,numero_barra int,metros numeric,metros_acumulados numeric,registrado_por uuid references public.tecnodrill_usuarios(id),tipo_registro text,observacao text,foto_url text,fotos jsonb default '[]');
+    create table public.tecnodrill_barras(id uuid primary key default gen_random_uuid(), furo_id uuid,numero_barra int,metros numeric,metros_acumulados numeric,registrado_por uuid references public.tecnodrill_usuarios(id),tipo_registro text,observacao text,foto_url text,fotos jsonb default '[]', unique(furo_id,numero_barra));
     create table public.tecnodrill_logs(id uuid primary key default gen_random_uuid(),usuario_id uuid,acao text);
     create table storage.objects(name text primary key,bucket_id text);
     alter table storage.objects enable row level security;

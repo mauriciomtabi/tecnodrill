@@ -46,3 +46,13 @@ Em produção, as políticas foram testadas para todos os 13 perfis dentro de tr
 A comparação dos vínculos legados por nome com os vínculos protegidos por ID não encontrou perda de acesso a obras. Duas contas de técnicos não têm obras atribuídas; elas já não correspondiam aos vínculos legados. Nenhum vínculo foi atribuído automaticamente por nome.
 
 O projeto Vercel alternativo `tecnodrill` continua com falha de deploy pré-existente. Não foi confirmado se mantém rotas antigas publicadas; essa revisão depende de acesso aos logs/configuração desse projeto. A atualização confirmada é de `tecnodrill-66l8`.
+
+
+## Correção de cadastro e gravações — 15/10/2026
+
+- Cadastro retornava erro genérico para `operador.teste`, já existente desde agosto. A função v2 verifica login/e-mail antes de provisionar Auth e retorna conflito 409 compreensível; e-mail opcional vazio vira NULL.
+- Obras e pagamentos deixam de retornar sucesso fictício quando a persistência falha. Removida a gravação duplicada de obra no backend legado. Falha do furo inicial é informada como gravação parcial, sem instruir novo cadastro da obra.
+- Removida atualização de metragem pelo cliente após inserir registro: o trigger mantém o agregado de todos os autores.
+- 26 testes locais passaram, incluindo criação administrativa com Auth simulado, duplicidade, gravação de obra/furo, falhas de persistência, pagamentos e isolamento. Teste RLS com unicidade de usuário/e-mail e número de barra.
+- No banco real, sessão de gestão criou obra, furo, registro de 7 m e pagamento dentro de transação com ROLLBACK; agregado confirmado em 7 m e ausência de resíduos confirmada depois. Esse teste não substitui um cadastro/login completo via navegador.
+- Nenhuma tabela ou configuração do JLE foi alterada.

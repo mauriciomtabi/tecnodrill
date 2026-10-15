@@ -77,9 +77,23 @@ Deno.serve(async req => {
     for (const field of ['nome', 'username', 'email', 'perfil', 'ativo', 'trocar_senha_primeiro_acesso']) {
       if (payload[field] !== undefined) changes[field] = payload[field];
     }
+    for (const field of ['nome', 'username', 'email']) {
+      if (typeof changes[field] === 'string') changes[field] = String(changes[field]).trim();
+    }
+    if (changes.email === '') changes.email = null;
     if (changes.perfil && !['ADMIN', 'GESTOR', 'OPERADOR', 'NAVEGADOR'].includes(String(changes.perfil))) return reply({ error: 'Perfil inválido.' }, 400);
     const password = payload.senha ? String(payload.senha) : '';
     if (password && password.length < 6) return reply({ error: 'A senha deve possuir pelo menos 6 caracteres.' }, 400);
+    // Check before provisioning Auth, and retain the constraint check for concurrent requests.
+    for (const field of ['username', 'email']) {
+      if (!changes[field]) continue;
+      const escaped = String(changes[field]).replace(/[\\%_]/g, '\\$&');
+      const { data: matches, error } = await admin.from('tecnodrill_usuarios').select('id').ilike(field, escaped);
+      if (error) throw error;
+      if (matches?.some((match: { id: string }) => match.id !== id)) {
+        return reply({ error: field === 'username' ? 'Este login já está cadastrado. Escolha outro login ou edite o usuário existente.' : 'Este e-mail já está cadastrado em outro usuário.' }, 409);
+      }
+    }
     if (input.action === 'create') {
       if (!password || !changes.nome || !changes.username || !changes.perfil) return reply({ error: 'Preencha nome, usuário, perfil e senha.' }, 400);
       const { data: created, error } = await admin.auth.admin.createUser({ id, email: authEmail(id), password, email_confirm: true, app_metadata: { application: 'tecnodrill' } });
@@ -100,7 +114,10 @@ Deno.serve(async req => {
     const { data, error } = await admin.from('tecnodrill_usuarios').update(changes).eq('id', id).select(fields).single();
     if (error) throw error;
     return reply(data);
-  } catch {
+  } catch (error) {
+    if ((error as { code?: string })?.code === '23505') {
+      return reply({ error: 'Login ou e-mail já cadastrado. Confira os usuários existentes.' }, 409);
+    }
     return reply({ error: 'Não foi possível concluir a operação de acesso.' }, 400);
   }
 });

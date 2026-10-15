@@ -5,17 +5,20 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { transformSync } = require('esbuild');
 
-function handlerForTest() {
+function handlerForTest(options = {}) {
+  const writes = [];
   let handler;
   const profile = { id: '11111111-1111-4111-8111-111111111111', nome: 'Teste', username: 'teste', perfil: 'OPERADOR', ativo: true, senha_hash: 'PRIVATE_TEST_HASH' };
   const admin = {
     auth: {
       getUser: async token => ({ data: { user: token === 'verified-op' || token === 'verified-admin' ? { id: token } : null }, error: null }),
-      admin: { getUserById: async () => ({ data: { user: { id: profile.id } } }) }
+      admin: { createUser: async input => { writes.push(input); return { data: { user: { id: input.id } }, error: null }; }, deleteUser: async () => ({ error: null }), getUserById: async () => ({ data: { user: { id: profile.id } } }) }
     },
     from: () => {
       let columns; let id;
       const q = {
+        insert(value) { writes.push(value); return q; },
+        then(resolve) { resolve({ data: options.duplicate ? [{ id: profile.id }] : [], error: null }); },
         select(value) { columns = value; return q; },
         ilike() { return q; },
         eq(_column, value) { id = value; return q; },
@@ -37,6 +40,7 @@ function handlerForTest() {
     Deno: { env: { get: key => key === 'SUPABASE_SERVICE_ROLE_KEY' ? 'SERVICE_TEST_ONLY' : 'PUBLIC_TEST_ONLY' }, serve: fn => { handler = fn; } },
     Request, Response, crypto, console, module: { exports: {} }, exports: {}
   });
+  handler.writes = writes;
   return handler;
 }
 const handler = handlerForTest();
@@ -63,4 +67,27 @@ test('empty login, unsupported methods and invalid actions are rejected', async 
   assert.equal((await call({ action: 'login', identifier: '', password: '' })).status, 401);
   assert.equal((await handler(new Request('https://example.invalid'))).status, 405);
   assert.equal((await call({ action: 'arbitrary-sql' }, 'verified-admin')).status, 400);
+});
+
+test('manager creates a user and normalizes an optional blank email', async () => {
+  const create = handlerForTest();
+  const response = await create(new Request('https://example.invalid', {
+    method: 'POST', headers: { authorization: 'Bearer verified-admin' },
+    body: JSON.stringify({ action: 'create', data: { nome: ' New User ', username: ' new.login ', email: '', perfil: 'OPERADOR', senha: 'test-password' } })
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(create.writes.length, 2);
+  assert.equal(create.writes[1].email, null);
+  assert.equal(create.writes[1].username, 'new.login');
+  assert.equal(create.writes[0].id, create.writes[1].id);
+  assert.equal((await response.text()).includes('senha_hash'), false);
+});
+test('duplicate login returns conflict before provisioning Auth', async () => {
+  const create = handlerForTest({ duplicate: true });
+  const response = await create(new Request('https://example.invalid', {
+    method: 'POST', headers: { authorization: 'Bearer verified-admin' },
+    body: JSON.stringify({ action: 'create', data: { nome: 'Existing', username: 'teste', perfil: 'OPERADOR', senha: 'test-password' } })
+  }));
+  assert.equal(response.status, 409);
+  assert.equal(create.writes.length, 0);
 });
