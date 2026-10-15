@@ -1328,6 +1328,10 @@ export class ApiService {
       id: created.id,
       furo_id: created.furo_id,
       numero_barra: created.numero_barra,
+      registrado_por: created.registrado_por || usuarioAtual?.id,
+      registrado_por_nome: usuarioAtual?.nome,
+      mes_referencia: defaultMesRef,
+      data_referencia: defaultDataRef,
       tipo_registro: isCaixaRegistro ? 'CAIXA' : (data.tipo_registro || 'CANALIZACAO'),
       metros: isCaixaRegistro ? 0 : (created.metros !== undefined && created.metros !== null ? Number(created.metros) : metrosDesteRegistro),
       metros_acumulados: Number(created.metros_acumulados) || metrosAcumulados,
@@ -1424,14 +1428,15 @@ export class ApiService {
       .single();
 
     if (updateErr) throw new Error(updateErr.message || 'Erro ao atualizar registro.');
-    return {
+    return (await withPrivatePhotos([{
       ...updated,
       diametro: updated.diametro || newMeta.diametro,
       registrado_por: updated.registrado_por || newMeta.registrado_por_id,
       registrado_por_nome: newMeta.registrado_por_nome,
+      fotos: updated.fotos?.length ? updated.fotos : (newMeta.fotos || []),
       mes_referencia: newMeta.mes_referencia,
       data_referencia: newMeta.data_referencia
-    };
+    }]))[0];
   }
 
   // ============================================================================

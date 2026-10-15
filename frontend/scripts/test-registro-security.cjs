@@ -31,6 +31,7 @@ test('actual PostgreSQL RLS, grants, triggers and photo policies', async t => {
   await db.exec(`
     create role anon; create role authenticated;
     create schema auth; create schema storage;
+    alter default privileges in schema public grant execute on functions to anon,authenticated;
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub' $$;
   `.replace("select nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub'", "select (nullif(current_setting('request.jwt.claims',true),'')::jsonb->>'sub')::uuid"));
   await db.exec(`
@@ -56,6 +57,11 @@ test('actual PostgreSQL RLS, grants, triggers and photo policies', async t => {
     insert into storage.objects values ('legacy/op.jpg','tecnodrill-fotos'),('legacy/nav.jpg','tecnodrill-fotos');
   `);
   await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261015180432_secure_tecnodrill_access.sql'), 'utf8'));
+  await db.exec(fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261015182639_revoke_anonymous_first_access.sql'), 'utf8'));
+  await t.test('anonymous execution is revoked even with Supabase default grants', async () => {
+    const { rows: [permissions] } = await db.query("select has_function_privilege('anon','public.tecnodrill_complete_first_access()','EXECUTE') as allowed");
+    assert.equal(permissions.allowed, false);
+  });
   const asUser = async id => {
     await db.exec('reset role');
     await db.query("select set_config('request.jwt.claims',$1,false)", [JSON.stringify({ sub: id, role: 'authenticated', user_metadata: { perfil: 'ADMIN' } })]);
