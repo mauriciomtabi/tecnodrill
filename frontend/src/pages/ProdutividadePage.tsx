@@ -1,3 +1,4 @@
+import { summarizeDiameterRevenue } from './produtividadeDiameters';
 import { summarizeAuthorRevenue } from './produtividadeAuthors';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -48,6 +49,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   const [filtroAno, setFiltroAno] = useState<string>(currentYear);
   const [filtroMes, setFiltroMes] = useState<string>('TODOS');
+  const [servicoExpandido, setServicoExpandido] = useState<string | null>(null);
   const [filtroTerceiro, setFiltroTerceiro] = useState('TODOS');
   const [filtroServico, setFiltroServico] = useState<string>('TODOS');
   const [filtroSegmento, setFiltroSegmento] = useState<string>('TODOS');
@@ -1637,12 +1639,16 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   const badgeColor = s.tipo_servico === 'SANEAMENTO' ? '#00B4D8' :
                     s.tipo_servico === 'RODOVIA' ? '#E67E22' : '#9B59B6';
 
+                  const expandido = servicoExpandido === s.id;
+                  const diametros = expandido ? summarizeDiameterRevenue(s, (barrasSelecionadas[s.id] || []).filter(isBarraInFilter)) : [];
+                  const toggle = () => setServicoExpandido(atual => atual === s.id ? null : s.id);
                   return (
+                    <React.Fragment key={s.id}>
                     <tr 
-                      key={s.id} 
+                      onClick={toggle}
                       style={{ 
                         borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                        transition: 'background-color 0.15s ease'
+                        transition: 'background-color 0.15s ease', cursor: 'pointer'
                       }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)'}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1650,9 +1656,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       {/* Nome e Cliente */}
                       <td style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>
-                            {s.nome}
-                          </strong>
+                          <button type="button" aria-expanded={expandido} aria-controls={`diametros-${s.id}`} onClick={e => { e.stopPropagation(); toggle(); }} style={{ border: 0, padding: 0, background: 'transparent', color: 'var(--text-main)', fontSize: 13, fontWeight: 800, cursor: 'pointer', textAlign: 'left' }}>{expandido ? '▾' : '▸'} {s.nome}</button>
                           <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
                             {s.cliente} • {s.cidade || 'Brasil'} - {s.uf || 'SP'}
                           </span>
@@ -1720,8 +1724,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <button
                           type="button"
-                          onClick={() => onSelectServico && onSelectServico(s.id)}
-                          title="Ver detalhes da obra"
+                          onClick={e => { e.stopPropagation(); toggle(); }}
+                          aria-expanded={expandido}
+                          aria-controls={`diametros-${s.id}`}
+                          title="Detalhar produção por diâmetro"
                           style={{
                             padding: '6px 10px',
                             borderRadius: '6px',
@@ -1745,11 +1751,28 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                             e.currentTarget.style.borderColor = 'var(--border-color)';
                           }}
                         >
-                          <span>Ver</span>
+                          <span>{expandido ? 'Fechar' : 'Diâmetros'}</span>
                           <ChevronRight size={13} />
                         </button>
                       </td>
                     </tr>
+                    {expandido && <tr id={`diametros-${s.id}`}><td colSpan={7} style={{ padding: '16px 24px 24px', background: 'var(--bg-app)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                        <div><strong style={{ color: 'var(--text-main)' }}>Produção por diâmetro — {s.nome}</strong><p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Valores do período e autor selecionados. Receita estimada conforme as regras financeiras da obra.</p></div>
+                        {onSelectServico && <button type="button" className="btn btn-secondary" onClick={() => onSelectServico(s.id)}>Abrir obra <ChevronRight size={14} /></button>}
+                      </div>
+                      {diametros.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhum registro neste serviço para os filtros selecionados.</p> : <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 13 }}>
+                        <thead><tr>{['Diâmetro', 'Registros', 'Metros', 'Receita estimada', 'Custo operacional'].map(label => <th scope="col" key={label} style={{ padding: 10, color: 'var(--text-muted)' }}>{label}</th>)}</tr></thead>
+                        <tbody>{diametros.map(d => <tr key={d.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: 10, fontWeight: 700 }}>{d.nome}</td><td style={{ padding: 10 }}>{d.registros}</td>
+                          <td style={{ padding: 10 }}>{d.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                          <td style={{ padding: 10, color: '#2ECC71' }}>{d.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                          <td style={{ padding: 10, color: '#E74C3C' }}>{d.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                        </tr>)}</tbody>
+                        <tfoot><tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 700 }}><td style={{ padding: 10 }}>Total</td><td style={{ padding: 10 }}>{s.qtdRegistrosPeriodo}</td><td style={{ padding: 10 }}>{s.metrosPeriodo.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td><td style={{ padding: 10 }}>{s.receitaPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td style={{ padding: 10 }}>{s.custoPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr></tfoot>
+                      </table>}
+                    </td></tr>}
+                    </React.Fragment>
                   );
                 })
               )}
