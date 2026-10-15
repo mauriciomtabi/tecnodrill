@@ -14,7 +14,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { ApiService } from '../services/api';
-import { TerceiroLancamento, Usuario, Servico, Barra } from '../types';
+import { TerceiroLancamento, Usuario, Barra } from '../types';
+import { carregarProducao, evolucaoTerceiros, mesDaProducao, paginarLancamentos } from './terceirosMetrics';
 
 interface Props {
   setHeaderInfo: (title: string, subtitle: string) => void;
@@ -28,7 +29,6 @@ const CORES_PALETA = [
 
 export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   const [lancamentos, setLancamentos] = useState<TerceiroLancamento[]>([]);
-  const [servicos, setServicos] = useState<Servico[]>([]);
   const [barras, setBarras] = useState<Barra[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,6 +38,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   const [filtroTerceiro, setFiltroTerceiro] = useState<string>('TODOS');
   const [filtroCategoria, setFiltroCategoria] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
+  const [pagina, setPagina] = useState(1);
 
   // Modal Novo Lançamento
   const [showNovoModal, setShowNovoModal] = useState(false);
@@ -67,23 +68,12 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tercData, servs] = await Promise.all([
+      const [tercData, producao] = await Promise.all([
         ApiService.getTerceirosLancamentos(),
-        ApiService.getServicos()
+        carregarProducao(ApiService)
       ]);
       setLancamentos(tercData);
-      setServicos(servs);
-
-      // Carregar todas as barras do serviço principal para cruzar produtividade MND
-      if (servs.length > 0) {
-        try {
-          const furos = await ApiService.getFuros(servs[0].id);
-          if (furos.length > 0) {
-            const bList = await ApiService.getBarras(furos[0].id);
-            setBarras(bList);
-          }
-        } catch (_) {}
-      }
+      setBarras(producao);
     } catch (err) {
       console.error('Erro ao carregar dados de Terceiros:', err);
     } finally {
@@ -110,8 +100,12 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
     lancamentos.forEach(l => {
       if (l.mes_referencia) s.add(l.mes_referencia);
     });
+    barras.forEach(b => {
+      const mes = mesDaProducao(b);
+      if (mes) s.add(mes);
+    });
     return Array.from(s).sort((a, b) => b.localeCompare(a));
-  }, [lancamentos]);
+  }, [lancamentos, barras]);
 
   // Filtragem dos lançamentos
   const lancamentosFiltrados = useMemo(() => {
@@ -141,6 +135,12 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
     });
   }, [lancamentos, filtroAno, filtroMes, filtroTerceiro, filtroCategoria, searchTerm]);
 
+  useEffect(() => {
+    setPagina(1);
+  }, [filtroAno, filtroMes, filtroTerceiro, filtroCategoria, searchTerm]);
+
+  const paginacao = paginarLancamentos(lancamentosFiltrados, pagina);
+
   // Métricas Consolidadas (KPIs)
   const metricas = useMemo(() => {
     const totalGasto = lancamentosFiltrados.reduce((acc, l) => acc + (Number(l.valor) || 0), 0);
@@ -149,9 +149,9 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
     // Metros totais perfurados por terceiros / barras no período correspondente
     let metrosMND = 0;
     barras.forEach(b => {
-      if (b.tipo_registro === 'CAIXA' || b.tem_caixa) return;
-      const bMes = b.mes_referencia || b.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
-      if (filtroAno !== 'TODOS' && bMes && !bMes.startsWith(filtroAno)) return;
+      if (b.tipo_registro === 'CAIXA') return;
+      const bMes = mesDaProducao(b);
+      if (filtroAno !== 'TODOS' && !bMes.startsWith(filtroAno + '-')) return;
       if (filtroMes !== 'TODOS' && bMes !== filtroMes) return;
       metrosMND += Number(b.metros) || 0;
     });
@@ -169,43 +169,10 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
   }, [lancamentosFiltrados, barras, filtroAno, filtroMes]);
 
   // Dados para o Gráfico de Evolução Mensal (Custos de Terceiros e Metros MND)
-  const dadosEvolucaoMensal = useMemo(() => {
-    const mesesMap: Record<string, { mes: string; custo: number; metros: number; terceiros: Set<string> }> = {
-      '2026-03': { mes: 'Mar/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-04': { mes: 'Abr/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-05': { mes: 'Mai/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-06': { mes: 'Jun/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-07': { mes: 'Jul/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-08': { mes: 'Ago/26', custo: 0, metros: 0, terceiros: new Set() },
-      '2026-09': { mes: 'Set/26', custo: 0, metros: 0, terceiros: new Set() }
-    };
-
-    // Adiciona custos de terceiros
-    lancamentos.forEach(l => {
-      const m = l.mes_referencia;
-      if (m && mesesMap[m]) {
-        mesesMap[m].custo += Number(l.valor) || 0;
-        mesesMap[m].terceiros.add(l.terceiro_nome);
-      }
-    });
-
-    // Adiciona metros executados da produção
-    barras.forEach(b => {
-      if (b.tipo_registro === 'CAIXA' || b.tem_caixa) return;
-      const bMes = b.mes_referencia || b.data_referencia?.slice(0, 7);
-      if (bMes && mesesMap[bMes]) {
-        mesesMap[bMes].metros += Number(b.metros) || 0;
-      }
-    });
-
-    return Object.entries(mesesMap).map(([key, item]) => ({
-      key,
-      mes: item.mes,
-      custo: item.custo,
-      metros: item.metros,
-      qtdTerceiros: item.terceiros.size
-    }));
-  }, [lancamentos, barras]);
+  const dadosEvolucaoMensal = useMemo(() =>
+    evolucaoTerceiros(lancamentosFiltrados, barras, filtroAno, filtroMes),
+    [lancamentosFiltrados, barras, filtroAno, filtroMes]
+  );
 
   // Distribuição por Terceiro (Top Prestadores)
   const dadosTopTerceiros = useMemo(() => {
@@ -540,7 +507,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-cyan-400" />
-                Evolução Mensal de Custos e Produtividade (2026)
+                Evolução Mensal de Custos e Produtividade ({filtroAno === 'TODOS' ? 'Todos os anos' : filtroAno})
               </h2>
               <p className="text-xs text-slate-400">Comparativo mês a mês entre custos pagos a terceiros (R$) e metros perfurados (m)</p>
             </div>
@@ -559,23 +526,23 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
               <ComposedChart data={dadosEvolucaoMensal} margin={{ top: 30, right: 20, left: 20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.4} />
                 <XAxis dataKey="mes" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                <YAxis yAxisId="custo" stroke="#38BDF8" fontSize={11} tickLine={false} tickFormatter={v => `R$ ${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="custo" stroke="#38BDF8" fontSize={11} tickLine={false} tickFormatter={v => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} />
                 <YAxis yAxisId="metros" orientation="right" stroke="#10B981" fontSize={11} tickLine={false} tickFormatter={v => `${v}m`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px', color: '#F8FAFC' }}
                   labelStyle={{ color: '#F8FAFC' }}
                   itemStyle={{ color: '#F8FAFC' }}
                   formatter={(value: any, name: string) => {
-                    if (name === 'custo') return [`R$ ${Number(value).toLocaleString('pt-BR')}`, 'Custo Terceiros'];
-                    if (name === 'metros') return [`${Number(value).toLocaleString('pt-BR')} m`, 'Metros MND'];
+                    if (name === 'custo') return [Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), 'Custo Terceiros'];
+                    if (name === 'metros') return [`${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} m`, 'Metros MND'];
                     return [value, name];
                   }}
                 />
                 <Bar yAxisId="custo" dataKey="custo" fill="#38BDF8" radius={[6, 6, 0, 0]} maxBarSize={36}>
-                  <LabelList dataKey="custo" position="top" fill="#F8FAFC" fontSize={10} formatter={(value: number) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
+                  <LabelList dataKey="custo" position="top" fill="#F8FAFC" fontSize={10} formatter={(value: number) => Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} />
                 </Bar>
                 <Line yAxisId="metros" type="monotone" dataKey="metros" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981' }}>
-                  <LabelList dataKey="metros" position="top" offset={10} fill="#34D399" fontSize={10} formatter={(value: number) => `${Number(value).toLocaleString('pt-BR')} m`} />
+                  <LabelList dataKey="metros" position="top" offset={10} fill="#34D399" fontSize={10} formatter={(value: number) => `${Number(value).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} m`} />
                 </Line>
               </ComposedChart>
             </ResponsiveContainer>
@@ -679,7 +646,7 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
                   </td>
                 </tr>
               ) : (
-                lancamentosFiltrados.map((item) => (
+                paginacao.itens.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="font-medium text-white">{item.data}</div>
@@ -735,6 +702,17 @@ export const TerceirosPage: React.FC<Props> = ({ setHeaderInfo, user }) => {
             </tbody>
           </table>
         </div>
+        <nav aria-label="Paginação dos lançamentos" className="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-slate-800 text-xs text-slate-300">
+          <span aria-live="polite">
+            {lancamentosFiltrados.length === 0 ? 'Nenhum lançamento' :
+              `Exibindo ${paginacao.inicio + 1}–${paginacao.inicio + paginacao.itens.length} de ${lancamentosFiltrados.length} lançamentos`}
+          </span>
+          <div className="flex items-center gap-3">
+            <button type="button" className="px-3 py-2 rounded-lg border border-slate-700" disabled={paginacao.paginaAtual === 1} onClick={() => setPagina(paginacao.paginaAtual - 1)}>Anterior</button>
+            <span>Página {paginacao.paginaAtual} de {paginacao.totalPaginas}</span>
+            <button type="button" className="px-3 py-2 rounded-lg border border-slate-700" disabled={paginacao.paginaAtual === paginacao.totalPaginas} onClick={() => setPagina(paginacao.paginaAtual + 1)}>Próxima</button>
+          </div>
+        </nav>
       </div>
 
       {/* MODAL: NOVO LANÇAMENTO DE TERCEIRO */}
