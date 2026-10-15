@@ -38,3 +38,35 @@ test('service and period selection exclude unrelated authors; missing author rem
 test('empty period has no fabricated revenue', () => {
   assert.equal(summarizeAuthorRevenue([{ id: 'S1', receitaPeriodo: 0 }], { S1: rows }, () => false, authors).length, 0);
 });
+
+test('worked days deduplicate across services and include box-only days', () => {
+  const result = summarizeAuthorRevenue([
+    { id: 'S1', receitaPeriodo: 100 }, { id: 'S2', receitaPeriodo: 200 }
+  ], {
+    S1: [{ registrado_por: 'a', metros: 10, data_referencia: '2026-10-06' },
+         { registrado_por: 'a', metros: 20, data_referencia: '2026-10-06' },
+         { registrado_por: 'a', tipo_registro: 'CAIXA', data_referencia: '2026-10-07' }],
+    S2: [{ registrado_por: 'a', metros: 30, data_referencia: '2026-10-06' }]
+  }, () => true, authors);
+  assert.equal(result[0].diasTrabalhados, 2);
+  assert.equal(result[0].mediaDiaria, 30);
+});
+test('daily average respects reference metadata and Sao Paulo calendar dates', () => {
+  const result = summarizeAuthorRevenue([{ id: 'S1', receitaPeriodo: 0 }], { S1: [
+    { registrado_por: 'a', metros: 10, horario_registro: '2026-10-07T01:00:00Z' },
+    { registrado_por: 'a', metros: 20, observacao: '<!--BARRA_META:{"data_referencia":"2026-10-06"}-->' },
+    { registrado_por: 'a', metros: 30, data_referencia: '2026-10-08', horario_registro: '2026-10-07T01:00:00Z' }
+  ] }, () => true, authors);
+  assert.equal(result[0].diasTrabalhados, 2);
+  assert.equal(result[0].mediaDiaria, 30);
+});
+test('missing or invalid calendar dates do not invent days or inflate the average', () => {
+  const result = summarizeAuthorRevenue([{ id: 'S1', receitaPeriodo: 0 }], { S1: [
+    { registrado_por: 'a', metros: 10, data_referencia: '2026-02-30' },
+    { registrado_por: 'a', metros: 20, mes_referencia: '2026-10' },
+    { registrado_por: 'a', metros: 30, data_referencia: '2026-10-06' }
+  ] }, () => true, authors);
+  assert.equal(result[0].diasTrabalhados, 1);
+  assert.equal(result[0].registrosSemData, 2);
+  assert.equal(result[0].mediaDiaria, null);
+});

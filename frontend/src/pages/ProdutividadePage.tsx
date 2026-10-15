@@ -629,7 +629,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Produtividade TecnoDrill');
     XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(receitaPorTerceiro.map(t => ({
-      'Terceiro / Autor': t.nome, 'ID Autor': t.id, 'Receita Estimada (R$)': Number(t.receita.toFixed(2)), 'Metros': t.metros, 'Registros': t.registros, 'Serviços': t.servicos.size
+      'Terceiro / Autor': t.nome, 'ID Autor': t.id, 'Receita Estimada (R$)': Number(t.receita.toFixed(2)), 'Metros': t.metros, 'Registros': t.registros, 'Serviços': t.servicos.size, 'Dias Trabalhados': t.diasTrabalhados, 'Média Diária (m/dia)': t.mediaDiaria === null ? '' : Number(t.mediaDiaria.toFixed(1)), 'Registros sem data': t.registrosSemData
     }))), 'Receita por Terceiro');
 
     const dataHojeFormatada = new Date().toISOString().split('T')[0];
@@ -953,11 +953,11 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
       <section aria-labelledby="receita-autores" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 24 }}>
         <h3 id="receita-autores" style={{ margin: '0 0 6px', color: 'var(--text-main)' }}>Receita por Terceiro — Autor da produção</h3>
-        <p style={{ color: 'var(--text-muted)', margin: '0 0 18px', fontSize: 13 }}>Receita estimada da produção registrada por cada autor, conforme o preço da obra e os filtros acima. Cada registro é contado uma vez.</p>
+        <p style={{ color: 'var(--text-muted)', margin: '0 0 18px', fontSize: 13 }}>Receita estimada da produção registrada por cada autor, conforme o preço da obra e os filtros acima. Cada registro é contado uma vez. Dias trabalhados: datas distintas com registros, incluindo caixas. Média diária: metros ÷ dias trabalhados.</p>
         {receitaPorTerceiro.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhuma produção encontrada para os filtros selecionados.</p> : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 14 }}>
-              <thead><tr>{['Terceiro / Autor', 'Receita estimada', 'Participação', 'Metros', 'Registros', 'Serviços'].map(label => <th key={label} scope="col" style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
+              <thead><tr>{['Terceiro / Autor', 'Receita estimada', 'Participação', 'Metros', 'Dias trabalhados', 'Média diária', 'Registros', 'Serviços'].map(label => <th key={label} scope="col" style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
               <tbody>{receitaPorTerceiro.map(t => {
                 const pct = totais.totalReceita > 0 ? t.receita / totais.totalReceita * 100 : 0;
                 return <tr key={t.id} style={{ borderTop: '1px solid var(--border-color)' }}>
@@ -965,12 +965,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   <td style={{ padding: 12, color: '#2ECC71', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                   <td style={{ padding: 12, minWidth: 100 }}>{pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%<div style={{ height: 5, background: 'var(--bg-app)', borderRadius: 5, marginTop: 6 }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: '#2ECC71', borderRadius: 5 }} /></div></td>
                   <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{t.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                  <td style={{ padding: 12 }} title={t.registrosSemData ? `${t.registrosSemData} registro(s) sem data completa; contagem parcial.` : 'Datas distintas com registros, incluindo caixas.'}>{t.diasTrabalhados}{t.registrosSemData > 0 ? '*' : ''}</td>
+                  <td style={{ padding: 12, whiteSpace: 'nowrap' }} title="Metros divididos pelos dias distintos com registros">{t.mediaDiaria === null ? '—' : `${t.mediaDiaria.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m/dia`}</td>
                   <td style={{ padding: 12 }}>{t.registros}</td><td style={{ padding: 12 }}>{t.servicos.size}</td>
                 </tr>;
               })}</tbody>
             </table>
           </div>
         )}
+        {receitaPorTerceiro.some(t => t.registrosSemData > 0) && <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 0 }}>* Contagem parcial: existem registros sem data completa. A média fica indisponível até completar essas datas.</p>}
       </section>
 
       {/* ────────────────────────────────────────────────────────────────
