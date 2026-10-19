@@ -1,11 +1,12 @@
-const CACHE_NAME = 'tecnodrill-infra-v10';
+const CACHE_NAME = 'tecnodrill-infra-v11';
 const ASSETS = [
   '/',
   '/index.html',
   '/logo.png',
   '/icon-192.png',
   '/icon-512.png',
-  '/manifest.json'
+  '/manifest.json',
+  '/libs/heic2any.min.js'
 ];
 
 self.addEventListener('install', (e) => {

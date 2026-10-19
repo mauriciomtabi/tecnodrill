@@ -10,6 +10,7 @@ import {
   AddressDetails, 
   formatFullAddress
 } from '../utils/watermark';
+import { isHeicFile, convertHeicToJpeg } from '../utils/imageConverter';
 import { 
   Camera, 
   Image as ImageIcon, 
@@ -582,8 +583,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       const locInfo = await ensureLocationAndAddress();
 
       for (let i = 0; i < total; i++) {
-        const file = files[i];
+        let file = files[i];
         const countPrefix = total > 1 ? `Foto ${i + 1} de ${total}: ` : '';
+
+        if (isHeicFile(file)) {
+          try {
+            setStatusMessage(`${countPrefix}Convertendo formato de imagem (HEIC para JPG)...`);
+            const convertedBlob = await convertHeicToJpeg(file);
+            file = new File([convertedBlob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' });
+          } catch (heicErr) {
+            console.warn('[HEIC convert error, fallback to standard compression]:', heicErr);
+          }
+        }
+
         setStatusMessage(`${countPrefix}Otimizando imagem na memória...`);
 
         let compressedBase64: string | null = null;
@@ -591,12 +603,17 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           compressedBase64 = await compressImageFile(file, 1280);
         } catch (err) {
           console.error('[Photo Compress Error]:', err);
-          compressedBase64 = await new Promise<string | null>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = (ev) => resolve((ev.target?.result as string) || null);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(file);
-          });
+          if (!isHeicFile(file)) {
+            compressedBase64 = await new Promise<string | null>((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (ev) => {
+                const res = (ev.target?.result as string) || null;
+                resolve(res && !res.startsWith('data:image/heic') ? res : null);
+              };
+              reader.onerror = () => resolve(null);
+              reader.readAsDataURL(file);
+            });
+          }
         }
 
         if (compressedBase64) {
@@ -786,7 +803,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       <input
         type="file"
         ref={cameraInputRef}
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/*"
         style={{ display: 'none' }}
         onChange={handlePhotoUpload}
       />
@@ -795,7 +812,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       <input
         type="file"
         ref={galleryInputRef}
-        accept="image/*"
+        accept="image/jpeg,image/png,image/webp,image/*"
         multiple
         style={{ display: 'none' }}
         onChange={handlePhotoUpload}

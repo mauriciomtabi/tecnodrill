@@ -29,8 +29,11 @@ import {
   Save,
   Check,
   AlertTriangle,
-  Loader2
+  Loader2,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
+import { isHeicDataUrl, convertHeicBase64ToJpeg } from '../utils/imageConverter';
 
 interface RegistroDetalhesModalProps {
   isOpen: boolean;
@@ -143,6 +146,28 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   if (!isOpen || !barra) return null;
 
   const currentPhoto = allPhotos[activePhotoIndex] || barra.foto_url;
+  const [photoError, setPhotoError] = useState(false);
+  const [convertedPhotoUrl, setConvertedPhotoUrl] = useState<string | null>(null);
+  const [convertingPhoto, setConvertingPhoto] = useState(false);
+
+  useEffect(() => {
+    setPhotoError(false);
+    setConvertedPhotoUrl(null);
+    if (!currentPhoto) return;
+
+    if (isHeicDataUrl(currentPhoto)) {
+      setConvertingPhoto(true);
+      convertHeicBase64ToJpeg(currentPhoto)
+        .then(jpegUrl => setConvertedPhotoUrl(jpegUrl))
+        .catch(err => {
+          console.warn('[HEIC conversion failed in viewer]:', err);
+          setPhotoError(true);
+        })
+        .finally(() => setConvertingPhoto(false));
+    }
+  }, [currentPhoto]);
+
+  const displayPhoto = convertedPhotoUrl || currentPhoto;
 
   const handleZoomIn = () => setZoom(prev => Math.min(3, prev + 0.25));
   const handleZoomOut = () => setZoom(prev => Math.max(0.5, prev - 0.25));
@@ -167,9 +192,9 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   };
 
   const handleDownload = () => {
-    if (!currentPhoto) return;
+    if (!displayPhoto) return;
     const a = document.createElement('a');
-    a.href = currentPhoto;
+    a.href = displayPhoto;
     a.download = `TecnoDrill_Registro_${barra.numero_barra}_foto_${activePhotoIndex + 1}.jpg`;
     a.click();
   };
@@ -343,10 +368,11 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
               overflow: 'hidden'
             }}
           >
-            {currentPhoto ? (
+            {displayPhoto && !photoError ? (
               <img 
-                src={currentPhoto} 
+                src={displayPhoto} 
                 alt={`Registro ${barra.numero_barra}`}
+                onError={() => setPhotoError(true)}
                 style={{
                   maxWidth: '100%',
                   maxHeight: isPhotoFullscreen ? '75vh' : '380px',
@@ -355,6 +381,45 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   transition: 'transform 0.2s ease-out'
                 }}
               />
+            ) : convertingPhoto ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '10px' }}>
+                <RefreshCw size={30} className="spin" style={{ color: 'var(--primary)' }} />
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>Convertendo imagem...</span>
+              </div>
+            ) : photoError ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '12px', padding: '24px', textAlign: 'center' }}>
+                <AlertCircle size={38} style={{ color: '#F05A22' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF' }}>Erro ao carregar foto</span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>A imagem pode estar temporariamente inacessível</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhotoError(false);
+                    if (currentPhoto && currentPhoto.startsWith('http')) {
+                      const separator = currentPhoto.includes('?') ? '&' : '?';
+                      setConvertedPhotoUrl(`${currentPhoto}${separator}t=${Date.now()}`);
+                    }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  <span>Tentar novamente</span>
+                </button>
+              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--text-muted)', gap: '8px' }}>
                 <Camera size={36} opacity={0.4} />

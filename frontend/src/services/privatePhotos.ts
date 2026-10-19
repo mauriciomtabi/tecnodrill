@@ -1,18 +1,20 @@
-import { supabase, SUPABASE_URL } from './supabaseClient';
 import type { Barra } from '../types';
 
-const prefix = `${SUPABASE_URL}/storage/v1/object/public/tecnodrill-fotos/`;
-
-/** Sign only paths whose access is authorized by the current user's Storage RLS. */
+/**
+ * Normaliza os registros com fotos.
+ * O bucket 'tecnodrill-fotos' é público para entrega via CDN, garantindo
+ * carregamento imediato, sem expiração de token e com alta performance.
+ */
 export async function withPrivatePhotos(registros: Barra[]): Promise<Barra[]> {
-  const urls = [...new Set(registros.flatMap(b => [b.foto_url || '', ...(b.fotos || [])]).filter(url => url.startsWith(prefix)))];
-  if (!urls.length) return registros;
-  const paths = urls.map(url => decodeURIComponent(url.slice(prefix.length)));
-  const { data, error } = await supabase.storage.from('tecnodrill-fotos').createSignedUrls(paths, 300);
-  const signed = new Map(urls.map((url, index) => [url, error ? '' : (data?.[index]?.signedUrl || '')]));
-  return registros.map(b => ({
-    ...b,
-    foto_url: signed.get(b.foto_url || '') ?? b.foto_url,
-    fotos: b.fotos?.map(url => signed.get(url) ?? url).filter(Boolean)
-  }));
+  return registros.map(b => {
+    const allFotos = b.fotos && b.fotos.length > 0 
+      ? b.fotos.filter(Boolean) 
+      : (b.foto_url ? [b.foto_url] : []);
+    return {
+      ...b,
+      foto_url: b.foto_url || (allFotos.length > 0 ? allFotos[0] : undefined),
+      fotos: allFotos
+    };
+  });
 }
+
