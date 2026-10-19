@@ -5,6 +5,7 @@ import { Servico, Furo, Barra } from '../types';
 import { ApiService, sanitizeLocalidade, parseBarraObservacao } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RodEntryModal } from '../components/RodEntryModal';
+import { getRodDraft } from '../utils/draftStorage';
 import { MetaCelebration } from '../components/MetaCelebration';
 import { MapView } from '../components/MapView';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -46,7 +47,9 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const [loading, setLoading] = useState(true);
 
   // Tabs & Filters (Identical to JLE: Fotos | Mapa)
-  const [activeTab, setActiveTab] = useState<'fotos' | 'mapa'>('fotos');
+  const [activeTab, setActiveTab] = useState<'fotos' | 'mapa'>(() => {
+    return (localStorage.getItem(`tecnodrill_tab_${servicoId}`) as 'fotos' | 'mapa') || 'fotos';
+  });
   const [filterType, setFilterType] = useState<'TODOS' | 'COM_CAIXA' | 'SEM_CAIXA'>('TODOS');
   const [sortOrder, setSortOrder] = useState<'DESC' | 'ASC'>('DESC');
 
@@ -54,6 +57,31 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
   const [selectedBarraDetails, setSelectedBarraDetails] = useState<Barra | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(`tecnodrill_tab_${servicoId}`, activeTab);
+  }, [activeTab, servicoId]);
+
+  // Recupera rascunho de apontamento em andamento se o operador saiu do app
+  useEffect(() => {
+    if (loading || !servico) return;
+
+    let isMounted = true;
+    const checkObraDraft = async () => {
+      try {
+        const draft = await getRodDraft(servicoId);
+        if (draft && isMounted && draft.source === 'OBRA_DETALHES' && (draft.isOpen || draft.fotosList.length > 0)) {
+          setShowAddModal(true);
+        }
+      } catch (_) {}
+    };
+
+    checkObraDraft();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [loading, servico, servicoId]);
 
   // Modal Editar Serviço
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1182,6 +1210,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         servico={servico}
         onSubmit={handleAddBarra}
         loading={savingBarra}
+        source="OBRA_DETALHES"
       />
 
       {/* MODAL DETALHES DO REGISTRO (PADRÃO JLE COM TOOLBAR DE ZOOM E INFORMAÇÕES) */}

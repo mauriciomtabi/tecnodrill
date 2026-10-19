@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
 import { useModalBackButton } from '../hooks/useModalBackButton';
+import { InAppCamera } from './InAppCamera';
+import { saveRodDraft, getRodDraft, clearRodDraft } from '../utils/draftStorage';
 import { 
   applyTecnodrillWatermark, 
   reverseGeocode, 
@@ -36,6 +38,7 @@ interface RodEntryModalProps {
   servico?: Servico | null;
   onSubmit: (barraData: Partial<Barra>) => Promise<any>;
   loading?: boolean;
+  source?: 'OBRA_DETALHES' | 'DIRECT';
 }
 
 const COMMON_DIAMETERS = ['100mm', '150mm', '200mm', '250mm', '300mm'];
@@ -46,7 +49,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   nextBarraNumber,
   servico = null,
   onSubmit,
-  loading = false
+  loading = false,
+  source = 'DIRECT'
 }: RodEntryModalProps) => {
   // Step 0: Escolha Tipo (Canalização vs Caixa)
   // Step 1: Captura de Fotos (mínimo obrigatório + adicionais)
@@ -86,7 +90,11 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Ref para fotos brutas (evita duplicar megabytes em re-renderizações de estado do React)
+  // In-App Live Camera State
+  const [showInAppCamera, setShowInAppCamera] = useState<boolean>(false);
+  const [draftRecovered, setDraftRecovered] = useState<boolean>(false);
+
+  // Ref para fotos brutas
   const rawPhotosListRef = useRef<string[]>([]);
   const [showAddressEditModal, setShowAddressEditModal] = useState<boolean>(false);
   const [editRua, setEditRua] = useState<string>('');
@@ -107,65 +115,19 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     fotos: string[];
   } | null>(null);
 
-
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const locationPromiseRef = useRef<Promise<{ lat: number | null; lon: number | null; addr: AddressDetails | null }> | null>(null);
 
-  // Persistência de rascunho de registro para celulares que reiniciem o app em baixa memória
-  const draftKey = `tecnodrill_draft_rod_${servico?.id || 'default'}_${nextBarraNumber}`;
-
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(draftKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.fotosList && parsed.fotosList.length > 0) {
-          setFotosList(parsed.fotosList);
-          rawPhotosListRef.current = parsed.rawPhotosList || parsed.fotosList;
-        }
-        if (parsed.tipoRegistro) setTipoRegistro(parsed.tipoRegistro);
-        if (parsed.diametro) setDiametro(parsed.diametro);
-        if (parsed.numeroOs) setNumeroOs(parsed.numeroOs);
-        if (parsed.metros !== undefined) setMetros(parsed.metros);
-        if (parsed.temCaixa !== undefined) setTemCaixa(parsed.temCaixa);
-        if (parsed.observacao) setObservacao(parsed.observacao);
-        if (parsed.step !== undefined && parsed.step < 4) setStep(parsed.step);
-      }
-    } catch (_) {}
-  }, [draftKey]);
-
-  useEffect(() => {
-    if (step === 4) {
-      try { sessionStorage.removeItem(draftKey); } catch (_) {}
-      return;
-    }
-    if (fotosList.length > 0 || observacao || numeroOs) {
-      try {
-        sessionStorage.setItem(draftKey, JSON.stringify({
-          fotosList,
-          rawPhotosList: rawPhotosListRef.current,
-          tipoRegistro,
-          diametro,
-          numeroOs,
-          metros,
-          temCaixa,
-          observacao,
-          step
-        }));
-      } catch (_) {}
-    }
-  }, [fotosList, tipoRegistro, diametro, numeroOs, metros, temCaixa, observacao, step, draftKey]);
-
-  // Trata botão nativo de voltar do celular de forma hierárquica e unificada (SEM conflito de popstate)
+  // Trata botão nativo de voltar do celular de forma hierárquica e unificada
   const handleModalCloseOrBack = useCallback(() => {
     if (step > 0 && step < 4) {
       setStep((prev) => (prev - 1) as any);
       return;
     }
-    try { sessionStorage.removeItem(draftKey); } catch (_) {}
+    clearRodDraft();
     onClose();
-  }, [step, draftKey, onClose]);
+  }, [step, onClose]);
 
   useModalBackButton(isOpen, handleModalCloseOrBack, 'rodEntry');
 
@@ -211,28 +173,190 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     return promise;
   }, []);
 
+  // CARREGA RASCUNHO SALVO DO INDEXEDDB DE FORMA SEGURA AO ABRIR O MODAL
   useEffect(() => {
-    if (isOpen) {
-      setStep(0);
-      setCurrentBarraNumber(nextBarraNumber);
-      setTipoRegistro('CANALIZACAO');
-      setFotosList([]);
-      rawPhotosListRef.current = [];
-      const defaultDiam = servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm';
-      setDiametro(defaultDiam);
-      setCustomDiametro('');
-      setNumeroOs('');
-      setMetros(3);
-      setTemCaixa(false);
-      setObservacao('');
-      setAddressDetails(null);
-      setStatusMessage('');
-      setSubmitError(null);
-      setSavedSuccessData(null);
-      setShowAddressEditModal(false);
-      captureLocation();
+    if (!isOpen) return;
+
+    let isMounted = true;
+
+    const restoreDraftOrInit = async () => {
+      try {
+        const draft = await getRodDraft(servico?.id);
+        if (draft && isMounted && (draft.fotosList.length > 0 || draft.numeroOs || draft.observacao || draft.step > 0)) {
+          if (draft.fotosList && draft.fotosList.length > 0) {
+            setFotosList(draft.fotosList);
+            rawPhotosListRef.current = draft.fotosList;
+          }
+          if (draft.tipoRegistro) setTipoRegistro(draft.tipoRegistro);
+          if (draft.diametro) setDiametro(draft.diametro);
+          if (draft.customDiametro) setCustomDiametro(draft.customDiametro);
+          if (draft.numeroOs) setNumeroOs(draft.numeroOs);
+          if (draft.metros !== undefined) setMetros(draft.metros);
+          if (draft.temCaixa !== undefined) setTemCaixa(draft.temCaixa);
+          if (draft.observacao) setObservacao(draft.observacao);
+          if (draft.mesReferencia) setMesReferencia(draft.mesReferencia);
+          if (draft.latitude) setLatitude(draft.latitude);
+          if (draft.longitude) setLongitude(draft.longitude);
+          if (draft.precisao) setPrecisao(draft.precisao);
+          if (draft.addressDetails) setAddressDetails(draft.addressDetails);
+          if (draft.nextBarraNumber) setCurrentBarraNumber(draft.nextBarraNumber);
+          if (draft.step !== undefined && draft.step < 4) setStep(draft.step);
+
+          setDraftRecovered(true);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Draft Restore Error]:', err);
+      }
+
+      // Se não há rascunho anterior pendente, inicializa apontamento limpo
+      if (isMounted) {
+        setStep(0);
+        setCurrentBarraNumber(nextBarraNumber);
+        setTipoRegistro('CANALIZACAO');
+        setFotosList([]);
+        rawPhotosListRef.current = [];
+        const defaultDiam = servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm';
+        setDiametro(defaultDiam);
+        setCustomDiametro('');
+        setNumeroOs('');
+        setMetros(3);
+        setTemCaixa(false);
+        setObservacao('');
+        setAddressDetails(null);
+        setStatusMessage('');
+        setSubmitError(null);
+        setSavedSuccessData(null);
+        setShowAddressEditModal(false);
+        setDraftRecovered(false);
+        captureLocation();
+      }
+    };
+
+    restoreDraftOrInit();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, servico?.id, nextBarraNumber, captureLocation]);
+
+  // AUTO-SALVA RASCUNHO NO INDEXEDDB QUANDO DADOS OU FOTOS SÃO ALTERADOS
+  useEffect(() => {
+    if (!isOpen || step === 4) return;
+
+    if (fotosList.length > 0 || observacao || numeroOs || step > 0) {
+      saveRodDraft({
+        isOpen: true,
+        source,
+        servicoId: servico?.id,
+        furoId: (servico as any)?.furos?.[0]?.id,
+        nextBarraNumber: currentBarraNumber,
+        step,
+        tipoRegistro,
+        diametro,
+        customDiametro,
+        numeroOs,
+        metros,
+        temCaixa,
+        observacao,
+        mesReferencia,
+        latitude,
+        longitude,
+        precisao,
+        addressDetails,
+        fotosList
+      });
     }
-  }, [isOpen, nextBarraNumber, captureLocation]);
+  }, [
+    isOpen,
+    source,
+    servico?.id,
+    currentBarraNumber,
+    step,
+    tipoRegistro,
+    diametro,
+    customDiametro,
+    numeroOs,
+    metros,
+    temCaixa,
+    observacao,
+    mesReferencia,
+    latitude,
+    longitude,
+    precisao,
+    addressDetails,
+    fotosList
+  ]);
+
+  // LISTENER DE SUSPENSÃO / SEGUNDO PLANO (SALVA INSTANTANEAMENTE QUANDO OPERADOR SAI DO APP)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isOpen && step < 4) {
+        saveRodDraft({
+          isOpen: true,
+          source,
+          servicoId: servico?.id,
+          furoId: (servico as any)?.furos?.[0]?.id,
+          nextBarraNumber: currentBarraNumber,
+          step,
+          tipoRegistro,
+          diametro,
+          customDiametro,
+          numeroOs,
+          metros,
+          temCaixa,
+          observacao,
+          mesReferencia,
+          latitude,
+          longitude,
+          precisao,
+          addressDetails,
+          fotosList
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handleVisibilityChange);
+    };
+  }, [
+    isOpen,
+    source,
+    servico?.id,
+    currentBarraNumber,
+    step,
+    tipoRegistro,
+    diametro,
+    customDiametro,
+    numeroOs,
+    metros,
+    temCaixa,
+    observacao,
+    mesReferencia,
+    latitude,
+    longitude,
+    precisao,
+    addressDetails,
+    fotosList
+  ]);
+
+  // Ação para descartar rascunho e recomeçar do zero caso o operador queira
+  const handleDiscardDraft = async () => {
+    await clearRodDraft();
+    setDraftRecovered(false);
+    setFotosList([]);
+    rawPhotosListRef.current = [];
+    setNumeroOs('');
+    setObservacao('');
+    setMetros(3);
+    setTemCaixa(false);
+    setStep(0);
+    captureLocation();
+  };
 
   if (!isOpen) return null;
 
@@ -365,7 +489,16 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const compressImageFile = async (file: File, maxDim: number = 1280): Promise<string> => {
     if (typeof window !== 'undefined' && 'createImageBitmap' in window) {
       try {
-        const bitmap = await createImageBitmap(file);
+        let bitmap: ImageBitmap;
+        try {
+          bitmap = await (createImageBitmap as any)(file, {
+            resizeWidth: maxDim,
+            resizeQuality: 'medium'
+          });
+        } catch {
+          bitmap = await createImageBitmap(file);
+        }
+
         let { width, height } = bitmap;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
@@ -379,15 +512,18 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (ctx) {
           ctx.drawImage(bitmap, 0, 0, width, height);
           bitmap.close();
-          return canvas.toDataURL('image/jpeg', 0.80);
+          const res = canvas.toDataURL('image/jpeg', 0.75);
+          canvas.width = 1;
+          canvas.height = 1;
+          return res;
         }
         bitmap.close();
       } catch (err) {
-        console.warn('[compressImageFile] fallback to standard image loader:', err);
+        console.warn('[compressImageFile] fallback to object URL:', err);
       }
     }
 
@@ -409,10 +545,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.80));
+          const out = canvas.toDataURL('image/jpeg', 0.75);
+          canvas.width = 1;
+          canvas.height = 1;
+          resolve(out);
         } else {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target?.result as string);
@@ -422,10 +561,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       };
       img.onerror = () => {
         URL.revokeObjectURL(objectUrl);
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        reject(new Error('Erro ao carregar imagem'));
       };
       img.src = objectUrl;
     });
@@ -513,6 +649,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
       await onSubmit(payload);
 
+      // Limpa rascunho salvo do IndexedDB após envio confirmado
+      await clearRodDraft();
+      setDraftRecovered(false);
+
       setSavedSuccessData({
         numero_barra: currentBarraNumber,
         tipo_registro: 'CAIXA',
@@ -560,6 +700,10 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
       await onSubmit(payload);
 
+      // Limpa rascunho salvo do IndexedDB após envio confirmado
+      await clearRodDraft();
+      setDraftRecovered(false);
+
       setSavedSuccessData({
         numero_barra: currentBarraNumber,
         tipo_registro: 'CANALIZACAO',
@@ -580,7 +724,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     }
   };
 
-  const handleStartNextRod = () => {
+  const handleStartNextRod = async () => {
+    await clearRodDraft();
+    setDraftRecovered(false);
     const nextNum = currentBarraNumber + 1;
     setCurrentBarraNumber(nextNum);
     setTipoRegistro('CANALIZACAO');
@@ -614,12 +760,33 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         boxSizing: 'border-box'
       }}
     >
-      {/* Input para Câmera do Celular */}
+      {/* CÂMERA AO VIVO INTEGRADA NO APP - SEM SOBRECARGA DE MEMÓRIA OU REINÍCIO */}
+      <InAppCamera
+        isOpen={showInAppCamera}
+        onClose={() => setShowInAppCamera(false)}
+        onCapture={async (base64Photo) => {
+          setShowInAppCamera(false);
+          setProcessingWatermark(true);
+          try {
+            const locInfo = await ensureLocationAndAddress();
+            await processAndAddPhoto(base64Photo, locInfo);
+          } catch (err) {
+            console.error('[InAppCamera Capture Error]:', err);
+          } finally {
+            setProcessingWatermark(false);
+          }
+        }}
+        onSelectFromGallery={() => {
+          setShowInAppCamera(false);
+          galleryInputRef.current?.click();
+        }}
+      />
+
+      {/* Input de Fallback da Câmera do Celular */}
       <input
         type="file"
         ref={cameraInputRef}
         accept="image/*"
-        capture="environment"
         style={{ display: 'none' }}
         onChange={handlePhotoUpload}
       />
@@ -886,6 +1053,46 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </div>
             </div>
 
+            {/* Banner de Rascunho Recuperado Automaticamente */}
+            {draftRecovered && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(39, 174, 96, 0.12)',
+                  border: '1px solid rgba(39, 174, 96, 0.4)',
+                  borderRadius: '8px',
+                  padding: '9px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  fontSize: '11.5px',
+                  color: '#27AE60'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle2 size={15} style={{ flexShrink: 0 }} />
+                  <span>Rascunho recuperado: continue de onde parou.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#FF7675',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    padding: '2px 4px'
+                  }}
+                  title="Descartar rascunho e recomeçar do zero"
+                >
+                  Descartar
+                </button>
+              </div>
+            )}
+
             {/* Thumbnails of Captured Photos */}
             {fotosList.length > 0 && (
               <div>
@@ -938,7 +1145,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               <button
                 type="button"
                 disabled={processingWatermark}
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={() => setShowInAppCamera(true)}
                 style={{
                   backgroundColor: 'var(--primary)',
                   color: '#FFFFFF',

@@ -305,7 +305,7 @@ export const applyTecnodrillWatermark = (
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: false });
         if (!ctx) {
           safeResolve(base64Src);
           return;
@@ -411,7 +411,9 @@ export const applyTecnodrillWatermark = (
           ctx.fillText(brandText, targetWidth - padding, padding);
         }
 
-        const outUrl = canvas.toDataURL('image/jpeg', 0.80);
+        const outUrl = canvas.toDataURL('image/jpeg', 0.75);
+        canvas.width = 1;
+        canvas.height = 1;
         safeResolve(outUrl);
       } catch (err) {
         console.warn('[Watermark Exception]:', err);

@@ -16,7 +16,25 @@ import { PwaInstall } from './components/PwaInstall';
 import { PrimeiroAcessoModal } from './components/PrimeiroAcessoModal';
 import { ApiService } from './services/api';
 import { Servico, Furo, Barra } from './types';
+import { getRodDraft } from './utils/draftStorage';
 import { LogOut } from 'lucide-react';
+
+const parseHashRoute = (): { path: string; obraId: string | null } | null => {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash;
+  if (!hash || hash === '#' || hash === '#/') return null;
+  const clean = hash.replace(/^#\/?/, '/');
+  if (clean.startsWith('/obra/')) {
+    const id = clean.replace('/obra/', '');
+    return { path: '/app/obras/detalhe', obraId: id };
+  }
+  if (clean.startsWith('/app/obras/') || clean.startsWith('/tecnico/obras/')) {
+    const parts = clean.split('/');
+    const id = parts[parts.length - 1];
+    return { path: '/app/obras/detalhe', obraId: id };
+  }
+  return { path: clean, obraId: null };
+};
 
 export const App: React.FC = () => {
   const { user, token, isLoading, showToast, logout } = useAuth();
@@ -58,13 +76,14 @@ export const App: React.FC = () => {
     setPageSubtitle(subtitle);
   };
 
-  // Sincronizar rotas baseadas no perfil do usuário
+  // Sincronizar rotas persistentes baseadas no perfil do usuário e URL hash
   useEffect(() => {
     if (isLoading) return;
 
     if (user) {
-      const savedPath = localStorage.getItem('tecnodrill_current_path');
-      const savedObraId = localStorage.getItem('tecnodrill_selected_obra_id');
+      const hashRoute = parseHashRoute();
+      const savedPath = hashRoute?.path || localStorage.getItem('tecnodrill_current_path');
+      const savedObraId = hashRoute?.obraId || localStorage.getItem('tecnodrill_selected_obra_id');
 
       const defaultRoute = (user.perfil === 'OPERADOR' || user.perfil === 'NAVEGADOR')
         ? '/tecnico/obras'
@@ -76,6 +95,12 @@ export const App: React.FC = () => {
 
       setCurrentPath(initialPath);
       setSelectedObraId(savedObraId || null);
+
+      if (initialPath === '/app/obras/detalhe' && savedObraId) {
+        window.location.hash = `#/obra/${savedObraId}`;
+      } else if (!window.location.hash) {
+        window.location.hash = `#${initialPath}`;
+      }
     } else {
       localStorage.removeItem('tecnodrill_current_path');
       localStorage.removeItem('tecnodrill_selected_obra_id');
@@ -84,6 +109,7 @@ export const App: React.FC = () => {
     }
   }, [user, isLoading]);
 
+  // Persistir última rota no localStorage e no hash
   useEffect(() => {
     if (user && currentPath) {
       localStorage.setItem('tecnodrill_current_path', currentPath);
@@ -95,6 +121,56 @@ export const App: React.FC = () => {
     }
   }, [currentPath, selectedObraId, user]);
 
+  // Recuperação de Rascunho se o operador saiu do app ou o navegador suspendeu
+  useEffect(() => {
+    if (isLoading || !user) return;
+
+    let isMounted = true;
+    const resumeDraftIfActive = async () => {
+      try {
+        const draft = await getRodDraft();
+        if (draft && isMounted && (draft.isOpen || draft.fotosList.length > 0)) {
+          if (draft.source === 'OBRA_DETALHES' && draft.servicoId) {
+            setSelectedObraId(draft.servicoId);
+            setCurrentPath('/app/obras/detalhe');
+            window.location.hash = `#/obra/${draft.servicoId}`;
+          } else if (draft.source === 'DIRECT' || !draft.servicoId) {
+            const servicos = await ApiService.getServicos();
+            if (servicos.length > 0 && isMounted) {
+              const targetServicoId = draft.servicoId || selectedObraId || servicos[0].id;
+              const targetServico = servicos.find(s => s.id === targetServicoId) || servicos[0];
+              setActiveServico(targetServico);
+              const furos = await ApiService.getFuros(targetServicoId);
+              if (furos.length > 0) {
+                setActiveFuro(furos[0]);
+                const barras = await ApiService.getBarras(furos[0].id);
+                setActiveBarraCount(draft.nextBarraNumber || barras.length + 1);
+              }
+              setShowDirectRodModal(true);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Resume Draft App Error]:', err);
+      }
+    };
+
+    resumeDraftIfActive();
+
+    // Também verifica quando o app volta para o primeiro plano
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        resumeDraftIfActive();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isLoading, user, selectedObraId]);
+
   const handleNavigate = (path: string, pushHistory = true) => {
     let targetPath = path;
     let targetObraId: string | null = null;
@@ -105,12 +181,14 @@ export const App: React.FC = () => {
       targetPath = '/app/obras/detalhe';
       setSelectedObraId(targetObraId);
       setCurrentPath('/app/obras/detalhe');
+      window.location.hash = `#/obra/${targetObraId}`;
     } else {
       targetPath = path;
       setCurrentPath(path);
       if (path !== '/app/obras/detalhe') {
         setSelectedObraId(null);
       }
+      window.location.hash = `#${path}`;
     }
 
     if (pushHistory) {
@@ -153,8 +231,20 @@ export const App: React.FC = () => {
       }
     };
 
+    const handleHashChange = () => {
+      const route = parseHashRoute();
+      if (route && route.path !== currentPath) {
+        setCurrentPath(route.path);
+        setSelectedObraId(route.obraId);
+      }
+    };
+
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   }, [currentPath, selectedObraId, user]);
 
   // Acionamento direto do formulário de novo registro pelo botão central da Câmera
@@ -388,6 +478,7 @@ export const App: React.FC = () => {
         nextBarraNumber={activeBarraCount}
         onSubmit={handleSubmitDirectRod}
         loading={savingDirectRod}
+        source="DIRECT"
       />
 
       {/* 6. MODAL CELEBRAÇÃO DE META */}
