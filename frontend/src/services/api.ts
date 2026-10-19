@@ -722,7 +722,28 @@ export class ApiService {
     if (data.min_fotos_registro !== undefined) supabasePayload.min_fotos_registro = Number(data.min_fotos_registro) || 2;
     supabasePayload.atualizado_em = new Date().toISOString();
 
-    const { descricao: cleanDesc, meta: existingMeta } = parseServicoDescricao(data.descricao !== undefined ? data.descricao : '');
+    let cleanDesc = '';
+    let existingMeta: ServicoMetaTag = {};
+
+    if (data.descricao !== undefined) {
+      const parsed = parseServicoDescricao(data.descricao);
+      cleanDesc = parsed.descricao;
+      existingMeta = parsed.meta;
+    } else {
+      try {
+        const { data: currentRecord } = await supabase
+          .from('tecnodrill_servicos')
+          .select('descricao')
+          .eq('id', id)
+          .single();
+        if (currentRecord?.descricao) {
+          const parsed = parseServicoDescricao(currentRecord.descricao);
+          cleanDesc = parsed.descricao;
+          existingMeta = parsed.meta;
+        }
+      } catch (_) {}
+    }
+
     const metaToSave: ServicoMetaTag = {
       tipo_servico: data.tipo_servico || existingMeta.tipo_servico || 'TELECOM',
       min_fotos_registro: data.min_fotos_registro !== undefined ? Number(data.min_fotos_registro) : (existingMeta.min_fotos_registro || 2),
@@ -734,8 +755,8 @@ export class ApiService {
       custo_combustivel_diario: data.custo_combustivel_diario !== undefined ? Number(data.custo_combustivel_diario) : (existingMeta.custo_combustivel_diario || 0),
       custo_equipamento_diario: data.custo_equipamento_diario !== undefined ? Number(data.custo_equipamento_diario) : (existingMeta.custo_equipamento_diario || 0),
       custo_outros_diario: data.custo_outros_diario !== undefined ? Number(data.custo_outros_diario) : (existingMeta.custo_outros_diario || 0),
-      navegadores: data.navegadores !== undefined ? data.navegadores : existingMeta.navegadores,
-      operadores: data.operadores !== undefined ? data.operadores : existingMeta.operadores
+      navegadores: data.navegadores !== undefined ? data.navegadores : (existingMeta.navegadores || []),
+      operadores: data.operadores !== undefined ? data.operadores : (existingMeta.operadores || [])
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -764,11 +785,11 @@ export class ApiService {
           custo_outros_diario: metaToSave.custo_outros_diario,
           logo_cliente: metaToSave.logo_cliente,
           logo_escala: metaToSave.logo_escala,
-          navegador_id: data.navegador_id,
-          navegador_nome: data.navegador_nome,
+          navegador_id: data.navegador_id !== undefined ? data.navegador_id : updated.navegador_id,
+          navegador_nome: data.navegador_nome !== undefined ? data.navegador_nome : updated.navegador_nome,
           navegadores: metaToSave.navegadores || [],
-          operador_id: data.operador_id,
-          operador_nome: data.operador_nome,
+          operador_id: data.operador_id !== undefined ? data.operador_id : updated.operador_id,
+          operador_nome: data.operador_nome !== undefined ? data.operador_nome : updated.operador_nome,
           operadores: metaToSave.operadores || []
         };
       } else if (error) {
@@ -832,32 +853,50 @@ export class ApiService {
   }
 
   /**
+   * Extrai e normaliza a lista de membros a partir dos metadados ou do campo de texto com barras (/)
+   */
+  private static extractTeamMembers(
+    explicitList?: Array<{ id: string; nome: string }>,
+    singleId?: string | null,
+    combinedName?: string | null
+  ): Array<{ id: string; nome: string }> {
+    if (explicitList && explicitList.length > 0) {
+      return explicitList
+        .map(item => ({ id: item.id || `custom_${item.nome}`, nome: item.nome.trim() }))
+        .filter(item => Boolean(item.nome));
+    }
+    if (!combinedName || !combinedName.trim()) return [];
+    const parts = combinedName.split(/\s*\/\s*/).map(p => p.trim()).filter(Boolean);
+    return parts.map((nome, idx) => ({
+      id: idx === 0 && singleId ? singleId : `member_${nome.replace(/\s+/g, '_')}`,
+      nome
+    }));
+  }
+
+  /**
    * Adiciona um novo operador ou navegador à equipe da obra sem substituir os atuais (apenas acrescenta)
    */
-  public static async addEquipeMembro(servicoId: string, membro: { id?: string; nome: string; perfil?: 'NAVEGADOR' | 'OPERADOR'; cargo?: 'NAVEGADOR' | 'OPERADOR' }): Promise<Servico> {
+  public static async addEquipeMembro(
+    servicoId: string, 
+    membro: { id?: string; nome: string; perfil?: 'NAVEGADOR' | 'OPERADOR'; cargo?: 'NAVEGADOR' | 'OPERADOR' }
+  ): Promise<Servico> {
     const s = await this.getServico(servicoId);
-    const { meta } = parseServicoDescricao(s.descricao);
+    const { meta, descricao: cleanDesc } = parseServicoDescricao(s.descricao);
     
-    let novosNavs: Array<{ id: string; nome: string }> = [...(meta.navegadores || s.navegadores || [])];
-    if (s.navegador_id && s.navegador_nome && !novosNavs.some(n => n.id === s.navegador_id)) {
-      novosNavs.push({ id: s.navegador_id, nome: s.navegador_nome });
-    }
-
-    let novosOps: Array<{ id: string; nome: string }> = [...(meta.operadores || s.operadores || [])];
-    if (s.operador_id && s.operador_nome && !novosOps.some(o => o.id === s.operador_id)) {
-      novosOps.push({ id: s.operador_id, nome: s.operador_nome });
-    }
+    let novosNavs = this.extractTeamMembers(meta.navegadores || s.navegadores, s.navegador_id, s.navegador_nome);
+    let novosOps = this.extractTeamMembers(meta.operadores || s.operadores, s.operador_id, s.operador_nome);
 
     const funcao = membro.perfil || membro.cargo;
     const membroId = membro.id || `custom_${Date.now()}`;
+    const cleanNome = membro.nome.trim();
 
     if (funcao === 'NAVEGADOR') {
-      if (!novosNavs.some(n => n.id === membroId)) {
-        novosNavs.push({ id: membroId, nome: membro.nome });
+      if (!novosNavs.some(n => (membro.id && n.id === membro.id) || n.nome.toLowerCase() === cleanNome.toLowerCase())) {
+        novosNavs.push({ id: membroId, nome: cleanNome });
       }
     } else if (funcao === 'OPERADOR') {
-      if (!novosOps.some(o => o.id === membroId)) {
-        novosOps.push({ id: membroId, nome: membro.nome });
+      if (!novosOps.some(o => (membro.id && o.id === membro.id) || o.nome.toLowerCase() === cleanNome.toLowerCase())) {
+        novosOps.push({ id: membroId, nome: cleanNome });
       }
     }
 
@@ -865,10 +904,56 @@ export class ApiService {
     const opNomeFormatted = novosOps.map(o => o.nome).join(' / ');
 
     return await this.updateServico(servicoId, {
+      descricao: cleanDesc,
       navegadores: novosNavs,
       operadores: novosOps,
+      navegador_id: novosNavs.length > 0 ? novosNavs[0].id : null,
       navegador_nome: navNomeFormatted,
+      operador_id: novosOps.length > 0 ? novosOps[0].id : null,
       operador_nome: opNomeFormatted
+    });
+  }
+
+  /**
+   * Remove um operador ou navegador da equipe da obra e sincroniza furos e filtros
+   */
+  public static async removeEquipeMembro(
+    servicoId: string, 
+    membro: { id?: string; nome: string; perfil: 'NAVEGADOR' | 'OPERADOR' }
+  ): Promise<Servico> {
+    const s = await this.getServico(servicoId);
+    const { meta, descricao: cleanDesc } = parseServicoDescricao(s.descricao);
+
+    let currentNavs = this.extractTeamMembers(meta.navegadores || s.navegadores, s.navegador_id, s.navegador_nome);
+    let currentOps = this.extractTeamMembers(meta.operadores || s.operadores, s.operador_id, s.operador_nome);
+
+    const normTarget = membro.nome.toLowerCase().trim();
+
+    if (membro.perfil === 'NAVEGADOR') {
+      currentNavs = currentNavs.filter(n => {
+        if (membro.id && n.id && n.id === membro.id) return false;
+        if (n.nome.toLowerCase().trim() === normTarget) return false;
+        return true;
+      });
+    } else if (membro.perfil === 'OPERADOR') {
+      currentOps = currentOps.filter(o => {
+        if (membro.id && o.id && o.id === membro.id) return false;
+        if (o.nome.toLowerCase().trim() === normTarget) return false;
+        return true;
+      });
+    }
+
+    const navNomeFormatted = currentNavs.map(n => n.nome).join(' / ');
+    const opNomeFormatted = currentOps.map(o => o.nome).join(' / ');
+
+    return await this.updateServico(servicoId, {
+      descricao: cleanDesc,
+      navegadores: currentNavs,
+      operadores: currentOps,
+      navegador_id: currentNavs.length > 0 ? currentNavs[0].id : null,
+      navegador_nome: navNomeFormatted || null,
+      operador_id: currentOps.length > 0 ? currentOps[0].id : null,
+      operador_nome: opNomeFormatted || null
     });
   }
 

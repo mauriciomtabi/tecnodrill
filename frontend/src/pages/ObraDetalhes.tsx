@@ -28,6 +28,22 @@ import {
   X
 } from 'lucide-react';
 
+const getEquipeList = (
+  list?: Array<{ id: string; nome: string }>,
+  singleName?: string | null,
+  singleId?: string | null
+): Array<{ id: string; nome: string }> => {
+  if (list && list.length > 0) {
+    return list.map(item => ({ id: item.id || `member_${item.nome}`, nome: item.nome.trim() })).filter(item => Boolean(item.nome));
+  }
+  if (!singleName || !singleName.trim()) return [];
+  const parts = singleName.split(/\s*\/\s*/).map(p => p.trim()).filter(Boolean);
+  return parts.map((nome, idx) => ({
+    id: idx === 0 && singleId ? singleId : `member_${nome.replace(/\s+/g, '_')}`,
+    nome
+  }));
+};
+
 interface ObraDetalhesProps {
   setHeaderInfo: (title: string, subtitle: string) => void;
   servicoId: string;
@@ -98,6 +114,8 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   // Confirm Dialogs
   const [confirmDeleteServicoOpen, setConfirmDeleteServicoOpen] = useState(false);
   const [confirmDeleteBarraId, setConfirmDeleteBarraId] = useState<string | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<{ id?: string; nome: string; perfil: 'NAVEGADOR' | 'OPERADOR' } | null>(null);
+  const [removingMember, setRemovingMember] = useState(false);
 
   // Meta Celebration
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -108,6 +126,25 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   }>({ metaMetros: 54, metrosAtingidos: 54, tipoMeta: 'DIARIA' });
 
   const isGestor = user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN';
+
+  const currentNavegadores = getEquipeList(servico?.navegadores, servico?.navegador_nome || furo?.navegador_nome, furo?.navegador_id);
+  const currentOperadores = getEquipeList(servico?.operadores, servico?.operador_nome || furo?.operador_nome, furo?.operador_id);
+
+  const handleConfirmRemoveMember = async () => {
+    if (!memberToRemove || !servico) return;
+    setRemovingMember(true);
+    try {
+      const updated = await ApiService.removeEquipeMembro(servico.id, memberToRemove);
+      setServico(updated);
+      showToast(`${memberToRemove.perfil === 'NAVEGADOR' ? 'Navegador' : 'Operador'} "${memberToRemove.nome}" removido da equipe com sucesso!`, 'info');
+      setMemberToRemove(null);
+      await fetchDados();
+    } catch (err: any) {
+      showToast(err.message || 'Erro ao remover membro da equipe.', 'error');
+    } finally {
+      setRemovingMember(false);
+    }
+  };
 
   const fetchDados = async () => {
     setLoading(true);
@@ -466,29 +503,111 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
               {servico.cliente} • {sanitizeLocalidade(servico.local, servico.cidade, servico.uf)}
             </p>
             
-            {/* Lista Completa da Equipe (Multi-Técnicos) */}
+            {/* Lista Completa da Equipe (Multi-Técnicos com remoção direta para gestores) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               {/* Navegadores */}
-              {(servico.navegadores && servico.navegadores.length > 0
-                ? servico.navegadores
-                : (servico.navegador_nome || furo?.navegador_nome)
-                  ? [{ id: furo?.navegador_id || '1', nome: servico.navegador_nome || furo?.navegador_nome || '' }]
-                  : []
-              ).map((nav, idx) => (
-                <span key={`nav-${idx}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(240, 90, 34, 0.12)', color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  🧭 Navegador: <strong style={{ color: 'var(--text-main)' }}>{nav.nome}</strong>
+              {currentNavegadores.map((nav, idx) => (
+                <span
+                  key={`nav-${idx}`}
+                  style={{
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                    color: 'var(--primary)',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>🧭 Navegador: <strong style={{ color: 'var(--text-main)' }}>{nav.nome}</strong></span>
+                  {isGestor && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMemberToRemove({ id: nav.id, nome: nav.nome, perfil: 'NAVEGADOR' });
+                      }}
+                      title={`Remover navegador ${nav.nome} deste serviço`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '1px 3px',
+                        marginLeft: '3px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'rgba(255, 255, 255, 0.45)',
+                        borderRadius: '3px',
+                        transition: 'color 0.15s, background-color 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#FF7675';
+                        e.currentTarget.style.backgroundColor = 'rgba(231, 76, 60, 0.25)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <X size={12} strokeWidth={2.5} />
+                    </button>
+                  )}
                 </span>
               ))}
 
               {/* Operadores */}
-              {(servico.operadores && servico.operadores.length > 0
-                ? servico.operadores
-                : (servico.operador_nome || furo?.operador_nome)
-                  ? [{ id: furo?.operador_id || '1', nome: servico.operador_nome || furo?.operador_nome || '' }]
-                  : []
-              ).map((op, idx) => (
-                <span key={`op-${idx}`} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(93, 173, 226, 0.12)', color: '#5DADE2', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  👷 Operador: <strong style={{ color: 'var(--text-main)' }}>{op.nome}</strong>
+              {currentOperadores.map((op, idx) => (
+                <span
+                  key={`op-${idx}`}
+                  style={{
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: 'rgba(93, 173, 226, 0.12)',
+                    color: '#5DADE2',
+                    fontWeight: 600,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>👷 Operador: <strong style={{ color: 'var(--text-main)' }}>{op.nome}</strong></span>
+                  {isGestor && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMemberToRemove({ id: op.id, nome: op.nome, perfil: 'OPERADOR' });
+                      }}
+                      title={`Remover operador ${op.nome} deste serviço`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '1px 3px',
+                        marginLeft: '3px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'rgba(255, 255, 255, 0.45)',
+                        borderRadius: '3px',
+                        transition: 'color 0.15s, background-color 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#FF7675';
+                        e.currentTarget.style.backgroundColor = 'rgba(231, 76, 60, 0.25)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'rgba(255, 255, 255, 0.45)';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <X size={12} strokeWidth={2.5} />
+                    </button>
+                  )}
                 </span>
               ))}
 
@@ -500,7 +619,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                     carregarUsuarios();
                     setShowAddMemberModal(true);
                   }}
-                  title="Acrescentar operador ou navegador à equipe"
+                  title="Gerenciar equipe ou acrescentar operador/navegador"
                   style={{
                     fontSize: '11px',
                     padding: '3px 8px',
@@ -1227,7 +1346,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         }}
       />
 
-      {/* MODAL ADICIONAR TÉCNICO À EQUIPE (APENAS GESTOR) */}
+      {/* MODAL GERENCIAR EQUIPE DA OBRA (APENAS GESTOR) */}
       {showAddMemberModal && createPortal(
         <div style={{
           position: 'fixed',
@@ -1242,7 +1361,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         }}>
           <div style={{
             width: '100%',
-            maxWidth: '420px',
+            maxWidth: '440px',
             backgroundColor: '#0D1C24',
             borderRadius: '12px',
             border: '1px solid var(--border-color)',
@@ -1250,156 +1369,267 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
             boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '14px'
+            gap: '14px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'rgba(240, 90, 34, 0.15)', color: 'var(--primary)' }}>
-                  <UserPlus size={18} />
+                  <Users size={18} />
                 </div>
                 <div>
                   <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                    Adicionar Técnico à Obra
+                    Gerenciar Equipe da Obra
                   </h3>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Acrescenta operador ou navegador à equipe sem substituir os atuais
+                    Adicione ou remova operadores e navegadores deste serviço
                   </span>
                 </div>
               </div>
-              <button onClick={() => setShowAddMemberModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <button onClick={() => setShowAddMemberModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
                 <X size={18} />
               </button>
             </div>
 
-            {/* Seleção de Função */}
+            {/* LISTA DE INTEGRANTES ATUAIS COM BOTÃO DE REMOÇÃO */}
             <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Função do Técnico
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase' }}>
+                Integrantes Atualmente Vinculados ({currentNavegadores.length + currentOperadores.length})
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setMembroTipo('OPERADOR')}
+
+              {currentNavegadores.length === 0 && currentOperadores.length === 0 ? (
+                <div style={{ padding: '12px', textAlign: 'center', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  Nenhum operador ou navegador vinculado a este serviço.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {currentNavegadores.map((nav, idx) => (
+                    <div
+                      key={`modal-nav-${idx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: 'rgba(240, 90, 34, 0.08)',
+                        border: '1px solid rgba(240, 90, 34, 0.25)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}>
+                        <span>🧭</span>
+                        <span style={{ color: 'var(--primary)', fontWeight: 600 }}>Navegador:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>{nav.nome}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberToRemove({ id: nav.id, nome: nav.nome, perfil: 'NAVEGADOR' });
+                        }}
+                        title={`Remover navegador ${nav.nome}`}
+                        style={{
+                          background: 'rgba(231, 76, 60, 0.15)',
+                          border: '1px solid rgba(231, 76, 60, 0.35)',
+                          color: '#FF7675',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Trash2 size={12} />
+                        <span>Remover</span>
+                      </button>
+                    </div>
+                  ))}
+
+                  {currentOperadores.map((op, idx) => (
+                    <div
+                      key={`modal-op-${idx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        backgroundColor: 'rgba(93, 173, 226, 0.08)',
+                        border: '1px solid rgba(93, 173, 226, 0.25)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}>
+                        <span>👷</span>
+                        <span style={{ color: '#5DADE2', fontWeight: 600 }}>Operador:</span>
+                        <strong style={{ color: 'var(--text-main)' }}>{op.nome}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMemberToRemove({ id: op.id, nome: op.nome, perfil: 'OPERADOR' });
+                        }}
+                        title={`Remover operador ${op.nome}`}
+                        style={{
+                          background: 'rgba(231, 76, 60, 0.15)',
+                          border: '1px solid rgba(231, 76, 60, 0.35)',
+                          color: '#FF7675',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Trash2 size={12} />
+                        <span>Remover</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <span style={{ display: 'block', fontSize: '11.5px', fontWeight: 800, color: 'var(--primary)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                + Adicionar Novo Integrante
+              </span>
+
+              {/* Seleção de Função */}
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Função do Técnico
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMembroTipo('OPERADOR')}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      border: `1px solid ${membroTipo === 'OPERADOR' ? 'var(--primary)' : 'var(--border-color)'}`,
+                      backgroundColor: membroTipo === 'OPERADOR' ? 'var(--primary)' : 'var(--bg-app)',
+                      color: membroTipo === 'OPERADOR' ? '#FFFFFF' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    👷 Operador
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMembroTipo('NAVEGADOR')}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      border: `1px solid ${membroTipo === 'NAVEGADOR' ? 'var(--primary)' : 'var(--border-color)'}`,
+                      backgroundColor: membroTipo === 'NAVEGADOR' ? 'var(--primary)' : 'var(--bg-app)',
+                      color: membroTipo === 'NAVEGADOR' ? '#FFFFFF' : 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🧭 Navegador
+                  </button>
+                </div>
+              </div>
+
+              {/* Selecionar Usuário Cadastrado */}
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Selecionar Usuário do Sistema
+                </label>
+                <select
+                  value={membroUserId}
+                  onChange={(e) => {
+                    setMembroUserId(e.target.value);
+                    if (e.target.value) setMembroCustomNome('');
+                  }}
                   style={{
-                    padding: '8px',
+                    width: '100%',
+                    backgroundColor: 'var(--bg-app)',
+                    border: '1px solid var(--border-color)',
                     borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    border: `1px solid ${membroTipo === 'OPERADOR' ? 'var(--primary)' : 'var(--border-color)'}`,
-                    backgroundColor: membroTipo === 'OPERADOR' ? 'var(--primary)' : 'var(--bg-app)',
-                    color: membroTipo === 'OPERADOR' ? '#FFFFFF' : 'var(--text-muted)',
-                    cursor: 'pointer'
+                    padding: '9px 12px',
+                    fontSize: '12.5px',
+                    color: 'var(--text-main)'
                   }}
                 >
-                  👷 Operador
+                  <option value="">-- Escolha um usuário cadastrado --</option>
+                  {todosUsuarios
+                    .filter(u => u.perfil === membroTipo || u.perfil === 'OPERADOR' || u.perfil === 'NAVEGADOR')
+                    .map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.nome} ({u.perfil})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Ou Nome Avulso */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
+                  Ou Digite o Nome do Técnico
+                </label>
+                <input
+                  type="text"
+                  value={membroCustomNome}
+                  onChange={(e) => {
+                    setMembroCustomNome(e.target.value);
+                    if (e.target.value) setMembroUserId('');
+                  }}
+                  placeholder="ex: João da Silva"
+                  style={{
+                    width: '100%',
+                    backgroundColor: 'var(--bg-app)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    padding: '9px 12px',
+                    fontSize: '12.5px',
+                    color: 'var(--text-main)',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Botões de Ação */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddMemberModal(false)}
+                  className="btn-secondary"
+                  style={{ padding: '8px 14px', fontSize: '12px' }}
+                >
+                  Fechar
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMembroTipo('NAVEGADOR')}
+                  disabled={salvandoMembro || (!membroUserId && !membroCustomNome.trim())}
+                  onClick={handleAddMember}
                   style={{
-                    padding: '8px',
+                    backgroundColor: (membroUserId || membroCustomNome.trim()) ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
+                    color: '#FFFFFF',
+                    border: 'none',
                     borderRadius: '6px',
-                    fontSize: '12px',
+                    padding: '8px 16px',
+                    fontSize: '12.5px',
                     fontWeight: 700,
-                    border: `1px solid ${membroTipo === 'NAVEGADOR' ? 'var(--primary)' : 'var(--border-color)'}`,
-                    backgroundColor: membroTipo === 'NAVEGADOR' ? 'var(--primary)' : 'var(--bg-app)',
-                    color: membroTipo === 'NAVEGADOR' ? '#FFFFFF' : 'var(--text-muted)',
-                    cursor: 'pointer'
+                    cursor: (membroUserId || membroCustomNome.trim()) ? 'pointer' : 'not-allowed',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
                   }}
                 >
-                  🧭 Navegador
+                  {salvandoMembro ? 'Adicionando...' : 'Adicionar à Obra'}
                 </button>
               </div>
-            </div>
-
-            {/* Selecionar Usuário Cadastrado */}
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Selecionar Usuário do Sistema
-              </label>
-              <select
-                value={membroUserId}
-                onChange={(e) => {
-                  setMembroUserId(e.target.value);
-                  if (e.target.value) setMembroCustomNome('');
-                }}
-                style={{
-                  width: '100%',
-                  backgroundColor: 'var(--bg-app)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  padding: '9px 12px',
-                  fontSize: '12.5px',
-                  color: 'var(--text-main)'
-                }}
-              >
-                <option value="">-- Escolha um usuário cadastrado --</option>
-                {todosUsuarios
-                  .filter(u => u.perfil === membroTipo || u.perfil === 'OPERADOR' || u.perfil === 'NAVEGADOR')
-                  .map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.nome} ({u.perfil})
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Ou Nome Avulso */}
-            <div>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase' }}>
-                Ou Digite o Nome do Técnico
-              </label>
-              <input
-                type="text"
-                value={membroCustomNome}
-                onChange={(e) => {
-                  setMembroCustomNome(e.target.value);
-                  if (e.target.value) setMembroUserId('');
-                }}
-                placeholder="ex: João da Silva"
-                style={{
-                  width: '100%',
-                  backgroundColor: 'var(--bg-app)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  padding: '9px 12px',
-                  fontSize: '12.5px',
-                  color: 'var(--text-main)',
-                  boxSizing: 'border-box'
-                }}
-              />
-            </div>
-
-            {/* Botões de Ação */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setShowAddMemberModal(false)}
-                className="btn-secondary"
-                style={{ padding: '8px 14px', fontSize: '12px' }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={salvandoMembro || (!membroUserId && !membroCustomNome.trim())}
-                onClick={handleAddMember}
-                style={{
-                  backgroundColor: (membroUserId || membroCustomNome.trim()) ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '8px 16px',
-                  fontSize: '12.5px',
-                  fontWeight: 700,
-                  cursor: (membroUserId || membroCustomNome.trim()) ? 'pointer' : 'not-allowed',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {salvandoMembro ? 'Adicionando...' : 'Adicionar à Obra'}
-              </button>
             </div>
           </div>
         </div>,
@@ -1447,6 +1677,18 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         danger={true}
         onConfirm={handleConfirmDeleteBarra}
         onCancel={() => setConfirmDeleteBarraId(null)}
+      />
+
+      {/* CONFIRM DIALOG - REMOVER MEMBRO DA EQUIPE */}
+      <ConfirmDialog
+        open={Boolean(memberToRemove)}
+        title={`Remover ${memberToRemove?.perfil === 'NAVEGADOR' ? 'Navegador' : 'Operador'}`}
+        message={`Deseja realmente remover o ${memberToRemove?.perfil === 'NAVEGADOR' ? 'navegador' : 'operador'} "${memberToRemove?.nome}" da equipe deste serviço? Ele deixará de ter acesso à obra em seu painel.`}
+        confirmLabel={removingMember ? "Removendo..." : "Sim, Remover"}
+        cancelLabel="Cancelar"
+        danger={true}
+        onConfirm={handleConfirmRemoveMember}
+        onCancel={() => setMemberToRemove(null)}
       />
 
     </div>

@@ -27,12 +27,12 @@ export interface Servico {
   local: string;
   cidade?: string;
   uf?: string;
-  gestor_id?: string;
-  navegador_id?: string;
-  navegador_nome?: string;
+  gestor_id?: string | null;
+  navegador_id?: string | null;
+  navegador_nome?: string | null;
   navegadores?: Array<{ id: string; nome: string }>;
-  operador_id?: string;
-  operador_nome?: string;
+  operador_id?: string | null;
+  operador_nome?: string | null;
   operadores?: Array<{ id: string; nome: string }>;
   status: StatusServico;
   tipo_servico?: TipoServico;

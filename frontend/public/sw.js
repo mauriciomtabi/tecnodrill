@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tecnodrill-infra-v9';
+const CACHE_NAME = 'tecnodrill-infra-v10';
 const ASSETS = [
   '/',
   '/index.html',
