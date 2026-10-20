@@ -82,6 +82,11 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       ? barraMeta.fotos
       : (barra?.foto_url ? [barra.foto_url] : []);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [photoError, setPhotoError] = useState(false);
+  const [convertedPhotoUrl, setConvertedPhotoUrl] = useState<string | null>(null);
+  const [convertingPhoto, setConvertingPhoto] = useState(false);
+
+  const currentPhoto = allPhotos[activePhotoIndex] || barra?.foto_url;
 
   useEffect(() => {
     setActivePhotoIndex(0);
@@ -91,7 +96,26 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     setMesRefSaved(false);
     setConfirmDelete(false);
     setDeleting(false);
+    setPhotoError(false);
+    setConvertedPhotoUrl(null);
   }, [barra?.id, isOpen]);
+
+  useEffect(() => {
+    setPhotoError(false);
+    setConvertedPhotoUrl(null);
+    if (!currentPhoto) return;
+
+    if (isHeicDataUrl(currentPhoto)) {
+      setConvertingPhoto(true);
+      convertHeicBase64ToJpeg(currentPhoto)
+        .then(jpegUrl => setConvertedPhotoUrl(jpegUrl))
+        .catch(err => {
+          console.warn('[HEIC conversion failed in viewer]:', err);
+          setPhotoError(true);
+        })
+        .finally(() => setConvertingPhoto(false));
+    }
+  }, [currentPhoto]);
 
   const handleConfirmDelete = async () => {
     if (!barra || !onDelete) return;
@@ -144,28 +168,6 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   }, [isOpen, barra]);
 
   if (!isOpen || !barra) return null;
-
-  const currentPhoto = allPhotos[activePhotoIndex] || barra.foto_url;
-  const [photoError, setPhotoError] = useState(false);
-  const [convertedPhotoUrl, setConvertedPhotoUrl] = useState<string | null>(null);
-  const [convertingPhoto, setConvertingPhoto] = useState(false);
-
-  useEffect(() => {
-    setPhotoError(false);
-    setConvertedPhotoUrl(null);
-    if (!currentPhoto) return;
-
-    if (isHeicDataUrl(currentPhoto)) {
-      setConvertingPhoto(true);
-      convertHeicBase64ToJpeg(currentPhoto)
-        .then(jpegUrl => setConvertedPhotoUrl(jpegUrl))
-        .catch(err => {
-          console.warn('[HEIC conversion failed in viewer]:', err);
-          setPhotoError(true);
-        })
-        .finally(() => setConvertingPhoto(false));
-    }
-  }, [currentPhoto]);
 
   const displayPhoto = convertedPhotoUrl || currentPhoto;
 
