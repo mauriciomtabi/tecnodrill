@@ -49,6 +49,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [barrasPorServico, setBarrasPorServico] = useState<Record<string, Barra[]>>({});
   const [loading, setLoading] = useState(true);
 
+  // Datas de referência
+  const currentYear = new Date().getFullYear().toString();
+  const currentMonth = (new Date().getMonth() + 1).toString();
+
   // Datas de início e fim do mês atual (padrão executivo)
   const getInicioMesAtual = () => {
     const d = new Date();
