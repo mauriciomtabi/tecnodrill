@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { FinanceiroService } from '../services/financeiroService';
 import { ExportService } from '../services/exportService';
 import { RelatorioDiarioEmailService } from '../services/relatorioDiarioEmailService';
+import { RelatorioDiarioTelegramService } from '../services/relatorioDiarioTelegramService';
 
 const router = Router();
 
@@ -82,4 +83,51 @@ router.post('/diario/config', async (req: Request, res: Response): Promise<any> 
   }
 });
 
+// GET /api/relatorios/telegram/config
+router.get('/telegram/config', async (_req: Request, res: Response): Promise<any> => {
+  try {
+    const config = RelatorioDiarioTelegramService.getConfigTelegram();
+    return res.json({ status: 'ok', config });
+  } catch (err: any) {
+    console.error('[Telegram Config GET] Erro:', err);
+    return res.status(500).json({ error: 'Erro ao consultar configurações do Telegram.' });
+  }
+});
+
+// POST /api/relatorios/telegram/config
+router.post('/telegram/config', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const saved = RelatorioDiarioTelegramService.salvarConfigTelegram(req.body);
+    return res.json({ status: 'ok', config: saved });
+  } catch (err: any) {
+    console.error('[Telegram Config POST] Erro:', err);
+    return res.status(500).json({ error: 'Erro ao salvar configurações do Telegram.' });
+  }
+});
+
+// POST /api/relatorios/telegram/enviar
+router.post('/telegram/enviar', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { chatId, botToken, dataRef } = req.body;
+    const resultado = await RelatorioDiarioTelegramService.enviarRelatorioTelegram(chatId, botToken, dataRef);
+    return res.json(resultado);
+  } catch (err: any) {
+    console.error('[Telegram Enviar] Erro:', err);
+    return res.status(500).json({ error: 'Erro ao disparar relatório diário no Telegram.' });
+  }
+});
+
+// GET /api/relatorios/telegram/detectar-chat
+router.get('/telegram/detectar-chat', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const botToken = req.query.botToken as string | undefined;
+    const resultado = await RelatorioDiarioTelegramService.detectarChatId(botToken);
+    return res.json(resultado);
+  } catch (err: any) {
+    console.error('[Telegram Detectar Chat] Erro:', err);
+    return res.status(500).json({ error: 'Erro ao detectar chat no Telegram.' });
+  }
+});
+
 export default router;
+

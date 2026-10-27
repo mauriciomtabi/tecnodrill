@@ -316,7 +316,9 @@ export class RelatorioDiarioEmailService {
             <div style="font-size: 26px; font-weight: 800; color: #2ECC71; margin: 2px 0 4px; white-space: nowrap;">
               ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
-            <div style="font-size: 11.5px; color: #64748B;">Faturamento bruto gerado</div>
+            <div style="font-size: 11.5px; color: #059669; font-weight: 600; white-space: nowrap;">
+              Acumulado no mês: ${dados.acumuladoMesReceita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </div>
           </td>
         </tr>
         <tr>
