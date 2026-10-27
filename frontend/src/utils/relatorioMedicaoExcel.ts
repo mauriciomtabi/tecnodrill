@@ -198,7 +198,7 @@ function criarWorksheetConsolidada(
   ws.getColumn(7).width = 14;  // G: DUTO diametro
   ws.getColumn(8).width = 18;  // H: Valor Metro
   ws.getColumn(9).width = 24;  // I: VALOR TOTAL FURO
-  ws.getColumn(10).width = 36; // J: DESCRIÇÃO observação
+  ws.getColumn(10).width = 60; // J: DESCRIÇÃO observação
 
   // Alturas das Linhas do Cabeçalho
   ws.getRow(1).height = 14;
@@ -471,7 +471,7 @@ function criarWorksheetEstilizada(
   ws.getColumn(5).width = 15;  // E: DUTO diametro
   ws.getColumn(6).width = 18;  // F: Valor Metro
   ws.getColumn(7).width = 24;  // G: VALOR TOTAL FURO
-  ws.getColumn(8).width = 36;  // H: DESCRIÇÃO observação
+  ws.getColumn(8).width = 60;  // H: DESCRIÇÃO observação
 
   // Alturas das Linhas do Cabeçalho
   ws.getRow(1).height = 14;
