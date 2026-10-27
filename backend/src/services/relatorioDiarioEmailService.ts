@@ -24,6 +24,8 @@ export interface DadosFechamentoDiario {
   metaMensalMetros: number;
   percentualMetaMensal: number;
   totalObrasAtivas: number;
+  totalObrasComProducaoHoje: number;
+  totalObrasEmAberto: number;
   obras: ItemObraDiario[];
 }
 
@@ -201,6 +203,8 @@ export class RelatorioDiarioEmailService {
     }
 
     const pctMetaMensal = metaMensalTotal > 0 ? (acumuladoMesMetros / metaMensalTotal) * 100 : 0;
+    const totalObrasEmAberto = servicos.filter(s => s.status !== 'CONCLUIDO').length || servicos.length;
+    const totalObrasComProducaoHoje = obrasMap.size;
 
     return {
       dataStr: dataFormatada,
@@ -212,7 +216,9 @@ export class RelatorioDiarioEmailService {
       acumuladoMesReceita: Math.round(acumuladoMesReceita * 100) / 100,
       metaMensalMetros: metaMensalTotal,
       percentualMetaMensal: Math.round(pctMetaMensal),
-      totalObrasAtivas: obrasMap.size,
+      totalObrasAtivas: totalObrasComProducaoHoje,
+      totalObrasComProducaoHoje,
+      totalObrasEmAberto,
       obras: Array.from(obrasMap.values()).sort((a, b) => b.metrosHoje - a.metrosHoje)
     };
   }
@@ -231,17 +237,17 @@ export class RelatorioDiarioEmailService {
           <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; color: #64748B;">
             ${o.cliente}
           </td>
-          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 700; color: #F05A22; font-size: 13px;">
+          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
             ${o.metrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
           </td>
-          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px;">
+          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
             ${o.receitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           </td>
-          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center; color: #64748B;">
+          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center; color: #64748B; white-space: nowrap;">
             ${o.metaDiaria} m
           </td>
-          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center;">
-            <span style="background: ${o.metaBatida ? '#ECFDF5' : '#FFFBEB'}; color: ${o.metaBatida ? '#059669' : '#D97706'}; border: 1px solid ${o.metaBatida ? '#A7F3D0' : '#FDE68A'}; padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">
+          <td style="padding: 12px; border-bottom: 1px solid #E2E8F0; text-align: center; white-space: nowrap;">
+            <span style="background: ${o.metaBatida ? '#ECFDF5' : '#FFFBEB'}; color: ${o.metaBatida ? '#059669' : '#D97706'}; border: 1px solid ${o.metaBatida ? '#A7F3D0' : '#FDE68A'}; padding: 3px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 700; white-space: nowrap;">
               ${o.metaBatida ? 'Meta Batida' : 'Em Andamento'}
             </span>
           </td>
@@ -272,9 +278,12 @@ export class RelatorioDiarioEmailService {
               Inteligência Operacional & Perfuração Não Destrutiva
             </div>
           </td>
-          <td style="text-align: right;">
-            <div style="background-color: rgba(240, 90, 34, 0.15); border: 1px solid rgba(240, 90, 34, 0.4); color: #FF7744; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-block;">
-              📅 ${dados.dataStr} • ${dados.horarioFechamento}
+          <td style="text-align: right; vertical-align: middle;">
+            <div style="color: #F8FAFC; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px;">
+              ${dados.dataExtenso}
+            </div>
+            <div style="color: #F05A22; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px;">
+              Fechamento Diário • ${dados.horarioFechamento}
             </div>
           </td>
         </tr>
@@ -297,14 +306,14 @@ export class RelatorioDiarioEmailService {
         <tr>
           <td style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 10px; padding: 16px; text-align: left; vertical-align: top; width: 50%;">
             <div style="font-size: 11px; font-weight: 700; color: #C2410C; text-transform: uppercase; letter-spacing: 0.5px;">Metros Perfurados Hoje</div>
-            <div style="font-size: 26px; font-weight: 800; color: #EA580C; margin: 2px 0 4px;">
+            <div style="font-size: 26px; font-weight: 800; color: #EA580C; margin: 2px 0 4px; white-space: nowrap;">
               ${dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m
             </div>
             <div style="font-size: 11.5px; color: #10B981; font-weight: 600;">Produção consolidada do dia</div>
           </td>
           <td style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left; vertical-align: top; width: 50%;">
             <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Receita Estimada (Hoje)</div>
-            <div style="font-size: 26px; font-weight: 800; color: #2ECC71; margin: 2px 0 4px;">
+            <div style="font-size: 26px; font-weight: 800; color: #2ECC71; margin: 2px 0 4px; white-space: nowrap;">
               ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </div>
             <div style="font-size: 11.5px; color: #64748B;">Faturamento bruto gerado</div>
@@ -313,17 +322,17 @@ export class RelatorioDiarioEmailService {
         <tr>
           <td style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left; vertical-align: top; width: 50%;">
             <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Acumulado no Mês</div>
-            <div style="font-size: 24px; font-weight: 800; color: #0F1215; margin: 2px 0 4px;">
+            <div style="font-size: 24px; font-weight: 800; color: #0F1215; margin: 2px 0 4px; white-space: nowrap;">
               ${dados.acumuladoMesMetros.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m
             </div>
             <div style="font-size: 11.5px; color: #2563EB; font-weight: 600;">${dados.percentualMetaMensal}% da meta mensal atingida</div>
           </td>
           <td style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left; vertical-align: top; width: 50%;">
-            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Frentes de Obra Ativas</div>
-            <div style="font-size: 24px; font-weight: 800; color: #0F1215; margin: 2px 0 4px;">
-              ${dados.totalObrasAtivas} Obras
+            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Frentes de Obra</div>
+            <div style="font-size: 24px; font-weight: 800; color: #0F1215; margin: 2px 0 4px; white-space: nowrap;">
+              ${dados.totalObrasComProducaoHoje} / ${dados.totalObrasEmAberto} Obras
             </div>
-            <div style="font-size: 11.5px; color: #64748B;">Com produção registrada hoje</div>
+            <div style="font-size: 11.5px; color: #0284C7; font-weight: 600;">${dados.totalObrasComProducaoHoje} com produção • ${dados.totalObrasEmAberto} em aberto</div>
           </td>
         </tr>
       </table>
@@ -331,7 +340,7 @@ export class RelatorioDiarioEmailService {
 
     <!-- TABELA DE OBRAS -->
     <div style="padding: 18px 32px 10px; font-size: 14px; font-weight: 800; color: #161B22; text-transform: uppercase; letter-spacing: 0.5px;">
-      🚧 Produção por Obra no Dia
+      Produção por Obra no Dia
     </div>
 
     <div style="padding: 0 32px 24px;">
@@ -340,19 +349,19 @@ export class RelatorioDiarioEmailService {
           <tr style="background-color: #161B22; color: #FFFFFF;">
             <th style="padding: 11px 12px; font-weight: 700; text-align: left; font-size: 11px; text-transform: uppercase;">Obra / Serviço</th>
             <th style="padding: 11px 12px; font-weight: 700; text-align: left; font-size: 11px; text-transform: uppercase;">Cliente</th>
-            <th style="padding: 11px 12px; font-weight: 700; text-align: right; font-size: 11px; text-transform: uppercase;">Metros Hoje</th>
-            <th style="padding: 11px 12px; font-weight: 700; text-align: right; font-size: 11px; text-transform: uppercase;">Receita (R$)</th>
-            <th style="padding: 11px 12px; font-weight: 700; text-align: center; font-size: 11px; text-transform: uppercase;">Meta Diária</th>
-            <th style="padding: 11px 12px; font-weight: 700; text-align: center; font-size: 11px; text-transform: uppercase;">Status</th>
+            <th style="padding: 11px 12px; font-weight: 700; text-align: right; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros Hoje</th>
+            <th style="padding: 11px 12px; font-weight: 700; text-align: right; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
+            <th style="padding: 11px 12px; font-weight: 700; text-align: center; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Meta Diária</th>
+            <th style="padding: 11px 12px; font-weight: 700; text-align: center; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Status</th>
           </tr>
         </thead>
         <tbody>
           ${obrasRows}
           <tr style="background-color: #F05A22; color: #FFFFFF; font-weight: 800;">
             <td colspan="2" style="padding: 12px;">TOTAL GERAL DO DIA</td>
-            <td style="text-align: right; font-size: 14px; padding: 12px;">${dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m</td>
-            <td style="text-align: right; font-size: 14px; padding: 12px;">${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-            <td colspan="2" style="text-align: center; padding: 12px;">100% OK</td>
+            <td style="text-align: right; font-size: 14px; padding: 12px; white-space: nowrap;">${dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 })} m</td>
+            <td style="text-align: right; font-size: 14px; padding: 12px; white-space: nowrap;">${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+            <td colspan="2" style="text-align: center; padding: 12px; white-space: nowrap;">100% OK</td>
           </tr>
         </tbody>
       </table>
