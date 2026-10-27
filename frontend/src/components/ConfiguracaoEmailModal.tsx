@@ -240,6 +240,42 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     window.open('/preview-email-diario.html', '_blank');
   };
 
+  const [sendingTelegramTest, setSendingTelegramTest] = useState(false);
+
+  // Disparar relatório de teste para o Telegram
+  const handleDispararTelegramTeste = async () => {
+    setSendingTelegramTest(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/relatorios/telegram/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (res.ok && data.sucesso) {
+        setFeedback({
+          type: 'success',
+          msg: 'Relatório diário enviado com sucesso para o grupo do Telegram!'
+        });
+        if (showToast) showToast('Relatório diário enviado para o grupo do Telegram!', 'success');
+      } else {
+        setFeedback({
+          type: 'error',
+          msg: data.mensagem || 'Falha ao enviar relatório para o Telegram.'
+        });
+      }
+    } catch (e: any) {
+      console.error('Erro ao disparar Telegram:', e);
+      setFeedback({
+        type: 'error',
+        msg: 'Não foi possível conectar ao servidor do Telegram.'
+      });
+    } finally {
+      setSendingTelegramTest(false);
+    }
+  };
+
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
@@ -573,6 +609,58 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
               </div>
             </div>
 
+          </div>
+
+          {/* Canal de Disparo Telegram */}
+          <div
+            style={{
+              padding: '14px 16px',
+              borderRadius: '8px',
+              border: '1px solid #1E293B',
+              backgroundColor: 'rgba(30, 41, 59, 0.4)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#2ECC71', boxShadow: '0 0 8px #2ECC71' }} />
+                <span style={{ fontSize: '13px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '0.2px' }}>
+                  Canal Telegram
+                </span>
+                <span style={{ fontSize: '10.5px', color: '#38BDF8', backgroundColor: 'rgba(2, 132, 199, 0.2)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(2, 132, 199, 0.4)', fontWeight: 700 }}>
+                  Conectado
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDispararTelegramTeste}
+                disabled={sendingTelegramTest}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #0284C7',
+                  backgroundColor: 'rgba(2, 132, 199, 0.15)',
+                  color: '#38BDF8',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: sendingTelegramTest ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Send size={12} />
+                <span>{sendingTelegramTest ? 'Enviando...' : 'Testar Telegram'}</span>
+              </button>
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span>Grupo:</span>
+              <strong style={{ color: '#F8FAFC' }}>TecnoDrill Relatórios</strong>
+              <span style={{ color: '#64748B' }}>• Bot: @TecnodrillRelatorioBot</span>
+            </div>
           </div>
 
           {/* Último Envio */}
