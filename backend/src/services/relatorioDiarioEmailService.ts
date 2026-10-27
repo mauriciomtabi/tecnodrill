@@ -330,9 +330,9 @@ export class RelatorioDiarioEmailService {
           <td style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left; vertical-align: top; width: 50%;">
             <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Frentes de Obra</div>
             <div style="font-size: 24px; font-weight: 800; color: #0F1215; margin: 2px 0 4px; white-space: nowrap;">
-              ${dados.totalObrasComProducaoHoje} / ${dados.totalObrasEmAberto} Obras
+              ${dados.totalObrasComProducaoHoje} Obras Hoje
             </div>
-            <div style="font-size: 11.5px; color: #0284C7; font-weight: 600;">${dados.totalObrasComProducaoHoje} com produção • ${dados.totalObrasEmAberto} em aberto</div>
+            <div style="font-size: 11.5px; color: #64748B; font-weight: 600;">de um total de ${dados.totalObrasEmAberto} obras</div>
           </td>
         </tr>
       </table>
