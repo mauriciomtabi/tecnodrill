@@ -31,9 +31,14 @@ import {
   AlertTriangle,
   Loader2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Edit3,
+  CheckCircle2
 } from 'lucide-react';
 import { isHeicDataUrl, convertHeicBase64ToJpeg } from '../utils/imageConverter';
+import { useAuth } from '../context/AuthContext';
+
+const COMMON_DIAMETERS = ['100mm', '150mm', '200mm', '250mm', '300mm'];
 
 interface RegistroDetalhesModalProps {
   isOpen: boolean;
@@ -54,6 +59,9 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   onDelete,
   onBarraUpdated
 }) => {
+  const { user, showToast } = useAuth();
+  const isEffectiveGestor = isGestor || user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN';
+
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isPhotoFullscreen, setIsPhotoFullscreen] = useState(false);
@@ -64,6 +72,16 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const [mesRefSaved, setMesRefSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Edição pelo técnico / gestor
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDiametro, setEditDiametro] = useState<string>('');
+  const [editCustomDiametro, setEditCustomDiametro] = useState<string>('');
+  const [editNumeroOs, setEditNumeroOs] = useState<string>('');
+  const [editObservacao, setEditObservacao] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSavedSuccess, setEditSavedSuccess] = useState<boolean>(false);
 
   // Trata botão nativo de voltar do celular (se tela cheia, fecha fullscreen; senão fecha modal)
   useModalBackButton(
@@ -76,6 +94,28 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const effectiveDiametro = barra?.diametro || barraMeta.diametro;
   const effectiveNumeroOs = barra?.numero_os || barraMeta.numero_os;
   const effectiveTipoRegistro = barra?.tipo_registro || barraMeta.tipo_registro || (barra?.tem_caixa ? 'CAIXA' : 'CANALIZACAO');
+  const effectiveAtualizadoEm = barra?.atualizado_em || barraMeta.atualizado_em;
+  const effectiveAtualizadoPorNome = barra?.atualizado_por_nome || barraMeta.atualizado_por_nome;
+
+  // Regra de permissão de edição:
+  // - Gestor/Admin: sem prazo limite
+  // - Técnico autor: até 72 horas após o lançamento
+  const isAuthor = Boolean(
+    user?.id && (
+      barra?.registrado_por === user.id ||
+      barraMeta.registrado_por_id === user.id ||
+      (!barra?.registrado_por && !barraMeta.registrado_por_id && (
+        servico?.navegador_id === user.id ||
+        servico?.operador_id === user.id
+      ))
+    )
+  );
+  const recordDateRaw = barra?.created_at || barra?.horario_registro || barra?.data_registro;
+  const recordTime = recordDateRaw ? new Date(recordDateRaw).getTime() : 0;
+  const hoursElapsed = recordTime > 0 ? (Date.now() - recordTime) / (1000 * 60 * 60) : 0;
+  const isWithin72h = hoursElapsed <= 72;
+  const canEdit = isEffectiveGestor || (isAuthor && isWithin72h);
+
   const allPhotos: string[] = (barra?.fotos && barra.fotos.length > 0)
     ? barra.fotos
     : (barraMeta.fotos && barraMeta.fotos.length > 0)
@@ -98,6 +138,24 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
     setDeleting(false);
     setPhotoError(false);
     setConvertedPhotoUrl(null);
+
+    // Inicializa campos de edição
+    setIsEditing(false);
+    setEditError(null);
+    setEditSavedSuccess(false);
+    const initialDiam = barra?.diametro || barraMeta.diametro || '';
+    if (COMMON_DIAMETERS.includes(initialDiam)) {
+      setEditDiametro(initialDiam);
+      setEditCustomDiametro('');
+    } else if (initialDiam) {
+      setEditDiametro('OUTRO');
+      setEditCustomDiametro(initialDiam);
+    } else {
+      setEditDiametro('');
+      setEditCustomDiametro('');
+    }
+    setEditNumeroOs(barra?.numero_os || barraMeta.numero_os || '');
+    setEditObservacao(cleanObservacao || '');
   }, [barra?.id, isOpen]);
 
   useEffect(() => {
@@ -217,6 +275,67 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       console.error('Erro ao atualizar mês de referência:', err);
     } finally {
       setSavingMesRef(false);
+    }
+  };
+
+  const handleStartEditing = () => {
+    const currentDiam = barra?.diametro || barraMeta.diametro || '';
+    if (COMMON_DIAMETERS.includes(currentDiam)) {
+      setEditDiametro(currentDiam);
+      setEditCustomDiametro('');
+    } else if (currentDiam) {
+      setEditDiametro('OUTRO');
+      setEditCustomDiametro(currentDiam);
+    } else {
+      setEditDiametro('');
+      setEditCustomDiametro('');
+    }
+    setEditNumeroOs(barra?.numero_os || barraMeta.numero_os || '');
+    setEditObservacao(cleanObservacao || '');
+    setEditError(null);
+    setIsEditing(true);
+  };
+
+  const handleCancelEditing = () => {
+    setIsEditing(false);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!barra) return;
+    const finalDiam = editDiametro === 'OUTRO' ? editCustomDiametro.trim() : editDiametro.trim();
+
+    if (servico?.os_obrigatoria && !editNumeroOs.trim()) {
+      setEditError('O número da OS é obrigatório para este serviço.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      const updated = await ApiService.updateBarra(barra.id, {
+        diametro: finalDiam || undefined,
+        numero_os: editNumeroOs.trim() || undefined,
+        observacao: editObservacao.trim(),
+        atualizado_em: new Date().toISOString(),
+        atualizado_por_nome: user?.nome || (isEffectiveGestor ? 'Gestor' : 'Técnico'),
+        atualizado_por_id: user?.id
+      });
+
+      setEditSavedSuccess(true);
+      setTimeout(() => setEditSavedSuccess(false), 2000);
+      setIsEditing(false);
+      if (onBarraUpdated) {
+        onBarraUpdated(updated);
+      }
+      if (showToast) {
+        showToast('Registro atualizado com sucesso!', 'success');
+      }
+    } catch (err: any) {
+      console.error('[Update Record Error]:', err);
+      setEditError(err.message || 'Erro ao atualizar dados do registro.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -648,6 +767,27 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                     <span>OS: {effectiveNumeroOs}</span>
                   </span>
                 )}
+
+                {effectiveAtualizadoEm && (
+                  <span 
+                    title={`Última alteração em ${new Date(effectiveAtualizadoEm).toLocaleString('pt-BR')}${effectiveAtualizadoPorNome ? ` por ${effectiveAtualizadoPorNome}` : ''}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      backgroundColor: 'rgba(243, 156, 18, 0.18)',
+                      color: '#F39C12',
+                      border: '1px solid rgba(243, 156, 18, 0.35)'
+                    }}
+                  >
+                    <Edit3 size={11} />
+                    <span>EDITADO{effectiveAtualizadoPorNome ? ` (${effectiveAtualizadoPorNome.split(' ')[0]})` : ''}</span>
+                  </span>
+                )}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
@@ -658,18 +798,277 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   {isBox ? 'Ponto de Caixa' : `+${barra.metros || 3}m (Acum: ${barra.metros_acumulados}m)`}
                 </span>
               </div>
+
+              {/* Botão para Iniciar Edição (Técnico autorizado em até 72h ou Gestor) */}
+              {canEdit && !isEditing && (
+                <div style={{ marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleStartEditing}
+                    style={{
+                      width: '100%',
+                      backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                      border: '1px solid var(--primary)',
+                      color: 'var(--primary)',
+                      padding: '9px 14px',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <Edit3 size={14} />
+                    <span>Editar Registro (Diâmetro / OS / Obs)</span>
+                  </button>
+                </div>
+              )}
+
+              {!canEdit && isAuthor && !isWithin72h && !isEffectiveGestor && (
+                <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                  <Clock size={12} style={{ color: 'var(--primary)' }} />
+                  <span>Prazo de 72h para edição pelo técnico expirado. Contate o gestor caso necessite ajustes.</span>
+                </div>
+              )}
             </div>
+
+            {/* MODO DE EDIÇÃO ATIVO */}
+            {isEditing && (
+              <div 
+                className="fade-in"
+                style={{
+                  backgroundColor: 'rgba(5, 15, 20, 0.88)',
+                  border: '1.5px solid var(--primary)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.5)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Edit3 size={15} style={{ color: 'var(--primary)' }} />
+                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#FFFFFF', textTransform: 'uppercase' }}>
+                      Ajustar Dados do Registro #{barra.numero_barra}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCancelEditing}
+                    disabled={savingEdit}
+                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                    title="Cancelar Edição"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {/* Diâmetro da Tubulação */}
+                {!isBox && (
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                      <Layers size={13} />
+                      <span>Diâmetro da Tubulação</span>
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                      {COMMON_DIAMETERS.map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            setEditDiametro(d);
+                            setEditCustomDiametro('');
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            border: `1px solid ${editDiametro === d ? 'var(--primary)' : 'rgba(255, 255, 255, 0.15)'}`,
+                            backgroundColor: editDiametro === d ? 'var(--primary)' : 'var(--bg-app)',
+                            color: editDiametro === d ? '#FFFFFF' : 'var(--text-main)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {d}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setEditDiametro('OUTRO')}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          border: `1px solid ${editDiametro === 'OUTRO' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.15)'}`,
+                          backgroundColor: editDiametro === 'OUTRO' ? 'var(--primary)' : 'var(--bg-app)',
+                          color: editDiametro === 'OUTRO' ? '#FFFFFF' : 'var(--text-main)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Outro
+                      </button>
+                    </div>
+
+                    {editDiametro === 'OUTRO' && (
+                      <input
+                        type="text"
+                        value={editCustomDiametro}
+                        onChange={(e) => setEditCustomDiametro(e.target.value)}
+                        placeholder="Digite o diâmetro (ex: 75mm, 400mm)"
+                        style={{
+                          width: '100%',
+                          fontSize: '12.5px',
+                          backgroundColor: 'var(--bg-app)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                          color: '#FFFFFF',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* Número da OS */}
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#00bcd4', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    <Hash size={13} />
+                    <span>Ordem de Serviço (OS){servico?.os_obrigatoria ? ' *' : ''}</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editNumeroOs}
+                    onChange={(e) => setEditNumeroOs(e.target.value)}
+                    placeholder="ex: OS-2026-9821"
+                    style={{
+                      width: '100%',
+                      fontSize: '12.5px',
+                      backgroundColor: 'var(--bg-app)',
+                      border: `1px solid ${servico?.os_obrigatoria && !editNumeroOs.trim() ? '#E74C3C' : 'var(--border-color)'}`,
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      color: '#FFFFFF',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  {servico?.os_obrigatoria && !editNumeroOs.trim() && (
+                    <span style={{ display: 'block', fontSize: '10.5px', color: '#E74C3C', marginTop: '3px' }}>
+                      Nº da OS é obrigatório para este serviço.
+                    </span>
+                  )}
+                </div>
+
+                {/* Observação Técnica */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    Observação Técnica
+                  </label>
+                  <textarea
+                    value={editObservacao}
+                    onChange={(e) => setEditObservacao(e.target.value)}
+                    placeholder="Observações ou correções técnicas do registro..."
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      fontSize: '12px',
+                      backgroundColor: 'var(--bg-app)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      color: '#FFFFFF',
+                      boxSizing: 'border-box',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                {editError && (
+                  <div style={{ backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid var(--danger)', borderRadius: '6px', padding: '8px 12px', color: '#FF7675', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                    <span>{editError}</span>
+                  </div>
+                )}
+
+                {/* Botões de Ação */}
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    disabled={savingEdit}
+                    onClick={handleCancelEditing}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'transparent',
+                      color: 'var(--text-muted)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: savingEdit ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingEdit || (servico?.os_obrigatoria && !editNumeroOs.trim())}
+                    onClick={handleSaveEdit}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      backgroundColor: editSavedSuccess ? 'var(--success)' : 'var(--primary)',
+                      color: '#FFFFFF',
+                      fontSize: '12.5px',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      cursor: savingEdit ? 'wait' : 'pointer',
+                      boxShadow: '0 2px 10px rgba(240, 90, 34, 0.3)'
+                    }}
+                  >
+                    {savingEdit ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Salvando...</span>
+                      </>
+                    ) : editSavedSuccess ? (
+                      <>
+                        <Check size={14} />
+                        <span>Salvo com sucesso!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={14} />
+                        <span>Salvar Alterações</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* List Details Stack */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12.5px' }}>
               
-              {/* Diâmetro do Tubo se houver */}
-              {effectiveDiametro && (
+              {/* Diâmetro do Tubo */}
+              {!isBox && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                   <Layers size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                   <div>
                     <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>DIÂMETRO DA TUBULAÇÃO</span>
-                    <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{effectiveDiametro}</span>
+                    <span style={{ color: effectiveDiametro ? '#FFFFFF' : '#F39C12', fontWeight: 700 }}>
+                      {effectiveDiametro || 'Não informado'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -700,10 +1099,23 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
                 <Clock size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
                 <div>
-                  <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>DATA E HORA</span>
+                  <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>DATA E HORA DO APONTAMENTO</span>
                   <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{dataFormatada}</span>
                 </div>
               </div>
+
+              {/* Última Alteração (Auditoria) */}
+              {effectiveAtualizadoEm && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
+                  <Edit3 size={16} style={{ color: '#F39C12', flexShrink: 0 }} />
+                  <div>
+                    <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase', color: '#F39C12' }}>ÚLTIMA ALTERAÇÃO</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      {new Date(effectiveAtualizadoEm).toLocaleString('pt-BR')} {effectiveAtualizadoPorNome ? `por ${effectiveAtualizadoPorNome}` : ''}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Mês de Referência (Competência Retroativa) */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', color: 'var(--text-muted)', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
@@ -717,7 +1129,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   </div>
                 </div>
 
-                {isGestor && (
+                {isEffectiveGestor && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <input
                       type="month"
@@ -759,7 +1171,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
               </div>
 
               {/* Informações Financeiras (Apenas Gestores - Confidencial) */}
-              {isGestor && valorBarra > 0 && (
+              {isEffectiveGestor && valorBarra > 0 && (
                 <div style={{
                   backgroundColor: 'rgba(46, 204, 113, 0.08)',
                   border: '1px solid rgba(46, 204, 113, 0.25)',
@@ -847,7 +1259,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
               )}
 
               {/* Botão / Confirmação de Exclusão de Registro para Gestores */}
-              {isGestor && onDelete && (
+              {isEffectiveGestor && onDelete && (
                 <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '12px', marginTop: '4px' }}>
                   {!confirmDelete ? (
                     <button

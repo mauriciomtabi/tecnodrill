@@ -46,6 +46,9 @@ export interface BarraMetaTag {
   mes_referencia?: string;
   data_referencia?: string;
   endereco?: string;
+  atualizado_em?: string;
+  atualizado_por_nome?: string;
+  atualizado_por_id?: string;
 }
 
 export function parseBarraObservacao(raw?: string | null): { observacao: string; meta: BarraMetaTag } {
@@ -1116,7 +1119,10 @@ export class ApiService {
         mes_referencia: meta.mes_referencia || (b.horario_registro ? b.horario_registro.slice(0, 7) : undefined),
         data_referencia: meta.data_referencia || (b.horario_registro ? b.horario_registro.split('T')[0] : undefined),
         data_registro: meta.data_referencia || (b.horario_registro ? b.horario_registro.split('T')[0] : undefined),
-        created_at: b.horario_registro
+        created_at: b.horario_registro,
+        atualizado_em: meta.atualizado_em,
+        atualizado_por_nome: meta.atualizado_por_nome,
+        atualizado_por_id: meta.atualizado_por_id
       };
     }));
   }
@@ -1176,7 +1182,10 @@ export class ApiService {
         longitude: b.longitude ? Number(b.longitude) : undefined,
         endereco: (b as any).endereco || meta.endereco || undefined,
         observacao: cleanObs,
-        horario_registro: b.horario_registro
+        horario_registro: b.horario_registro,
+        atualizado_em: meta.atualizado_em,
+        atualizado_por_nome: meta.atualizado_por_nome,
+        atualizado_por_id: meta.atualizado_por_id
       });
     }
 
@@ -1429,7 +1438,10 @@ export class ApiService {
       data_referencia: updates.data_referencia !== undefined ? updates.data_referencia : meta.data_referencia,
       registrado_por_id: updates.registrado_por !== undefined ? updates.registrado_por : meta.registrado_por_id,
       registrado_por_nome: updates.registrado_por_nome !== undefined ? updates.registrado_por_nome : meta.registrado_por_nome,
-      endereco: updates.endereco !== undefined ? updates.endereco : meta.endereco
+      endereco: updates.endereco !== undefined ? updates.endereco : meta.endereco,
+      atualizado_em: updates.atualizado_em !== undefined ? updates.atualizado_em : meta.atualizado_em,
+      atualizado_por_nome: updates.atualizado_por_nome !== undefined ? updates.atualizado_por_nome : meta.atualizado_por_nome,
+      atualizado_por_id: updates.atualizado_por_id !== undefined ? updates.atualizado_por_id : meta.atualizado_por_id
     };
 
     const encodedObs = buildBarraObservacao(updates.observacao !== undefined ? updates.observacao : cleanObs, newMeta);
@@ -1453,11 +1465,15 @@ export class ApiService {
     return (await withPrivatePhotos([{
       ...updated,
       diametro: updated.diametro || newMeta.diametro,
+      numero_os: updated.numero_os || newMeta.numero_os,
       registrado_por: updated.registrado_por || newMeta.registrado_por_id,
       registrado_por_nome: newMeta.registrado_por_nome,
       fotos: updated.fotos?.length ? updated.fotos : (newMeta.fotos || []),
       mes_referencia: newMeta.mes_referencia,
-      data_referencia: newMeta.data_referencia
+      data_referencia: newMeta.data_referencia,
+      atualizado_em: newMeta.atualizado_em,
+      atualizado_por_nome: newMeta.atualizado_por_nome,
+      atualizado_por_id: newMeta.atualizado_por_id
     }]))[0];
   }
 

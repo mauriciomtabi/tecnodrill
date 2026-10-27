@@ -114,6 +114,9 @@ export interface Barra {
   data_referencia?: string;
   created_at?: string;
   data_registro?: string;
+  atualizado_em?: string;
+  atualizado_por_nome?: string;
+  atualizado_por_id?: string;
 }
 
 export interface ResumoFinanceiroServico {
