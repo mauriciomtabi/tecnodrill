@@ -184,8 +184,9 @@ function criarWorksheetConsolidada(
   nomeFiltroPeriodo?: string
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet('CONSOLIDADO', {
-    views: [{ showGridLines: true }]
+    views: [{ showGridLines: false }]
   });
+  ws.views = [{ showGridLines: false }];
 
   // Larguras de Colunas
   ws.getColumn(1).width = 4;   // A: Margem
@@ -458,8 +459,9 @@ function criarWorksheetEstilizada(
   sheetName: string
 ): ExcelJS.Worksheet {
   const ws = wb.addWorksheet(sheetName, {
-    views: [{ showGridLines: true }]
+    views: [{ showGridLines: false }]
   });
+  ws.views = [{ showGridLines: false }];
 
   // Larguras de Colunas
   ws.getColumn(1).width = 4;   // A: Margem
