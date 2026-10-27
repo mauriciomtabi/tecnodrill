@@ -1,11 +1,20 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Servico, Barra } from '../types';
 import { parseBarraObservacao } from '../services/api';
+import { TECNODRILL_LOGO_BASE64 } from './tecnodrillLogoBase64';
 
 const MESES_NOMES = [
   'JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO',
   'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'
 ];
+
+// Paleta Oficial TecnoDrill
+const COLOR_TECNODRILL_ORANGE = 'FFF05A22';
+const COLOR_TECNODRILL_DARK = 'FF161B22';
+const COLOR_WHITE = 'FFFFFFFF';
+const COLOR_ZEBRA_LIGHT = 'FFF8F9FA';
+const COLOR_BORDER_LIGHT = 'FFE2E8F0';
+const COLOR_BORDER_HEADER = 'FF334155';
 
 export interface ItemMedicaoFuro {
   data: string;
@@ -68,237 +77,388 @@ export function processarBarrasParaMedicao(servico: Servico, barras: Barra[]): R
     const osLimpa = rawOs ? rawOs.replace(/^OS[:\s-]*/i, '') : '';
     const osFinal = osLimpa || servico.nome || 'S/N';
 
-    // Diâmetro
-    const diamStr = b.diametro || meta.diametro || '';
-    const diamParsed = parseFloat(String(diamStr).replace(/[^\d.]/g, '')) || diamDefault;
+    // Metros da barra
+    const metros = Number(b.metros) !== undefined && b.metros !== null ? Number(b.metros) : 3;
 
-    // Chave de agrupamento por furo e data/OS
-    const chaveFuro = `${b.furo_id || 'furo'}_${dataFormatada}_${osFinal}_${diamParsed}`;
+    // Diâmetro do furo
+    let diamParsed = diamDefault;
+    if (b.diametro) {
+      const parsedD = parseFloat(String(b.diametro).replace(/[^\d.]/g, ''));
+      if (!isNaN(parsedD) && parsedD > 0) diamParsed = parsedD;
+    }
 
-    const m = b.metros !== undefined && b.metros !== null ? Number(b.metros) : 3;
+    // Chave de agrupamento: Furo + Data + OS + Diâmetro
+    const furoIdKey = (b.furo_id || `${dataFormatada}_${osFinal}_${diamParsed}`).trim();
+    const groupKey = `${furoIdKey}__${dataFormatada}__${osFinal}__${diamParsed}`;
 
-    if (!furosMap.has(chaveFuro)) {
-      furosMap.set(chaveFuro, {
-        furoId: b.furo_id || 'furo',
+    if (!furosMap.has(groupKey)) {
+      furosMap.set(groupKey, {
+        furoId: furoIdKey,
         dataRaw: d,
         dataStr: dataFormatada,
         mesAnoKey,
         mesNome,
         ano: anoStr,
         os: osFinal,
-        metros: m,
+        metros: 0,
         diametroNum: diamParsed,
-        observacoes: cleanObs ? [cleanObs] : []
+        observacoes: []
       });
-    } else {
-      const item = furosMap.get(chaveFuro)!;
-      item.metros += m;
-      if (cleanObs && !item.observacoes.includes(cleanObs)) {
-        item.observacoes.push(cleanObs);
-      }
+    }
+
+    const entry = furosMap.get(groupKey)!;
+    entry.metros += metros;
+    if (cleanObs && !entry.observacoes.includes(cleanObs)) {
+      entry.observacoes.push(cleanObs);
     }
   });
 
-  // Cálculo de valores conforme regras financeiras da obra
+  // Agrupar itens finais por Mês
   const porMes: Record<string, ItemMedicaoFuro[]> = {};
 
-  furosMap.forEach(item => {
-    let valorMetro = 0;
-    if (servico.cenario_financeiro === 'VALOR_METRO') {
-      valorMetro = Number(servico.valor_metro) || 0;
-    } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-      valorMetro = fatorFinanceiro * item.diametroNum;
-    } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
-      const prev = Number(servico.metragem_prevista_total) || 1000;
-      valorMetro = prev > 0 ? (Number(servico.valor_total_fechado) || 0) / prev : 0;
-    }
+  Array.from(furosMap.values())
+    .sort((a, b) => a.dataRaw.getTime() - b.dataRaw.getTime())
+    .forEach(item => {
+      // Cálculo do valor unitário por metro conforme cenário financeiro
+      let valorMetro = 0;
+      if (servico.cenario_financeiro === 'VALOR_METRO') {
+        valorMetro = Number(servico.valor_metro) || 0;
+      } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+        valorMetro = fatorFinanceiro * item.diametroNum;
+      } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
+        const totalPrevisto = Number(servico.metragem_prevista_total) || 1;
+        const totalFechado = Number(servico.valor_total_fechado) || 0;
+        valorMetro = totalPrevisto > 0 ? (totalFechado / totalPrevisto) : 0;
+      } else {
+        valorMetro = Number(servico.valor_metro) || (fatorFinanceiro * item.diametroNum);
+      }
 
-    const valorTotal = item.metros * valorMetro;
+      const valorTotal = Math.round(item.metros * valorMetro * 100) / 100;
+      const obsTexto = item.observacoes.length > 0 ? item.observacoes.join('; ') : '';
 
-    const registroMedicao: ItemMedicaoFuro = {
-      data: item.dataStr,
-      dataRaw: item.dataRaw,
-      mesAnoKey: item.mesAnoKey,
-      mesNome: item.mesNome,
-      ano: item.ano,
-      os: item.os,
-      medidaMts: Math.round(item.metros * 10) / 10,
-      diametro: item.diametroNum,
-      valorMetro: Math.round(valorMetro * 100) / 100,
-      valorTotal: Math.round(valorTotal * 100) / 100,
-      observacao: item.observacoes.join('; ')
-    };
+      const itemFinal: ItemMedicaoFuro = {
+        data: item.dataStr,
+        dataRaw: item.dataRaw,
+        mesAnoKey: item.mesAnoKey,
+        mesNome: item.mesNome,
+        ano: item.ano,
+        os: item.os,
+        medidaMts: Math.round(item.metros * 10) / 10,
+        diametro: item.diametroNum,
+        valorMetro: Math.round(valorMetro * 100) / 100,
+        valorTotal,
+        observacao: obsTexto
+      };
 
-    if (!porMes[item.mesNome]) {
-      porMes[item.mesNome] = [];
-    }
-    porMes[item.mesNome].push(registroMedicao);
-  });
-
-  // Ordena os registros dentro de cada mês por data
-  Object.keys(porMes).forEach(m => {
-    porMes[m].sort((a, b) => a.dataRaw.getTime() - b.dataRaw.getTime());
-  });
+      if (!porMes[item.mesNome]) {
+        porMes[item.mesNome] = [];
+      }
+      porMes[item.mesNome].push(itemFinal);
+    });
 
   return porMes;
 }
 
 /**
- * Constrói uma planilha (Worksheet) formatada exatamente conforme o padrão da imagem
+ * Cria e formata uma worksheet com a identidade visual executiva da TecnoDrill
  */
-function criarWorksheetMedicao(
+function criarWorksheetEstilizada(
+  wb: ExcelJS.Workbook,
   nomeCliente: string,
-  nomeMes: string,
-  itens: ItemMedicaoFuro[]
-): XLSX.WorkSheet {
-  const ws: XLSX.WorkSheet = {};
-
-  // Linhas iniciais:
-  // Row 1 (index 0): padding
-  // Row 2 (index 1): Cabeçalho com Logos e Título
-  // Row 3 (index 2): continuação de merge vertical do cabeçalho
-  // Row 4 (index 3): padding
-  // Row 5 (index 4): Cabeçalhos das Colunas (DATA, 'OS', MEDIDA 1, DUTO, Valor Metro, VALOR TOTAL FURO, DESCRIÇÃO)
-  // Row 6 (index 5): Subcabeçalhos (nº, mts, diametro, observação)
-  // Rows 7+ (index 6+): Dados
-  // Row N+1: TOTAL
-
-  // 1. Cabeçalho Superior
-  const clienteDisplay = nomeCliente ? `CONSTRUTORA ${nomeCliente.toUpperCase()}` : 'CONSTRUTORA CLIENTE';
-  const tituloDisplay = `LANÇAMENTO MEDIÇÃO ${nomeMes.toUpperCase()}`;
-  const empresaDisplay = 'TecnoDrill INFRA';
-
-  ws['B2'] = { t: 's', v: clienteDisplay };
-  ws['D2'] = { t: 's', v: tituloDisplay };
-  ws['G2'] = { t: 's', v: empresaDisplay };
-
-  // 2. Linha 5: Cabeçalhos Principais (Colunas B a H)
-  ws['B5'] = { t: 's', v: 'DATA' };
-  ws['C5'] = { t: 's', v: "'OS'" };
-  ws['D5'] = { t: 's', v: 'MEDIDA 1' };
-  ws['E5'] = { t: 's', v: 'DUTO' };
-  ws['F5'] = { t: 's', v: 'Valor Metro' };
-  ws['G5'] = { t: 's', v: 'VALOR TOTAL FURO' };
-  ws['H5'] = { t: 's', v: 'DESCRIÇÃO' };
-
-  // 3. Linha 6: Subcabeçalhos
-  ws['B6'] = { t: 's', v: '' };
-  ws['C6'] = { t: 's', v: 'nº' };
-  ws['D6'] = { t: 's', v: 'mts' };
-  ws['E6'] = { t: 's', v: 'diametro' };
-  ws['F6'] = { t: 's', v: '' };
-  ws['G6'] = { t: 's', v: '' };
-  ws['H6'] = { t: 's', v: 'observação' };
-
-  // 4. Linhas de Dados
-  let curRow = 7;
-  let somaMetros = 0;
-  let somaTotal = 0;
-
-  itens.forEach(item => {
-    ws[`B${curRow}`] = { t: 's', v: item.data };
-    ws[`C${curRow}`] = { t: 's', v: item.os };
-    ws[`D${curRow}`] = { t: 'n', v: item.medidaMts, z: '#,##0.0' };
-    ws[`E${curRow}`] = { t: 'n', v: item.diametro, z: '0' };
-    ws[`F${curRow}`] = { t: 'n', v: item.valorMetro, z: '"R$" #,##0.00' };
-    ws[`G${curRow}`] = { 
-      t: 'n', 
-      f: `D${curRow}*F${curRow}`, 
-      v: item.valorTotal, 
-      z: '"R$" #,##0.00' 
-    };
-    ws[`H${curRow}`] = { t: 's', v: item.observacao };
-
-    somaMetros += item.medidaMts;
-    somaTotal += item.valorTotal;
-    curRow++;
+  mesNome: string,
+  itens: ItemMedicaoFuro[],
+  sheetName: string
+): ExcelJS.Worksheet {
+  const ws = wb.addWorksheet(sheetName, {
+    views: [{ showGridLines: true }]
   });
 
-  // Se não houver itens, garante pelo menos 1 linha vazia
-  if (itens.length === 0) {
-    ws[`B${curRow}`] = { t: 's', v: '-' };
-    ws[`C${curRow}`] = { t: 's', v: '-' };
-    ws[`D${curRow}`] = { t: 'n', v: 0 };
-    ws[`E${curRow}`] = { t: 'n', v: 0 };
-    ws[`F${curRow}`] = { t: 'n', v: 0, z: '"R$" #,##0.00' };
-    ws[`G${curRow}`] = { t: 'n', v: 0, z: '"R$" #,##0.00' };
-    ws[`H${curRow}`] = { t: 's', v: 'Nenhum lançamento no período' };
-    curRow++;
+  // Larguras de Colunas
+  ws.getColumn(1).width = 4;   // A: Margem
+  ws.getColumn(2).width = 15;  // B: DATA
+  ws.getColumn(3).width = 20;  // C: 'OS' nº
+  ws.getColumn(4).width = 16;  // D: MEDIDA 1 mts
+  ws.getColumn(5).width = 15;  // E: DUTO diametro
+  ws.getColumn(6).width = 18;  // F: Valor Metro
+  ws.getColumn(7).width = 24;  // G: VALOR TOTAL FURO
+  ws.getColumn(8).width = 36;  // H: DESCRIÇÃO observação
+
+  // Alturas das Linhas do Cabeçalho
+  ws.getRow(1).height = 14;
+  ws.getRow(2).height = 28;
+  ws.getRow(3).height = 28;
+
+  // 1. Cliente / Construtora (B2:C3)
+  ws.mergeCells('B2:C3');
+  const cellCliente = ws.getCell('B2');
+  cellCliente.value = (nomeCliente || 'CONSTRUTORA').toUpperCase();
+  cellCliente.font = { name: 'Calibri', size: 12, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
+  cellCliente.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+
+  // 2. Título Central da Medição (D2:F3)
+  ws.mergeCells('D2:F3');
+  const cellTitulo = ws.getCell('D2');
+  cellTitulo.value = `LANÇAMENTO MEDIÇÃO ${mesNome.toUpperCase()}`;
+  cellTitulo.font = { name: 'Calibri', size: 14, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+  cellTitulo.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // 3. Logo Oficial da TecnoDrill (G2:H3)
+  try {
+    const logoId = wb.addImage({
+      base64: TECNODRILL_LOGO_BASE64,
+      extension: 'png'
+    });
+    ws.addImage(logoId, {
+      tl: { col: 6.05, row: 1.15 },
+      ext: { width: 175, height: 52 }
+    });
+  } catch (err) {
+    // Fallback texto caso imagem falhe
+    ws.mergeCells('G2:H3');
+    const cellLogoFallback = ws.getCell('G2');
+    cellLogoFallback.value = 'TecnoDrill INFRA';
+    cellLogoFallback.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+    cellLogoFallback.alignment = { vertical: 'middle', horizontal: 'center' };
   }
 
-  // 5. Linha de TOTAL
-  const firstDataRow = 7;
-  const lastDataRow = curRow - 1;
+  // 4. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 20;
 
-  ws[`B${curRow}`] = { t: 's', v: 'TOTAL' };
-  ws[`C${curRow}`] = { t: 's', v: '' };
-  ws[`D${curRow}`] = { 
-    t: 'n', 
-    f: `SUM(D${firstDataRow}:D${lastDataRow})`, 
-    v: Math.round(somaMetros * 10) / 10, 
-    z: '#,##0.0' 
-  };
-  ws[`E${curRow}`] = { t: 's', v: '' };
-  ws[`F${curRow}`] = { t: 's', v: '' };
-  ws[`G${curRow}`] = { 
-    t: 'n', 
-    f: `SUM(G${firstDataRow}:G${lastDataRow})`, 
-    v: Math.round(somaTotal * 100) / 100, 
-    z: '"R$" #,##0.00' 
-  };
-  ws[`H${curRow}`] = { t: 's', v: '' };
+  // Merges de Cabeçalho Vertical
+  ws.mergeCells('B4:B5'); // DATA
+  ws.mergeCells('F4:F5'); // Valor Metro
+  ws.mergeCells('G4:G5'); // VALOR TOTAL FURO
 
-  // Definição da área de referência da planilha
-  ws['!ref'] = `A1:H${curRow + 2}`;
+  // Linha 4 (Títulos Principais)
+  ws.getCell('B4').value = 'DATA';
+  ws.getCell('C4').value = "'OS'";
+  ws.getCell('D4').value = 'MEDIDA 1';
+  ws.getCell('E4').value = 'DUTO';
+  ws.getCell('F4').value = 'Valor Metro';
+  ws.getCell('G4').value = 'VALOR TOTAL FURO';
+  ws.getCell('H4').value = 'DESCRIÇÃO';
 
-  // Larguras de Colunas (Pixel width balanceado)
-  ws['!cols'] = [
-    { wch: 4 },   // A: margem
-    { wch: 14 },  // B: DATA
-    { wch: 16 },  // C: 'OS' nº
-    { wch: 14 },  // D: MEDIDA 1 mts
-    { wch: 12 },  // E: DUTO diametro
-    { wch: 16 },  // F: Valor Metro
-    { wch: 22 },  // G: VALOR TOTAL FURO
-    { wch: 32 }   // H: DESCRIÇÃO obeservação
-  ];
+  // Linha 5 (Subtítulos / Unidades)
+  ws.getCell('C5').value = 'nº';
+  ws.getCell('D5').value = 'mts';
+  ws.getCell('E5').value = 'diametro';
+  ws.getCell('H5').value = 'observação';
 
-  // Mesclagens (Merges) idênticas ao layout do Excel
-  ws['!merges'] = [
-    { s: { r: 1, c: 1 }, e: { r: 2, c: 2 } }, // B2:C3 - Construtora / Cliente
-    { s: { r: 1, c: 3 }, e: { r: 2, c: 5 } }, // D2:F3 - Título Centralizado
-    { s: { r: 1, c: 6 }, e: { r: 2, c: 7 } }, // G2:H3 - TecnoDrill INFRA
-    { s: { r: curRow - 1, c: 1 }, e: { r: curRow - 1, c: 2 } } // Linha TOTAL: B e C
-  ];
+  const colsHeader = ['B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  [4, 5].forEach(rowNum => {
+    colsHeader.forEach(colLetter => {
+      const cell = ws.getCell(`${colLetter}${rowNum}`);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: COLOR_TECNODRILL_DARK }
+      };
+      cell.font = {
+        name: 'Calibri',
+        size: 10,
+        bold: true,
+        color: { argb: COLOR_WHITE }
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        left: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        bottom: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        right: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } }
+      };
+    });
+  });
+
+  // 5. Linhas de Dados (A partir da Linha 6)
+  let curRow = 6;
+
+  if (itens.length === 0) {
+    ws.getRow(curRow).height = 24;
+    ws.mergeCells(`B${curRow}:H${curRow}`);
+    const emptyCell = ws.getCell(`B${curRow}`);
+    emptyCell.value = 'Nenhum lançamento de medição registrado para este período.';
+    emptyCell.font = { name: 'Calibri', size: 10.5, italic: true, color: { argb: 'FF64748B' } };
+    emptyCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    colsHeader.forEach(colLetter => {
+      ws.getCell(`${colLetter}${curRow}`).border = {
+        top: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+        bottom: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } }
+      };
+    });
+    curRow++;
+  } else {
+    itens.forEach((item, idx) => {
+      const row = ws.getRow(curRow);
+      row.height = 21;
+      const isZebra = idx % 2 === 1;
+      const rowBgColor = isZebra ? COLOR_ZEBRA_LIGHT : COLOR_WHITE;
+
+      // Col B: DATA
+      const cB = ws.getCell(`B${curRow}`);
+      cB.value = item.data;
+      cB.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col C: 'OS' nº
+      const cC = ws.getCell(`C${curRow}`);
+      cC.value = item.os;
+      cC.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col D: MEDIDA 1 mts
+      const cD = ws.getCell(`D${curRow}`);
+      cD.value = item.medidaMts;
+      cD.numFmt = '#,##0.0';
+      cD.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col E: DUTO diametro
+      const cE = ws.getCell(`E${curRow}`);
+      cE.value = item.diametro;
+      cE.numFmt = '0';
+      cE.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col F: Valor Metro
+      const cF = ws.getCell(`F${curRow}`);
+      cF.value = item.valorMetro;
+      cF.numFmt = '"R$" #,##0.00';
+      cF.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col G: VALOR TOTAL FURO (Fórmula Excel com valor pré-calculado)
+      const cG = ws.getCell(`G${curRow}`);
+      cG.value = {
+        formula: `D${curRow}*F${curRow}`,
+        result: item.valorTotal
+      };
+      cG.numFmt = '"R$" #,##0.00';
+      cG.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
+      cG.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col H: DESCRIÇÃO observação
+      const cH = ws.getCell(`H${curRow}`);
+      cH.value = item.observacao;
+      cH.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+
+      // Aplicação de Estilo e Bordas em todas as células da linha
+      colsHeader.forEach(colLetter => {
+        const cell = ws.getCell(`${colLetter}${curRow}`);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: rowBgColor }
+        };
+        if (!cell.font) {
+          cell.font = { name: 'Calibri', size: 10, color: { argb: COLOR_TECNODRILL_DARK } };
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          left: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          bottom: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          right: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } }
+        };
+      });
+
+      curRow++;
+    });
+  }
+
+  // 6. Linha de TOTAL - Fundo Laranja TecnoDrill (#F05A22) e Texto em Branco
+  const rowTotal = ws.getRow(curRow);
+  rowTotal.height = 26;
+
+  // Mesclar B e C para 'TOTAL'
+  ws.mergeCells(`B${curRow}:C${curRow}`);
+  const cTotalLabel = ws.getCell(`B${curRow}`);
+  cTotalLabel.value = 'TOTAL';
+  cTotalLabel.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  if (itens.length > 0) {
+    // Col D: Soma Metragem
+    const cTotalMts = ws.getCell(`D${curRow}`);
+    cTotalMts.value = {
+      formula: `SUM(D6:D${curRow - 1})`
+    };
+    cTotalMts.numFmt = '#,##0.0';
+    cTotalMts.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    // Col G: Soma Financeira
+    const cTotalVal = ws.getCell(`G${curRow}`);
+    cTotalVal.value = {
+      formula: `SUM(G6:G${curRow - 1})`
+    };
+    cTotalVal.numFmt = '"R$" #,##0.00';
+    cTotalVal.alignment = { vertical: 'middle', horizontal: 'right' };
+  }
+
+  // Estilização das células da Linha de TOTAL com Fundo Laranja e Texto Branco
+  colsHeader.forEach(colLetter => {
+    const cell = ws.getCell(`${colLetter}${curRow}`);
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: COLOR_TECNODRILL_ORANGE }
+    };
+    cell.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: COLOR_WHITE }
+    };
+    cell.border = {
+      top: { style: 'thin', color: { argb: COLOR_WHITE } },
+      bottom: { style: 'double', color: { argb: COLOR_TECNODRILL_DARK } },
+      left: { style: 'thin', color: { argb: '33FFFFFF' } },
+      right: { style: 'thin', color: { argb: '33FFFFFF' } }
+    };
+  });
 
   return ws;
 }
 
 /**
+ * Dispara o download de um Workbook ExcelJS no navegador
+ */
+async function baixarWorkbook(wb: ExcelJS.Workbook, filename: string) {
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(url);
+}
+
+/**
  * Gera e dispara o download do relatório de medição em Excel para um serviço específico
  */
-export function exportarRelatorioMedicaoServico(
+export async function exportarRelatorioMedicaoServico(
   servico: Servico,
   barras: Barra[],
   nomeFiltroPeriodo?: string
 ) {
   const porMes = processarBarrasParaMedicao(servico, barras);
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'TecnoDrill INFRA';
+  wb.created = new Date();
 
   const mesesKeys = Object.keys(porMes);
+  const clienteOuObra = servico.cliente || servico.nome;
 
   if (mesesKeys.length === 0) {
-    // Se não houver barras no período, gera uma aba com o nome do mês ativo ou MEDIÇÃO
     const fallbackMes = nomeFiltroPeriodo ? nomeFiltroPeriodo.toUpperCase() : 'MEDIÇÃO';
-    const ws = criarWorksheetMedicao(servico.cliente || servico.nome, fallbackMes, []);
-    XLSX.utils.book_append_sheet(wb, ws, fallbackMes.slice(0, 31));
+    criarWorksheetEstilizada(wb, clienteOuObra, fallbackMes, [], fallbackMes.slice(0, 31));
   } else {
     mesesKeys.forEach(mesNome => {
       const itens = porMes[mesNome];
-      const ws = criarWorksheetMedicao(servico.cliente || servico.nome, mesNome, itens);
-      // O nome da aba no Excel suporta até 31 caracteres
       const tabName = mesNome.slice(0, 31);
-      XLSX.utils.book_append_sheet(wb, ws, tabName);
+      criarWorksheetEstilizada(wb, clienteOuObra, mesNome, itens, tabName);
     });
   }
 
@@ -306,43 +466,56 @@ export function exportarRelatorioMedicaoServico(
   const sanitizedObra = (servico.nome || servico.id).replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `PLANILHA_Medicao_${sanitizedCliente}_${sanitizedObra}.xlsx`;
 
-  XLSX.writeFile(wb, filename);
+  await baixarWorkbook(wb, filename);
 }
 
 /**
  * Gera e dispara o download consolidado de todas as obras filtradas
  */
-export function exportarRelatorioMedicaoConsolidado(
+export async function exportarRelatorioMedicaoConsolidado(
   servicos: Servico[],
   barrasPorServico: Record<string, Barra[]>,
   nomeFiltroPeriodo?: string
 ) {
-  const wb = XLSX.utils.book_new();
-  let sheetsCount = 0;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'TecnoDrill INFRA';
+  wb.created = new Date();
+
+  const usedSheetNames = new Set<string>();
 
   servicos.forEach(servico => {
     const barras = barrasPorServico[servico.id] || [];
     const porMes = processarBarrasParaMedicao(servico, barras);
     const mesesKeys = Object.keys(porMes);
-
+    const clienteOuObra = servico.cliente || servico.nome;
     const siglaObra = (servico.id || servico.nome.slice(0, 10)).replace(/[^a-zA-Z0-9]/g, '');
 
     if (mesesKeys.length === 0) {
-      const fallbackMes = nomeFiltroPeriodo ? `${siglaObra}_${nomeFiltroPeriodo.slice(0, 15)}` : `${siglaObra}_MED`;
-      const ws = criarWorksheetMedicao(servico.cliente || servico.nome, fallbackMes, []);
-      XLSX.utils.book_append_sheet(wb, ws, fallbackMes.slice(0, 31));
-      sheetsCount++;
+      let rawTitle = nomeFiltroPeriodo ? `${siglaObra}_${nomeFiltroPeriodo.slice(0, 15)}` : `${siglaObra}_MED`;
+      let tabTitle = rawTitle.slice(0, 31);
+      let counter = 1;
+      while (usedSheetNames.has(tabTitle.toUpperCase())) {
+        tabTitle = `${rawTitle.slice(0, 28)}_${counter}`.slice(0, 31);
+        counter++;
+      }
+      usedSheetNames.add(tabTitle.toUpperCase());
+      criarWorksheetEstilizada(wb, clienteOuObra, tabTitle, [], tabTitle);
     } else {
       mesesKeys.forEach(mesNome => {
         const itens = porMes[mesNome];
-        const tabTitle = `${mesNome} - ${siglaObra}`.slice(0, 31);
-        const ws = criarWorksheetMedicao(servico.cliente || servico.nome, mesNome, itens);
-        XLSX.utils.book_append_sheet(wb, ws, tabTitle);
-        sheetsCount++;
+        let rawTitle = `${mesNome} - ${siglaObra}`;
+        let tabTitle = rawTitle.slice(0, 31);
+        let counter = 1;
+        while (usedSheetNames.has(tabTitle.toUpperCase())) {
+          tabTitle = `${rawTitle.slice(0, 28)}_${counter}`.slice(0, 31);
+          counter++;
+        }
+        usedSheetNames.add(tabTitle.toUpperCase());
+        criarWorksheetEstilizada(wb, clienteOuObra, mesNome, itens, tabTitle);
       });
     }
   });
 
   const filename = `PLANILHA_Medicao_Consolidada_TecnoDrill_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(wb, filename);
+  await baixarWorkbook(wb, filename);
 }
