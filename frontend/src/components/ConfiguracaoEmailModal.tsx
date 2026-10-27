@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Mail, 
   X, 
@@ -66,6 +67,17 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [sendingTest, setSendingTest] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+
+  // Trava a rolagem do body enquanto o modal estiver aberto
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   // Carrega configuração salva
   useEffect(() => {
@@ -228,20 +240,26 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     window.open('/preview-email-diario.html', '_blank');
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div 
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
         backgroundColor: 'rgba(0, 0, 0, 0.75)',
         backdropFilter: 'blur(4px)',
-        zIndex: 9999,
+        zIndex: 999999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: '20px',
+        boxSizing: 'border-box'
       }}
       onClick={onClose}
     >
@@ -251,12 +269,14 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
           borderRadius: '16px',
           border: '1px solid var(--border-color)',
           width: '620px',
-          maxWidth: '100%',
-          maxHeight: '90vh',
+          maxWidth: 'calc(100vw - 40px)',
+          maxHeight: 'min(90vh, 750px)',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 24px 60px rgba(0, 0, 0, 0.5)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative',
+          margin: 'auto'
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -690,6 +710,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
