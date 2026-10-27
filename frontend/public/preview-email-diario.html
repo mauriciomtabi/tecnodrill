@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TecnoDrill INFRA - Relatório Diário de Produção</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0F1215;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #334155;
+      -webkit-font-smoothing: antialiased;
+    }
+    .email-container {
+      max-width: 660px;
+      margin: 20px auto;
+      background-color: #FFFFFF;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    }
+    .header {
+      background: linear-gradient(135deg, #161B22 0%, #0F1215 100%);
+      padding: 26px 32px;
+      border-bottom: 4px solid #F05A22;
+    }
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .logo-text {
+      color: #FFFFFF;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .logo-highlight {
+      color: #F05A22;
+    }
+    .date-badge {
+      background-color: rgba(240, 90, 34, 0.15);
+      border: 1px solid rgba(240, 90, 34, 0.4);
+      color: #FF7744;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      display: inline-block;
+    }
+    .intro {
+      padding: 24px 32px 10px;
+    }
+    .intro h2 {
+      margin: 0 0 6px 0;
+      font-size: 20px;
+      color: #161B22;
+      font-weight: 800;
+    }
+    .intro p {
+      margin: 0;
+      color: #64748B;
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+    .kpi-section {
+      padding: 14px 32px;
+    }
+    .kpi-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 10px;
+    }
+    .kpi-card {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: left;
+      vertical-align: top;
+      width: 50%;
+    }
+    .kpi-card.highlight {
+      background: #FFF7ED;
+      border-color: #FED7AA;
+    }
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .kpi-card.highlight .kpi-label {
+      color: #C2410C;
+    }
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: #0F1215;
+      margin: 2px 0 4px;
+    }
+    .kpi-card.highlight .kpi-value {
+      color: #EA580C;
+    }
+    .kpi-subtext {
+      font-size: 11.5px;
+      color: #10B981;
+      font-weight: 600;
+    }
+    .section-title {
+      padding: 18px 32px 10px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #161B22;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .table-section {
+      padding: 0 32px 24px;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 12.5px;
+    }
+    .data-table th {
+      background-color: #161B22;
+      color: #FFFFFF;
+      padding: 11px 12px;
+      font-weight: 700;
+      text-align: left;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .data-table td {
+      padding: 12px;
+      border-bottom: 1px solid #E2E8F0;
+      color: #1E293B;
+      vertical-align: middle;
+    }
+    .data-table tr:nth-child(even) td {
+      background-color: #F8FAFC;
+    }
+    .data-table tr.total-row td {
+      background-color: #F05A22;
+      color: #FFFFFF;
+      font-weight: 800;
+      border: none;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+    .badge-ok {
+      background: #ECFDF5;
+      color: #059669;
+      border: 1px solid #A7F3D0;
+    }
+    .badge-andamento {
+      background: #FFFBEB;
+      color: #D97706;
+      border: 1px solid #FDE68A;
+    }
+    .cta-section {
+      padding: 24px 32px 32px;
+      text-align: center;
+      background: #F8FAFC;
+      border-top: 1px solid #E2E8F0;
+    }
+    .btn-portal {
+      display: inline-block;
+      background-color: #F05A22;
+      color: #FFFFFF !important;
+      text-decoration: none;
+      padding: 12px 28px;
+      border-radius: 6px;
+      font-weight: 800;
+      font-size: 13.5px;
+      letter-spacing: 0.3px;
+      box-shadow: 0 4px 12px rgba(240, 90, 34, 0.3);
+    }
+    .footer {
+      padding: 20px 32px;
+      text-align: center;
+      background-color: #0F1215;
+      color: #64748B;
+      font-size: 11px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="email-container">
+    
+    <!-- CABEÇALHO EXECUTIVO COM LOGO TECNODRILL -->
+    <div class="header">
+      <table class="header-table">
+        <tr>
+          <td>
+            <div class="logo-text">
+              Tecno<span class="logo-highlight">Drill</span> <span style="font-size: 14px; font-weight: 400; color: #94A3B8;">INFRA</span>
+            </div>
+            <div style="color: #94A3B8; font-size: 11.5px; margin-top: 3px;">
+              Inteligência Operacional & Perfuração Não Destrutiva
+            </div>
+          </td>
+          <td style="text-align: right;">
+            <div class="date-badge">
+              📅 27/10/2026 • 19:00h
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- TÍTULO -->
+    <div class="intro">
+      <h2>Relatório Diário de Produção & Faturamento</h2>
+      <p>
+        Fechamento consolidado das obras em <strong>27 de Outubro de 2026</strong>.
+      </p>
+    </div>
+
+    <!-- 4 CARDS DE INDICADORES CHAVE (KPIS DIÁRIOS & ACUMULADOS) -->
+    <div class="kpi-section">
+      <table class="kpi-table">
+        <tr>
+          <td class="kpi-card highlight">
+            <div class="kpi-label">Metros Perfurados Hoje</div>
+            <div class="kpi-value">738,0 m</div>
+            <div class="kpi-subtext">Produção consolidada do dia</div>
+          </td>
+          <td class="kpi-card">
+            <div class="kpi-label">Receita Estimada (Hoje)</div>
+            <div class="kpi-value" style="color: #2ECC71;">R$ 73.800,00</div>
+            <div style="font-size: 11.5px; color: #64748B;">Faturamento bruto gerado</div>
+          </td>
+        </tr>
+        <tr>
+          <td class="kpi-card">
+            <div class="kpi-label">Acumulado no Mês (Outubro)</div>
+            <div class="kpi-value">4.890,0 m</div>
+            <div class="kpi-subtext" style="color: #2563EB;">87% da meta mensal atingida</div>
+          </td>
+          <td class="kpi-card">
+            <div class="kpi-label">Frentes de Obra Ativas</div>
+            <div class="kpi-value">3 Obras</div>
+            <div style="font-size: 11.5px; color: #64748B;">Com produção registrada hoje</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- TABELA DE PRODUÇÃO POR SERVIÇO / OBRA -->
+    <div class="section-title">
+      🚧 Produção por Obra no Dia
+    </div>
+
+    <div class="table-section">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Obra / Serviço</th>
+            <th>Cliente</th>
+            <th style="text-align: right;">Metros Hoje</th>
+            <th style="text-align: right;">Receita (R$)</th>
+            <th style="text-align: center;">Meta Diária</th>
+            <th style="text-align: center;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>VALE DO OURO ITABERÁ</strong></td>
+            <td style="color: #64748B;">Construtora Vale do Ouro</td>
+            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px;">243,0 m</td>
+            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px;">R$ 24.300,00</td>
+            <td style="text-align: center; color: #64748B;">100 m</td>
+            <td style="text-align: center;"><span class="badge badge-ok">Meta Batida</span></td>
+          </tr>
+          <tr>
+            <td><strong>SANEAMENTO DOM PEDRI</strong></td>
+            <td style="color: #64748B;">SABESP</td>
+            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px;">435,0 m</td>
+            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px;">R$ 43.500,00</td>
+            <td style="text-align: center; color: #64748B;">100 m</td>
+            <td style="text-align: center;"><span class="badge badge-ok">Meta Batida</span></td>
+          </tr>
+          <tr>
+            <td><strong>REDE 280 CANOAS</strong></td>
+            <td style="color: #64748B;">Telefônica</td>
+            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px;">60,0 m</td>
+            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px;">R$ 6.000,00</td>
+            <td style="text-align: center; color: #64748B;">54 m</td>
+            <td style="text-align: center;"><span class="badge badge-ok">Meta Batida</span></td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="2" style="padding: 12px;">TOTAL GERAL DO DIA</td>
+            <td style="text-align: right; font-size: 14px; padding: 12px;">738,0 m</td>
+            <td style="text-align: right; font-size: 14px; padding: 12px;">R$ 73.800,00</td>
+            <td colspan="2" style="text-align: center; padding: 12px;">100% OK</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- BOTÃO DE ACESSO AO PORTAL -->
+    <div class="cta-section">
+      <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748B;">
+        Para consultar os detalhes completos e baixar as planilhas de medição em Excel:
+      </p>
+      <a href="https://tecnodrill-66l8.vercel.app" class="btn-portal" target="_blank">
+        Acessar BI TecnoDrill INFRA →
+      </a>
+    </div>
+
+    <!-- RODAPÉ CORPORATIVO -->
+    <div class="footer">
+      Relatório diário gerado automaticamente pelo <strong>TecnoDrill INFRA</strong>.<br>
+      Horário de consolidação diária: 19h00 (Horário de Brasília).
+    </div>
+
+  </div>
+
+</body>
+</html>

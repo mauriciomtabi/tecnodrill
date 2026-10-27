@@ -18,9 +18,11 @@ import {
   PieChart as PieIcon, 
   Coins,
   FileSpreadsheet,
-  Calendar
+  Calendar,
+  Mail
 } from 'lucide-react';
 import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado } from '../utils/relatorioMedicaoExcel';
+import { ConfiguracaoEmailModal } from '../components/ConfiguracaoEmailModal';
 
 interface ProdutividadePageProps {
   setHeaderInfo: (title: string, subtitle: string) => void;
@@ -59,6 +61,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [filtroSegmento, setFiltroSegmento] = useState<string>('TODOS');
   const [periodoRapido, setPeriodoRapido] = useState<PeriodoRapido>('ANO');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
 
   // Controles de Gráficos (Estilo BI JLE)
   const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>('FINANCEIRO');
@@ -692,31 +695,66 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </div>
           </div>
 
-          {/* Botão Exportar Relatório Excel (.xlsx) */}
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: '#1E7E34',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '8px',
-              padding: '9px 16px',
-              fontSize: '12.5px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(30, 126, 52, 0.25)',
-              transition: 'var(--transition)'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#155D27'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1E7E34'}
-          >
-            <Download size={15} />
-            <span>Exportar Relatório Excel (.xlsx)</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Botão Configurar E-mail Diário (Padrão BI JLE) */}
+            <button
+              type="button"
+              onClick={() => setShowEmailModal(true)}
+              title="Configurações de envio automático de relatório diário por e-mail"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '9px 15px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: 'var(--shadow-sm)',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.borderColor = '#F05A22';
+                e.currentTarget.style.color = '#F05A22';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-color)';
+                e.currentTarget.style.color = 'var(--text-main)';
+              }}
+            >
+              <Mail size={15} color="#F05A22" />
+              <span>E-mails Automáticos</span>
+            </button>
+
+            {/* Botão Exportar Relatório Excel (.xlsx) */}
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                backgroundColor: '#1E7E34',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 16px',
+                fontSize: '12.5px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(30, 126, 52, 0.25)',
+                transition: 'var(--transition)'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#155D27'}
+              onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1E7E34'}
+            >
+              <Download size={15} />
+              <span>Exportar Relatório Excel (.xlsx)</span>
+            </button>
+          </div>
         </div>
 
         {/* Inputs de Filtro no Topo (Período por Calendário) */}
@@ -1964,6 +2002,12 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         </div>
 
       </div>
+
+      {/* Modal de Configuração de E-mails Automáticos */}
+      <ConfiguracaoEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+      />
 
     </div>
   );
