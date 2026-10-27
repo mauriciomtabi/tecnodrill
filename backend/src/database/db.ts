@@ -25,8 +25,8 @@ const loadEnv = () => {
 loadEnv();
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dkscchjzztwyjzjpllob.supabase.co';
-const PUBLIC_KEY = 'sb_publishable_vAiCBdEioA9vqF6dzHjADQ_TkVsFWuj';
-export const supabase: SupabaseClient = createClient(SUPABASE_URL, PUBLIC_KEY, {
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_vAiCBdEioA9vqF6dzHjADQ_TkVsFWuj';
+export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
   global: { fetch: (input, init) => {
     const headers = new Headers(init?.headers);

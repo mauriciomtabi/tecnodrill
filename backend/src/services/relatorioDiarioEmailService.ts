@@ -159,21 +159,53 @@ export class RelatorioDiarioEmailService {
           // Verificação da data da barra
           let dataBarraYMD = '';
           const bAny = b as any;
-          const raw = b.horario_registro || bAny.data_registro || bAny.created_at;
-          if (raw) {
-            const dObj = new Date(raw);
-            if (!isNaN(dObj.getTime())) {
-              dataBarraYMD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
-              // Acumulado do Mês
-              if (dObj.getFullYear() === ano && dObj.getMonth() + 1 === mesNum) {
-                acumuladoMesMetros += m;
-                acumuladoMesReceita += receitaLance;
+
+          // 1. Extrair data_referencia dos metadados da observação <!--BARRA_META:{...}-->
+          if (b.observacao && b.observacao.includes('BARRA_META:')) {
+            const match = b.observacao.match(/<!--BARRA_META:(.*?)-->/);
+            if (match) {
+              try {
+                const meta = JSON.parse(match[1]);
+                if (meta.data_referencia) {
+                  dataBarraYMD = String(meta.data_referencia).trim();
+                } else if (meta.mes_referencia) {
+                  dataBarraYMD = `${meta.mes_referencia}-01`;
+                }
+              } catch (_) {}
+            }
+          }
+
+          // 2. Extrair de campos diretos se não encontrou nos metadados
+          if (!dataBarraYMD) {
+            const raw = bAny.data_referencia || b.horario_registro || bAny.data_registro || bAny.created_at;
+            if (raw) {
+              if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
+                dataBarraYMD = raw.slice(0, 10);
+              } else {
+                const dObj = new Date(raw);
+                if (!isNaN(dObj.getTime())) {
+                  dataBarraYMD = `${dObj.getFullYear()}-${String(dObj.getMonth() + 1).padStart(2, '0')}-${String(dObj.getDate()).padStart(2, '0')}`;
+                }
               }
             }
           }
 
+          // 3. Fallback para data_furo
+          if (!dataBarraYMD && furo.data_furo) {
+            dataBarraYMD = furo.data_furo.slice(0, 10);
+          }
+
+          // Acumulado do Mês (todas as barras do mês e ano de referência)
+          if (dataBarraYMD) {
+            const [bAno, bMes] = dataBarraYMD.split('-').map(Number);
+            if (bAno === ano && bMes === mesNum) {
+              acumuladoMesMetros += m;
+              acumuladoMesReceita += receitaLance;
+            }
+          }
+
           // Se for produção do dia
-          if (dataBarraYMD === hojeYMD || (dataRef === undefined && dataBarraYMD === '')) {
+          if (dataBarraYMD === hojeYMD) {
             totalMetrosHoje += m;
             totalReceitaHoje += receitaLance;
 
