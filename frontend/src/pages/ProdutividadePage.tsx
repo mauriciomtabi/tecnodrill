@@ -16,8 +16,10 @@ import {
   Filter, 
   BarChart3, 
   PieChart as PieIcon, 
-  Coins 
+  Coins,
+  FileSpreadsheet
 } from 'lucide-react';
+import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado } from '../utils/relatorioMedicaoExcel';
 
 interface ProdutividadePageProps {
   setHeaderInfo: (title: string, subtitle: string) => void;
@@ -1600,24 +1602,68 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </span>
           </div>
 
-          {/* Campo de Busca */}
-          <div style={{ position: 'relative', width: '280px' }}>
-            <input
-              type="text"
-              placeholder="Buscar serviço ou cliente..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%',
-                backgroundColor: 'var(--bg-app)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                padding: '9px 12px 9px 34px',
-                fontSize: '12.5px',
-                color: 'var(--text-main)'
+          {/* Ações da Tabela e Campo de Busca */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Botão Exportar Medições (.xlsx) consolidado */}
+            <button
+              type="button"
+              onClick={() => {
+                const nomePeriodo = filtroMes !== 'TODOS'
+                  ? `${MESES_LABEL[Number(filtroMes) - 1] || filtroMes}_${filtroAno !== 'TODOS' ? filtroAno : currentYear}`
+                  : (filtroAno !== 'TODOS' ? `ANO_${filtroAno}` : periodoRapido);
+                const barrasFiltradasMap: Record<string, Barra[]> = {};
+                servicosFiltrados.forEach(s => {
+                  barrasFiltradasMap[s.id] = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
+                });
+                exportarRelatorioMedicaoConsolidado(servicosFiltrados, barrasFiltradasMap, nomePeriodo);
               }}
-            />
-            <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+              title="Exportar planilha consolidada de medições em Excel com abas mensais"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 14px',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(46, 204, 113, 0.15)',
+                border: '1px solid #2ECC71',
+                color: '#2ECC71',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#2ECC71';
+                e.currentTarget.style.color = '#FFFFFF';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.15)';
+                e.currentTarget.style.color = '#2ECC71';
+              }}
+            >
+              <FileSpreadsheet size={15} />
+              <span>Exportar Medições (.xlsx)</span>
+            </button>
+
+            {/* Campo de Busca */}
+            <div style={{ position: 'relative', width: '260px' }}>
+              <input
+                type="text"
+                placeholder="Buscar serviço ou cliente..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '9px 12px 9px 34px',
+                  fontSize: '12.5px',
+                  color: 'var(--text-main)'
+                }}
+              />
+              <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            </div>
           </div>
         </div>
 
@@ -1730,38 +1776,78 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
                       {/* Ação */}
                       <td style={{ padding: '12px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          onClick={e => { e.stopPropagation(); toggle(); }}
-                          aria-expanded={expandido}
-                          aria-controls={`diametros-${s.id}`}
-                          title="Detalhar produção por diâmetro"
-                          style={{
-                            padding: '6px 10px',
-                            borderRadius: '6px',
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            border: '1px solid var(--border-color)',
-                            color: 'var(--text-main)',
-                            fontSize: '11.5px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'var(--transition)'
-                          }}
-                          onMouseOver={(e) => {
-                            e.currentTarget.style.backgroundColor = 'var(--primary)';
-                            e.currentTarget.style.borderColor = 'var(--primary)';
-                          }}
-                          onMouseOut={(e) => {
-                            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                            e.currentTarget.style.borderColor = 'var(--border-color)';
-                          }}
-                        >
-                          <span>{expandido ? 'Fechar' : 'Diâmetros'}</span>
-                          <ChevronRight size={13} />
-                        </button>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const barrasDaObra = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
+                              const nomePeriodo = filtroMes !== 'TODOS'
+                                ? `${MESES_LABEL[Number(filtroMes) - 1] || filtroMes}_${filtroAno !== 'TODOS' ? filtroAno : currentYear}`
+                                : (filtroAno !== 'TODOS' ? `ANO_${filtroAno}` : periodoRapido);
+                              exportarRelatorioMedicaoServico(s, barrasDaObra, nomePeriodo);
+                            }}
+                            title={`Exportar Planilha de Medição Excel (${s.nome})`}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: 'rgba(46, 204, 113, 0.12)',
+                              border: '1px solid rgba(46, 204, 113, 0.4)',
+                              color: '#2ECC71',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.backgroundColor = '#2ECC71';
+                              e.currentTarget.style.color = '#FFFFFF';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.12)';
+                              e.currentTarget.style.color = '#2ECC71';
+                            }}
+                          >
+                            <FileSpreadsheet size={13} />
+                            <span>Excel</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); toggle(); }}
+                            aria-expanded={expandido}
+                            aria-controls={`diametros-${s.id}`}
+                            title="Detalhar produção por diâmetro"
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                              border: '1px solid var(--border-color)',
+                              color: 'var(--text-main)',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              transition: 'var(--transition)'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--primary)';
+                              e.currentTarget.style.borderColor = 'var(--primary)';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                              e.currentTarget.style.borderColor = 'var(--border-color)';
+                            }}
+                          >
+                            <span>{expandido ? 'Fechar' : 'Diâmetros'}</span>
+                            <ChevronRight size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     {expandido && <tr id={`diametros-${s.id}`}><td colSpan={7} style={{ padding: '16px 24px 24px', background: 'var(--bg-app)' }}>
