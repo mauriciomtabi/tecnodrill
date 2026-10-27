@@ -49,17 +49,29 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [barrasPorServico, setBarrasPorServico] = useState<Record<string, Barra[]>>({});
   const [loading, setLoading] = useState(true);
 
-  // Filtros no topo (Estilo BI JLE)
-  const currentYear = new Date().getFullYear().toString();
-  const currentMonth = (new Date().getMonth() + 1).toString();
+  // Datas de início e fim do mês atual (padrão executivo)
+  const getInicioMesAtual = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}-01`;
+  };
 
-  const [dataInicio, setDataInicio] = useState<string>(`${currentYear}-01-01`);
-  const [dataFim, setDataFim] = useState<string>(`${currentYear}-12-31`);
+  const getFimMesAtual = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(y, d.getMonth() + 1, 0).getDate();
+    return `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
+  };
+
+  const [dataInicio, setDataInicio] = useState<string>(getInicioMesAtual);
+  const [dataFim, setDataFim] = useState<string>(getFimMesAtual);
   const [servicoExpandido, setServicoExpandido] = useState<string | null>(null);
   const [filtroTerceiro, setFiltroTerceiro] = useState('TODOS');
   const [filtroServico, setFiltroServico] = useState<string>('TODOS');
   const [filtroSegmento, setFiltroSegmento] = useState<string>('TODOS');
-  const [periodoRapido, setPeriodoRapido] = useState<PeriodoRapido>('ANO');
+  const [periodoRapido, setPeriodoRapido] = useState<PeriodoRapido>('MES');
   const [searchTerm, setSearchTerm] = useState('');
   const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
 
@@ -241,15 +253,15 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return true;
   };
 
-  // Limpa os filtros e qualquer seleção de detalhe.
+  // Limpa os filtros e retorna ao período padrão do mês atual.
   const limparFiltros = () => {
-    setDataInicio('');
-    setDataFim('');
+    setDataInicio(getInicioMesAtual());
+    setDataFim(getFimMesAtual());
     setFiltroSegmento('TODOS');
     setFiltroServico('TODOS');
     setFiltroTerceiro('TODOS');
     setSearchTerm('');
-    setPeriodoRapido('GERAL');
+    setPeriodoRapido('MES');
     setServicoExpandido(null);
     setHoveredMonthIdx(null);
   };
@@ -687,7 +699,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </div>
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                Filtros Analíticos & Competência
+                Filtros Analíticos & Período
               </h3>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 Controle temporal consolidado para medição de produtividade e financeiro
