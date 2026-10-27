@@ -61,6 +61,46 @@ router.post('/diario/enviar', async (req: Request, res: Response): Promise<any> 
   }
 });
 
+// GET / POST /api/relatorios/diario/cron
+// Chamado pelo Vercel Cron às 22h UTC (19h Brasília) ou por rotinas agendadas
+const executarCronDiario = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const dataRef = (req.query.data as string) || (req.body?.dataRef as string) || undefined;
+    console.log(`[Relatorio Cron 19h] Executando rotina diária automatizada (DataRef: ${dataRef || 'hoje'})...`);
+
+    // 1. Disparo de E-mail
+    let emailRes: any = null;
+    try {
+      emailRes = await RelatorioDiarioEmailService.enviarRelatorioEmail(undefined, dataRef);
+    } catch (eEmail: any) {
+      console.error('[Relatorio Cron] Erro no e-mail:', eEmail);
+      emailRes = { sucesso: false, erro: eEmail.message };
+    }
+
+    // 2. Disparo do Telegram
+    let telegramRes: any = null;
+    try {
+      telegramRes = await RelatorioDiarioTelegramService.enviarRelatorioTelegram(undefined, undefined, dataRef);
+    } catch (eTel: any) {
+      console.error('[Relatorio Cron] Erro no Telegram:', eTel);
+      telegramRes = { sucesso: false, erro: eTel.message };
+    }
+
+    return res.json({
+      status: 'ok',
+      executadoEm: new Date().toISOString(),
+      email: emailRes,
+      telegram: telegramRes
+    });
+  } catch (err: any) {
+    console.error('[Relatorio Cron] Erro na execução:', err);
+    return res.status(500).json({ error: 'Erro ao executar cron diário', details: err.message });
+  }
+};
+
+router.get('/diario/cron', executarCronDiario);
+router.post('/diario/cron', executarCronDiario);
+
 // GET /api/relatorios/diario/config
 router.get('/diario/config', async (_req: Request, res: Response): Promise<any> => {
   try {

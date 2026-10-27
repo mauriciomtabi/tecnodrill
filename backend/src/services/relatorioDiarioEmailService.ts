@@ -51,13 +51,26 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
   diasSemana: [1, 2, 3, 4, 5, 6] // Seg a Sáb
 };
 
+function getEmailConfigFilePath(): string {
+  const candidates = [
+    path.join(process.cwd(), 'backend', 'data', 'tecnodrill_email_config.json'),
+    path.join(process.cwd(), 'data', 'tecnodrill_email_config.json'),
+    path.join(__dirname, '..', '..', 'data', 'tecnodrill_email_config.json'),
+    path.join('/tmp', 'tecnodrill_email_config.json')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
 export class RelatorioDiarioEmailService {
   /**
    * Obtém as configurações salvas de envio automático de e-mail
    */
   public static getConfigEmailDiario(): ConfigEmailDiario {
     try {
-      const configPath = path.join(process.cwd(), 'data', 'tecnodrill_email_config.json');
+      const configPath = getEmailConfigFilePath();
       if (fs.existsSync(configPath)) {
         const raw = fs.readFileSync(configPath, 'utf-8');
         return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
@@ -79,12 +92,16 @@ export class RelatorioDiarioEmailService {
       updatedAt: new Date().toISOString()
     };
     try {
-      const dir = path.join(process.cwd(), 'data');
+      const configPath = getEmailConfigFilePath();
+      const dir = path.dirname(configPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const configPath = path.join(dir, 'tecnodrill_email_config.json');
       fs.writeFileSync(configPath, JSON.stringify(mesclada, null, 2), 'utf-8');
     } catch (e) {
       console.error('[RelatorioDiarioEmail] Erro ao salvar config:', e);
+      try {
+        const tmpPath = path.join('/tmp', 'tecnodrill_email_config.json');
+        fs.writeFileSync(tmpPath, JSON.stringify(mesclada, null, 2), 'utf-8');
+      } catch (_) {}
     }
     return mesclada;
   }

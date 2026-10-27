@@ -7,19 +7,28 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Environment loader
 const loadEnv = () => {
-  const envPath = path.join(process.cwd(), '.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    content.split('\n').forEach(line => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine || trimmedLine.startsWith('#')) return;
-      const parts = trimmedLine.split('=');
-      if (parts.length >= 2) {
-        const key = parts[0].trim();
-        const value = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
-        process.env[key] = value;
-      }
-    });
+  const envPaths = [
+    path.join(process.cwd(), 'backend', '.env'),
+    path.join(process.cwd(), '.env'),
+    path.join(__dirname, '..', '..', '.env')
+  ];
+  for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      content.split('\n').forEach(line => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine || trimmedLine.startsWith('#')) return;
+        const parts = trimmedLine.split('=');
+        if (parts.length >= 2) {
+          const key = parts[0].trim();
+          const value = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+          if (!process.env[key]) {
+            process.env[key] = value;
+          }
+        }
+      });
+      break;
+    }
   }
 };
 loadEnv();

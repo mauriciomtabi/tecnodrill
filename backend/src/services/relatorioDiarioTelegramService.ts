@@ -14,9 +14,22 @@ export interface ConfigTelegram {
 const DEFAULT_TELEGRAM_CONFIG: ConfigTelegram = {
   ativo: true,
   botToken: process.env.TELEGRAM_BOT_TOKEN || '9178731502:AAHZcYDQQvYhPqLylQ5y2tWcHl4ceeJMmI8',
-  chatId: process.env.TELEGRAM_CHAT_ID || '',
+  chatId: process.env.TELEGRAM_CHAT_ID || '-5448882645',
   chatNome: 'TecnoDrill Relatórios'
 };
+
+function getTelegramConfigFilePath(): string {
+  const candidates = [
+    path.join(process.cwd(), 'backend', 'data', 'tecnodrill_telegram_config.json'),
+    path.join(process.cwd(), 'data', 'tecnodrill_telegram_config.json'),
+    path.join(__dirname, '..', '..', 'data', 'tecnodrill_telegram_config.json'),
+    path.join('/tmp', 'tecnodrill_telegram_config.json')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
 
 export class RelatorioDiarioTelegramService {
   /**
@@ -24,7 +37,7 @@ export class RelatorioDiarioTelegramService {
    */
   public static getConfigTelegram(): ConfigTelegram {
     try {
-      const configPath = path.join(process.cwd(), 'data', 'tecnodrill_telegram_config.json');
+      const configPath = getTelegramConfigFilePath();
       if (fs.existsSync(configPath)) {
         const raw = fs.readFileSync(configPath, 'utf-8');
         return { ...DEFAULT_TELEGRAM_CONFIG, ...JSON.parse(raw) };
@@ -46,12 +59,16 @@ export class RelatorioDiarioTelegramService {
       updatedAt: new Date().toISOString()
     };
     try {
-      const dir = path.join(process.cwd(), 'data');
+      const configPath = getTelegramConfigFilePath();
+      const dir = path.dirname(configPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const configPath = path.join(dir, 'tecnodrill_telegram_config.json');
       fs.writeFileSync(configPath, JSON.stringify(mesclada, null, 2), 'utf-8');
     } catch (e) {
       console.error('[TelegramService] Erro ao salvar config:', e);
+      try {
+        const tmpPath = path.join('/tmp', 'tecnodrill_telegram_config.json');
+        fs.writeFileSync(tmpPath, JSON.stringify(mesclada, null, 2), 'utf-8');
+      } catch (_) {}
     }
     return mesclada;
   }

@@ -68,6 +68,48 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(500).json({ error: 'Ocorreu um erro interno no servidor da Tecnodrill.' });
 });
 
+import { RelatorioDiarioEmailService } from './services/relatorioDiarioEmailService';
+import { RelatorioDiarioTelegramService } from './services/relatorioDiarioTelegramService';
+
+let ultimoDiaExecutado = '';
+
+const iniciarAgendadorRelatorioDiario = () => {
+  console.log('⏰ [Scheduler] Agendador de relatórios diários das 19h (Brasília) inicializado.');
+  setInterval(async () => {
+    try {
+      const agora = new Date();
+      const optionsHora: Intl.DateTimeFormatOptions = { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hour12: false };
+      const optionsData: Intl.DateTimeFormatOptions = { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' };
+
+      const horaBrasilia = agora.toLocaleTimeString('pt-BR', optionsHora);
+      const dataBrasilia = agora.toLocaleDateString('pt-BR', optionsData);
+
+      const [hora, minuto] = horaBrasilia.split(':').map(Number);
+
+      if (hora === 19 && minuto >= 0 && minuto <= 5 && ultimoDiaExecutado !== dataBrasilia) {
+        ultimoDiaExecutado = dataBrasilia;
+        console.log(`⏰ [Scheduler 19h] Disparando relatórios automáticos diários de ${dataBrasilia} às ${horaBrasilia}...`);
+
+        try {
+          await RelatorioDiarioEmailService.enviarRelatorioEmail();
+          console.log('✅ [Scheduler 19h] Relatório de e-mail disparado.');
+        } catch (e: any) {
+          console.error('❌ [Scheduler 19h] Erro ao disparar e-mail:', e);
+        }
+
+        try {
+          await RelatorioDiarioTelegramService.enviarRelatorioTelegram();
+          console.log('✅ [Scheduler 19h] Relatório do Telegram disparado.');
+        } catch (e: any) {
+          console.error('❌ [Scheduler 19h] Erro ao disparar Telegram:', e);
+        }
+      }
+    } catch (err) {
+      console.error('[Scheduler Error]', err);
+    }
+  }, 60000);
+};
+
 // Start server and initialize DB
 const startServer = async () => {
   try {
@@ -75,6 +117,7 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 [Tecnodrill INFRA Backend] Servidor rodando com sucesso na porta ${PORT}`);
       console.log(`📡 URL API: http://localhost:${PORT}/api`);
+      iniciarAgendadorRelatorioDiario();
     });
   } catch (err) {
     console.error('Falha crítica ao iniciar servidor Tecnodrill:', err);
