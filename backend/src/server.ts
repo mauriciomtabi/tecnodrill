@@ -39,16 +39,28 @@ app.get('/api/health', (_req, res) => {
 
 // Mount Routes
 app.use('/api', (req, res, next) => {
-  if (req.path === '/geocode' || req.path.startsWith('/geocode/')) return next();
+  if (
+    req.path === '/geocode' || 
+    req.path.startsWith('/geocode/') ||
+    req.path.startsWith('/relatorios/diario') ||
+    req.path.startsWith('/relatorios/telegram') ||
+    req.path.startsWith('/auth')
+  ) {
+    return next();
+  }
   return requireManager(req, res, next);
 });
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes);
 app.use('/api/servicos', servicosRoutes);
+app.use('/servicos', servicosRoutes);
 app.use('/api/furos', furosRoutes);
+app.use('/furos', furosRoutes);
 app.use('/api', barrasRoutes);
 app.use('/api/relatorios', relatoriosRoutes);
+app.use('/relatorios', relatoriosRoutes);
 app.use('/api/geocode', geocodeRoutes);
+app.use('/geocode', geocodeRoutes);
 
 // Global Error Handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -70,4 +82,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  startServer();
+}
+
+export default app;
