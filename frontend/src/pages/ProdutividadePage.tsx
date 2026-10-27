@@ -17,7 +17,8 @@ import {
   BarChart3, 
   PieChart as PieIcon, 
   Coins,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Calendar
 } from 'lucide-react';
 import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado } from '../utils/relatorioMedicaoExcel';
 
@@ -50,8 +51,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const currentYear = new Date().getFullYear().toString();
   const currentMonth = (new Date().getMonth() + 1).toString();
 
-  const [filtroAno, setFiltroAno] = useState<string>(currentYear);
-  const [filtroMes, setFiltroMes] = useState<string>('TODOS');
+  const [dataInicio, setDataInicio] = useState<string>(`${currentYear}-01-01`);
+  const [dataFim, setDataFim] = useState<string>(`${currentYear}-12-31`);
   const [servicoExpandido, setServicoExpandido] = useState<string | null>(null);
   const [filtroTerceiro, setFiltroTerceiro] = useState('TODOS');
   const [filtroServico, setFiltroServico] = useState<string>('TODOS');
@@ -219,36 +220,18 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return d;
   }, [now]);
 
-  // Função para verificar se a barra pertence ao filtro ativo (com suporte a mes_referencia retroativo)
+  // Função para verificar se a barra pertence ao filtro ativo por intervalo de datas (Data Início e Fim)
   const isBarraInFilter = (b: Barra): boolean => {
     const dateInfo = getBarraDateInfo(b);
-    if (!dateInfo) return periodoRapido === 'GERAL';
+    if (!dateInfo) return !dataInicio && !dataFim;
 
-    const bYear = dateInfo.year;
-    const bMonth = String(dateInfo.month);
-    const bDate = new Date(Number(dateInfo.year), dateInfo.month - 1, dateInfo.day);
+    const bDateStr = `${dateInfo.year}-${String(dateInfo.month).padStart(2, '0')}-${String(dateInfo.day).padStart(2, '0')}`;
 
-    // Filtro por Período Rápido
-    if (periodoRapido === 'HOJE') {
-      return (
-        bDate.getFullYear() === now.getFullYear() &&
-        bDate.getMonth() === now.getMonth() &&
-        bDate.getDate() === now.getDate()
-      );
-    }
-    if (periodoRapido === 'SEMANA') {
-      return bDate >= sevenDaysAgo;
-    }
-    if (periodoRapido === 'GERAL') {
-      return true;
-    }
-
-    // Filtro por Ano e Mês selecionados
-    if (filtroAno !== 'TODOS' && bYear !== filtroAno) {
+    if (dataInicio && bDateStr < dataInicio) {
       return false;
     }
 
-    if (filtroMes !== 'TODOS' && bMonth !== filtroMes) {
+    if (dataFim && bDateStr > dataFim) {
       return false;
     }
 
@@ -257,8 +240,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   // Limpa os filtros e qualquer seleção de detalhe.
   const limparFiltros = () => {
-    setFiltroAno('TODOS');
-    setFiltroMes('TODOS');
+    setDataInicio('');
+    setDataFim('');
     setFiltroSegmento('TODOS');
     setFiltroServico('TODOS');
     setFiltroTerceiro('TODOS');
@@ -339,7 +322,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         qtdCaixasPeriodo: barrasPeriodo.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length
       };
     });
-  }, [servicos, barrasSelecionadas, periodoRapido, filtroAno, filtroMes, sevenDaysAgo, now]);
+  }, [servicos, barrasSelecionadas, dataInicio, dataFim]);
 
   // Filtragem por busca e por segmento
   const servicosFiltrados = useMemo(() => {
@@ -356,7 +339,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   const receitaPorTerceiro = useMemo(() => {
     return summarizeAuthorRevenue(servicosFiltrados, barrasSelecionadas, isBarraInFilter, terceirosDisponiveis);
-  }, [servicosFiltrados, barrasSelecionadas, terceirosDisponiveis, periodoRapido, filtroAno, filtroMes]);
+  }, [servicosFiltrados, barrasSelecionadas, terceirosDisponiveis, dataInicio, dataFim]);
 
   // Totais consolidados dos KPIs
   const totais = useMemo(() => {
@@ -383,7 +366,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   // Dados para o Gráfico de Evolução (12 meses do ano ou granularidade selecionada)
   const dadosEvolucao = useMemo(() => {
-    const targetYear = filtroAno !== 'TODOS' ? filtroAno : currentYear;
+    const targetYear = dataInicio ? dataInicio.split('-')[0] : currentYear;
 
     if (granularidade === 'MENSAL') {
       // 12 Meses do ano selecionado
@@ -440,7 +423,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     }
 
     if (granularidade === 'SEMANAL') {
-      const targetMonthNum = filtroMes !== 'TODOS' ? Number(filtroMes) : Number(currentMonth);
+      const targetMonthNum = dataInicio ? Number(dataInicio.split('-')[1]) : Number(currentMonth);
       const semanas = [
         { label: 'Sem 1 (1-7)', min: 1, max: 7 },
         { label: 'Sem 2 (8-14)', min: 8, max: 14 },
@@ -498,7 +481,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     }
 
     // Diário (dias 1 a 31)
-    const targetMonthNum = filtroMes !== 'TODOS' ? Number(filtroMes) : Number(currentMonth);
+    const targetMonthNum = dataInicio ? Number(dataInicio.split('-')[1]) : Number(currentMonth);
     const daysInMonth = new Date(Number(targetYear), targetMonthNum, 0).getDate();
 
     return Array.from({ length: daysInMonth }, (_, i) => {
@@ -548,7 +531,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         margem: Number((receita - custo).toFixed(2))
       };
     });
-  }, [servicosFiltrados, barrasSelecionadas, filtroAno, filtroMes, granularidade, currentYear, currentMonth]);
+  }, [servicosFiltrados, barrasSelecionadas, dataInicio, dataFim, granularidade, currentYear, currentMonth]);
 
   // Escala máxima do gráfico de evolução para desenhar as barras com precisão e espaço para rótulos de dados
   const maxEvolucaoVal = useMemo(() => {
@@ -635,7 +618,8 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     }))), 'Receita por Terceiro');
 
     const dataHojeFormatada = new Date().toISOString().split('T')[0];
-    const fileName = `Produtividade_TecnoDrill_${filtroAno}_${filtroMes !== 'TODOS' ? `Mes${filtroMes}` : 'AnoInteiro'}_${dataHojeFormatada}.xlsx`;
+    const periodoLabel = dataInicio && dataFim ? `${dataInicio}_a_${dataFim}` : (dataInicio || dataFim || 'Geral');
+    const fileName = `Produtividade_TecnoDrill_${periodoLabel}_${dataHojeFormatada}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
 
@@ -735,69 +719,67 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           </button>
         </div>
 
-        {/* Dropdowns de Filtro no Topo (Estilo BI JLE) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', alignItems: 'center' }}>
+        {/* Inputs de Filtro no Topo (Período por Calendário) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', alignItems: 'end' }}>
           
-          {/* Filtro de Ano */}
+          {/* Filtro: Data Início */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
-              Ano
+            <label htmlFor="filtro-data-inicio" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
+              <Calendar size={13} style={{ color: 'var(--primary)' }} />
+              Período: Início
             </label>
-            <select
-              value={filtroAno}
+            <input
+              id="filtro-data-inicio"
+              type="date"
+              value={dataInicio}
               onChange={(e) => {
-                setFiltroAno(e.target.value);
+                setDataInicio(e.target.value);
                 setPeriodoRapido('CUSTOM');
               }}
               style={{
                 width: '100%',
+                boxSizing: 'border-box',
                 backgroundColor: 'var(--bg-app)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '8px',
-                padding: '9px 12px',
+                padding: '8px 12px',
                 fontSize: '13px',
                 fontWeight: 700,
                 color: 'var(--text-main)',
+                colorScheme: 'dark light',
                 cursor: 'pointer'
               }}
-            >
-              <option value="TODOS">Todos os Anos</option>
-              {anosDisponiveis.map(ano => (
-                <option key={ano} value={ano}>{ano}</option>
-              ))}
-            </select>
+            />
           </div>
 
-          {/* Filtro de Mês */}
+          {/* Filtro: Data Fim */}
           <div>
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
-              Competência / Mês
+            <label htmlFor="filtro-data-fim" style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>
+              <Calendar size={13} style={{ color: 'var(--primary)' }} />
+              Período: Fim
             </label>
-            <select
-              value={filtroMes}
+            <input
+              id="filtro-data-fim"
+              type="date"
+              value={dataFim}
               onChange={(e) => {
-                setFiltroMes(e.target.value);
+                setDataFim(e.target.value);
                 setPeriodoRapido('CUSTOM');
               }}
               style={{
                 width: '100%',
+                boxSizing: 'border-box',
                 backgroundColor: 'var(--bg-app)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '8px',
-                padding: '9px 12px',
+                padding: '8px 12px',
                 fontSize: '13px',
                 fontWeight: 700,
                 color: 'var(--text-main)',
+                colorScheme: 'dark light',
                 cursor: 'pointer'
               }}
-            >
-              <option value="TODOS">Todos os Meses (Jan - Dez)</option>
-              {MESES_LABEL.map((nome, idx) => (
-                <option key={idx + 1} value={(idx + 1).toString()}>
-                  {idx + 1} - {nome}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Filtro de Segmento */}
@@ -810,6 +792,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               onChange={(e) => setFiltroSegmento(e.target.value)}
               style={{
                 width: '100%',
+                boxSizing: 'border-box',
                 backgroundColor: 'var(--bg-app)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '8px',
@@ -849,6 +832,104 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </button>
           </div>
 
+        </div>
+
+        {/* Atalhos Rápidos de Período */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '8px', borderTop: '1px solid var(--border-color)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginRight: '4px', letterSpacing: '0.3px' }}>
+            Atalhos:
+          </span>
+          {[
+            {
+              label: 'Hoje',
+              action: () => {
+                const hoje = new Date().toISOString().split('T')[0];
+                setDataInicio(hoje);
+                setDataFim(hoje);
+                setPeriodoRapido('HOJE');
+              }
+            },
+            {
+              label: 'Últimos 7 Dias',
+              action: () => {
+                const fim = new Date();
+                const ini = new Date();
+                ini.setDate(ini.getDate() - 7);
+                setDataInicio(ini.toISOString().split('T')[0]);
+                setDataFim(fim.toISOString().split('T')[0]);
+                setPeriodoRapido('SEMANA');
+              }
+            },
+            {
+              label: 'Este Mês',
+              action: () => {
+                const d = new Date();
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const lastDay = new Date(y, d.getMonth() + 1, 0).getDate();
+                setDataInicio(`${y}-${m}-01`);
+                setDataFim(`${y}-${m}-${lastDay}`);
+                setPeriodoRapido('MES');
+              }
+            },
+            {
+              label: 'Mês Anterior',
+              action: () => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - 1);
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const lastDay = new Date(y, d.getMonth() + 1, 0).getDate();
+                setDataInicio(`${y}-${m}-01`);
+                setDataFim(`${y}-${m}-${lastDay}`);
+                setPeriodoRapido('CUSTOM');
+              }
+            },
+            {
+              label: 'Ano Atual',
+              action: () => {
+                const y = new Date().getFullYear();
+                setDataInicio(`${y}-01-01`);
+                setDataFim(`${y}-12-31`);
+                setPeriodoRapido('ANO');
+              }
+            },
+            {
+              label: 'Todo o Histórico',
+              action: () => {
+                setDataInicio('');
+                setDataFim('');
+                setPeriodoRapido('GERAL');
+              }
+            }
+          ].map(shortcut => (
+            <button
+              key={shortcut.label}
+              type="button"
+              onClick={shortcut.action}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.color = 'var(--primary)';
+                e.currentTarget.style.borderColor = 'var(--primary)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.color = 'var(--text-main)';
+                e.currentTarget.style.borderColor = 'var(--border-color)';
+              }}
+            >
+              {shortcut.label}
+            </button>
+          ))}
         </div>
 
       </div>
@@ -1000,7 +1081,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           <div>
             <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <BarChart3 size={20} color="var(--primary)" />
-              Evolução {granularidade === 'MENSAL' ? `Mensal (${filtroAno !== 'TODOS' ? filtroAno : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
+              Evolução {granularidade === 'MENSAL' ? `Mensal (${dataInicio ? dataInicio.split('-')[0] : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
             </h3>
             <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
               {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita e Custo Operacional por competência' : 'Volume de Perfuração Direcional em Metros'}
@@ -1148,7 +1229,11 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               const showTick = i === dadosEvolucao.length - 1 || (i % tickStep === 0 && (i === 0 || i <= dadosEvolucao.length - 1 - tickStep));
               const verticalLabels = cellWidth < (metricaEvolucao === 'FINANCEIRO' ? 85 : 45);
               const isHovered = hoveredMonthIdx === i;
-              const isSelectedMonth = filtroMes !== 'TODOS' && d.mesNum === Number(filtroMes);
+              const anoAlvo = dataInicio ? dataInicio.split('-')[0] : currentYear;
+              const mesInicioStr = `${anoAlvo}-${String(d.mesNum).padStart(2, '0')}-01`;
+              const ultDia = new Date(Number(anoAlvo), d.mesNum, 0).getDate();
+              const mesFimStr = `${anoAlvo}-${String(d.mesNum).padStart(2, '0')}-${String(ultDia).padStart(2, '0')}`;
+              const isSelectedMonth = Boolean(dataInicio && dataFim && mesFimStr >= dataInicio && mesInicioStr <= dataFim);
               const receitaHeightPct = Math.min(100, (d.receita / maxEvolucaoVal) * 100);
               const custoHeightPct = Math.min(100, (d.custo / maxEvolucaoVal) * 100);
               const metrosHeightPct = Math.min(100, (d.metros / maxEvolucaoVal) * 100);
@@ -1160,7 +1245,11 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                   onMouseLeave={() => setHoveredMonthIdx(null)}
                   onClick={() => {
                     if (granularidade === 'MENSAL') {
-                      setFiltroMes(d.mesNum.toString());
+                      const y = dataInicio ? dataInicio.split('-')[0] : currentYear;
+                      const m = String(d.mesNum).padStart(2, '0');
+                      const lastDay = new Date(Number(y), d.mesNum, 0).getDate();
+                      setDataInicio(`${y}-${m}-01`);
+                      setDataFim(`${y}-${m}-${lastDay}`);
                       setPeriodoRapido('CUSTOM');
                     }
                   }}
@@ -1608,9 +1697,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             <button
               type="button"
               onClick={() => {
-                const nomePeriodo = filtroMes !== 'TODOS'
-                  ? `${MESES_LABEL[Number(filtroMes) - 1] || filtroMes}_${filtroAno !== 'TODOS' ? filtroAno : currentYear}`
-                  : (filtroAno !== 'TODOS' ? `ANO_${filtroAno}` : periodoRapido);
+                const nomePeriodo = dataInicio && dataFim
+                  ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
+                  : (dataInicio || dataFim || 'GERAL');
                 const barrasFiltradasMap: Record<string, Barra[]> = {};
                 servicosFiltrados.forEach(s => {
                   barrasFiltradasMap[s.id] = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
@@ -1782,9 +1871,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                             onClick={(e) => {
                               e.stopPropagation();
                               const barrasDaObra = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
-                              const nomePeriodo = filtroMes !== 'TODOS'
-                                ? `${MESES_LABEL[Number(filtroMes) - 1] || filtroMes}_${filtroAno !== 'TODOS' ? filtroAno : currentYear}`
-                                : (filtroAno !== 'TODOS' ? `ANO_${filtroAno}` : periodoRapido);
+                              const nomePeriodo = dataInicio && dataFim
+                                ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
+                                : (dataInicio || dataFim || 'GERAL');
                               exportarRelatorioMedicaoServico(s, barrasDaObra, nomePeriodo);
                             }}
                             title={`Exportar Planilha de Medição Excel (${s.nome})`}
