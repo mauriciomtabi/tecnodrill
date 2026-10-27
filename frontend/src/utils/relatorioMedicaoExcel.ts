@@ -30,6 +30,22 @@ export interface ItemMedicaoFuro {
   observacao: string;
 }
 
+export interface ItemMedicaoConsolidado extends ItemMedicaoFuro {
+  servicoId: string;
+  servicoNome: string;
+}
+
+/**
+ * Sanitiza o nome de uma aba para os padrões exigidos pelo Excel (máx 31 chars, sem caracteres especiais)
+ */
+export function sanitizarNomeAba(nome: string): string {
+  const limpo = (nome || 'SERVICO')
+    .replace(/[\\/*?[\]:]/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+  return limpo.slice(0, 31) || 'SERVICO';
+}
+
 /**
  * Agrupa as barras de um serviço por Furo / Apontamento diário consolidado
  */
@@ -160,7 +176,279 @@ export function processarBarrasParaMedicao(servico: Servico, barras: Barra[]): R
 }
 
 /**
- * Cria e formata uma worksheet com a identidade visual executiva da TecnoDrill
+ * Cria e formata a ABA PRINCIPAL CONSOLIDADA com todas as informações e as colunas (ID do Serviço e Nome do Serviço)
+ */
+function criarWorksheetConsolidada(
+  wb: ExcelJS.Workbook,
+  itensConsolidados: ItemMedicaoConsolidado[],
+  nomeFiltroPeriodo?: string
+): ExcelJS.Worksheet {
+  const ws = wb.addWorksheet('CONSOLIDADO', {
+    views: [{ showGridLines: true }]
+  });
+
+  // Larguras de Colunas
+  ws.getColumn(1).width = 4;   // A: Margem
+  ws.getColumn(2).width = 16;  // B: ID do Serviço
+  ws.getColumn(3).width = 32;  // C: Nome do Serviço
+  ws.getColumn(4).width = 14;  // D: DATA
+  ws.getColumn(5).width = 18;  // E: 'OS' nº
+  ws.getColumn(6).width = 16;  // F: MEDIDA 1 mts
+  ws.getColumn(7).width = 14;  // G: DUTO diametro
+  ws.getColumn(8).width = 18;  // H: Valor Metro
+  ws.getColumn(9).width = 24;  // I: VALOR TOTAL FURO
+  ws.getColumn(10).width = 36; // J: DESCRIÇÃO observação
+
+  // Alturas das Linhas do Cabeçalho
+  ws.getRow(1).height = 14;
+  ws.getRow(2).height = 28;
+  ws.getRow(3).height = 28;
+
+  // 1. Identificação Corporativa (B2:D3)
+  ws.mergeCells('B2:D3');
+  const cellCorp = ws.getCell('B2');
+  cellCorp.value = 'TECNODRILL INFRA';
+  cellCorp.font = { name: 'Calibri', size: 12, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
+  cellCorp.alignment = { vertical: 'middle', horizontal: 'left' };
+
+  // 2. Título Central da Medição Consolidada (E2:H3)
+  ws.mergeCells('E2:H3');
+  const cellTitulo = ws.getCell('E2');
+  const periodoTxt = nomeFiltroPeriodo ? ` (${nomeFiltroPeriodo.replace(/_/g, ' ')})` : '';
+  cellTitulo.value = `LANÇAMENTO DE MEDIÇÕES CONSOLIDADO${periodoTxt.toUpperCase()}`;
+  cellTitulo.font = { name: 'Calibri', size: 13.5, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+  cellTitulo.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // 3. Logo Oficial da TecnoDrill (I2:J3)
+  try {
+    const logoId = wb.addImage({
+      base64: TECNODRILL_LOGO_BASE64,
+      extension: 'png'
+    });
+    ws.addImage(logoId, {
+      tl: { col: 8.05, row: 1.15 },
+      ext: { width: 175, height: 52 }
+    });
+  } catch (err) {
+    ws.mergeCells('I2:J3');
+    const cellLogoFallback = ws.getCell('I2');
+    cellLogoFallback.value = 'TecnoDrill INFRA';
+    cellLogoFallback.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+    cellLogoFallback.alignment = { vertical: 'middle', horizontal: 'center' };
+  }
+
+  // 4. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 20;
+
+  // Merges de Cabeçalho Vertical
+  ws.mergeCells('B4:B5'); // ID DO SERVIÇO
+  ws.mergeCells('C4:C5'); // NOME DO SERVIÇO
+  ws.mergeCells('D4:D5'); // DATA
+  ws.mergeCells('H4:H5'); // Valor Metro
+  ws.mergeCells('I4:I5'); // VALOR TOTAL FURO
+
+  // Linha 4
+  ws.getCell('B4').value = 'ID DO SERVIÇO';
+  ws.getCell('C4').value = 'NOME DO SERVIÇO';
+  ws.getCell('D4').value = 'DATA';
+  ws.getCell('E4').value = "'OS'";
+  ws.getCell('F4').value = 'MEDIDA 1';
+  ws.getCell('G4').value = 'DUTO';
+  ws.getCell('H4').value = 'Valor Metro';
+  ws.getCell('I4').value = 'VALOR TOTAL FURO';
+  ws.getCell('J4').value = 'DESCRIÇÃO';
+
+  // Linha 5
+  ws.getCell('E5').value = 'nº';
+  ws.getCell('F5').value = 'mts';
+  ws.getCell('G5').value = 'diametro';
+  ws.getCell('J5').value = 'observação';
+
+  const colsHeader = ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+  [4, 5].forEach(rowNum => {
+    colsHeader.forEach(colLetter => {
+      const cell = ws.getCell(`${colLetter}${rowNum}`);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: COLOR_TECNODRILL_DARK }
+      };
+      cell.font = {
+        name: 'Calibri',
+        size: 9.5,
+        bold: true,
+        color: { argb: COLOR_WHITE }
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: 'center',
+        wrapText: true
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        left: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        bottom: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } },
+        right: { style: 'thin', color: { argb: COLOR_BORDER_HEADER } }
+      };
+    });
+  });
+
+  // 5. Linhas de Dados (A partir da Linha 6)
+  let curRow = 6;
+
+  if (itensConsolidados.length === 0) {
+    ws.getRow(curRow).height = 24;
+    ws.mergeCells(`B${curRow}:J${curRow}`);
+    const emptyCell = ws.getCell(`B${curRow}`);
+    emptyCell.value = 'Nenhum lançamento de medição registrado para os filtros selecionados.';
+    emptyCell.font = { name: 'Calibri', size: 10.5, italic: true, color: { argb: 'FF64748B' } };
+    emptyCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    colsHeader.forEach(colLetter => {
+      ws.getCell(`${colLetter}${curRow}`).border = {
+        top: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+        bottom: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } }
+      };
+    });
+    curRow++;
+  } else {
+    itensConsolidados.forEach((item, idx) => {
+      const row = ws.getRow(curRow);
+      row.height = 21;
+      const isZebra = idx % 2 === 1;
+      const rowBgColor = isZebra ? COLOR_ZEBRA_LIGHT : COLOR_WHITE;
+
+      // Col B: ID do Serviço
+      const cB = ws.getCell(`B${curRow}`);
+      cB.value = item.servicoId;
+      cB.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col C: Nome do Serviço
+      const cC = ws.getCell(`C${curRow}`);
+      cC.value = item.servicoNome;
+      cC.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+
+      // Col D: DATA
+      const cD = ws.getCell(`D${curRow}`);
+      cD.value = item.data;
+      cD.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col E: 'OS' nº
+      const cE = ws.getCell(`E${curRow}`);
+      cE.value = item.os;
+      cE.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col F: MEDIDA 1 mts
+      const cF = ws.getCell(`F${curRow}`);
+      cF.value = item.medidaMts;
+      cF.numFmt = '#,##0.0';
+      cF.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col G: DUTO diametro
+      const cG = ws.getCell(`G${curRow}`);
+      cG.value = item.diametro;
+      cG.numFmt = '0';
+      cG.alignment = { vertical: 'middle', horizontal: 'center' };
+
+      // Col H: Valor Metro
+      const cH = ws.getCell(`H${curRow}`);
+      cH.value = item.valorMetro;
+      cH.numFmt = '"R$" #,##0.00';
+      cH.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col I: VALOR TOTAL FURO (Fórmula Excel com valor pré-calculado)
+      const cI = ws.getCell(`I${curRow}`);
+      cI.value = {
+        formula: `F${curRow}*H${curRow}`,
+        result: item.valorTotal
+      };
+      cI.numFmt = '"R$" #,##0.00';
+      cI.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
+      cI.alignment = { vertical: 'middle', horizontal: 'right' };
+
+      // Col J: DESCRIÇÃO observação
+      const cJ = ws.getCell(`J${curRow}`);
+      cJ.value = item.observacao;
+      cJ.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+
+      // Aplicação de Estilo e Bordas em todas as células da linha
+      colsHeader.forEach(colLetter => {
+        const cell = ws.getCell(`${colLetter}${curRow}`);
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: rowBgColor }
+        };
+        if (!cell.font) {
+          cell.font = { name: 'Calibri', size: 10, color: { argb: COLOR_TECNODRILL_DARK } };
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          left: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          bottom: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } },
+          right: { style: 'thin', color: { argb: COLOR_BORDER_LIGHT } }
+        };
+      });
+
+      curRow++;
+    });
+  }
+
+  // 6. Linha de TOTAL CONSOLIDADO - Fundo Laranja TecnoDrill (#F05A22) e Texto em Branco
+  const rowTotal = ws.getRow(curRow);
+  rowTotal.height = 26;
+
+  // Mesclar B a E para 'TOTAL GERAL CONSOLIDADO'
+  ws.mergeCells(`B${curRow}:E${curRow}`);
+  const cTotalLabel = ws.getCell(`B${curRow}`);
+  cTotalLabel.value = 'TOTAL GERAL CONSOLIDADO';
+  cTotalLabel.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  if (itensConsolidados.length > 0) {
+    // Col F: Soma Metragem
+    const cTotalMts = ws.getCell(`F${curRow}`);
+    cTotalMts.value = {
+      formula: `SUM(F6:F${curRow - 1})`
+    };
+    cTotalMts.numFmt = '#,##0.0';
+    cTotalMts.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    // Col I: Soma Financeira
+    const cTotalVal = ws.getCell(`I${curRow}`);
+    cTotalVal.value = {
+      formula: `SUM(I6:I${curRow - 1})`
+    };
+    cTotalVal.numFmt = '"R$" #,##0.00';
+    cTotalVal.alignment = { vertical: 'middle', horizontal: 'right' };
+  }
+
+  // Estilização das células da Linha de TOTAL
+  colsHeader.forEach(colLetter => {
+    const cell = ws.getCell(`${colLetter}${curRow}`);
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: COLOR_TECNODRILL_ORANGE }
+    };
+    cell.font = {
+      name: 'Calibri',
+      size: 11,
+      bold: true,
+      color: { argb: COLOR_WHITE }
+    };
+    cell.border = {
+      top: { style: 'thin', color: { argb: COLOR_WHITE } },
+      bottom: { style: 'double', color: { argb: COLOR_TECNODRILL_DARK } },
+      left: { style: 'thin', color: { argb: '33FFFFFF' } },
+      right: { style: 'thin', color: { argb: '33FFFFFF' } }
+    };
+  });
+
+  return ws;
+}
+
+/**
+ * Cria e formata uma worksheet com a identidade visual executiva da TecnoDrill para uma obra específica
  */
 function criarWorksheetEstilizada(
   wb: ExcelJS.Workbook,
@@ -213,7 +501,6 @@ function criarWorksheetEstilizada(
       ext: { width: 175, height: 52 }
     });
   } catch (err) {
-    // Fallback texto caso imagem falhe
     ws.mergeCells('G2:H3');
     const cellLogoFallback = ws.getCell('G2');
     cellLogoFallback.value = 'TecnoDrill INFRA';
@@ -450,14 +737,19 @@ export async function exportarRelatorioMedicaoServico(
 
   const mesesKeys = Object.keys(porMes);
   const clienteOuObra = servico.cliente || servico.nome;
+  const nomeObra = (servico.nome || servico.id).trim();
 
   if (mesesKeys.length === 0) {
+    const tabName = sanitizarNomeAba(nomeObra);
     const fallbackMes = nomeFiltroPeriodo ? nomeFiltroPeriodo.toUpperCase() : 'MEDIÇÃO';
-    criarWorksheetEstilizada(wb, clienteOuObra, fallbackMes, [], fallbackMes.slice(0, 31));
+    criarWorksheetEstilizada(wb, clienteOuObra, fallbackMes, [], tabName);
   } else {
     mesesKeys.forEach(mesNome => {
       const itens = porMes[mesNome];
-      const tabName = mesNome.slice(0, 31);
+      const baseTitle = mesesKeys.length > 1
+        ? `${nomeObra.slice(0, 20)} - ${mesNome.slice(0, 7)}`
+        : nomeObra;
+      const tabName = sanitizarNomeAba(baseTitle);
       criarWorksheetEstilizada(wb, clienteOuObra, mesNome, itens, tabName);
     });
   }
@@ -471,6 +763,9 @@ export async function exportarRelatorioMedicaoServico(
 
 /**
  * Gera e dispara o download consolidado de todas as obras filtradas
+ * Inclui:
+ * 1. Primeira aba "CONSOLIDADO" com todas as informações e colunas (ID do Serviço e Nome do Serviço)
+ * 2. Abas subsequentes com o NOME DO SERVIÇO individual
  */
 export async function exportarRelatorioMedicaoConsolidado(
   servicos: Servico[],
@@ -483,31 +778,58 @@ export async function exportarRelatorioMedicaoConsolidado(
 
   const usedSheetNames = new Set<string>();
 
+  // 1. Coleta e consolidação de todos os itens de medição de todas as obras
+  const todosItensConsolidados: ItemMedicaoConsolidado[] = [];
+
+  servicos.forEach(servico => {
+    const barras = barrasPorServico[servico.id] || [];
+    const porMes = processarBarrasParaMedicao(servico, barras);
+    Object.values(porMes).forEach(itensDoMes => {
+      itensDoMes.forEach(it => {
+        todosItensConsolidados.push({
+          ...it,
+          servicoId: servico.id,
+          servicoNome: servico.nome
+        });
+      });
+    });
+  });
+
+  // Ordenar itens consolidados por data cronológica
+  todosItensConsolidados.sort((a, b) => a.dataRaw.getTime() - b.dataRaw.getTime());
+
+  // Criar Aba Principal Consolidada (Primeira Aba)
+  criarWorksheetConsolidada(wb, todosItensConsolidados, nomeFiltroPeriodo);
+  usedSheetNames.add('CONSOLIDADO');
+
+  // 2. Abas individuais com o NOME DO SERVIÇO
   servicos.forEach(servico => {
     const barras = barrasPorServico[servico.id] || [];
     const porMes = processarBarrasParaMedicao(servico, barras);
     const mesesKeys = Object.keys(porMes);
     const clienteOuObra = servico.cliente || servico.nome;
-    const siglaObra = (servico.id || servico.nome.slice(0, 10)).replace(/[^a-zA-Z0-9]/g, '');
+    const nomeObra = (servico.nome || servico.id).trim();
 
     if (mesesKeys.length === 0) {
-      let rawTitle = nomeFiltroPeriodo ? `${siglaObra}_${nomeFiltroPeriodo.slice(0, 15)}` : `${siglaObra}_MED`;
-      let tabTitle = rawTitle.slice(0, 31);
+      let tabTitle = sanitizarNomeAba(nomeObra);
       let counter = 1;
       while (usedSheetNames.has(tabTitle.toUpperCase())) {
-        tabTitle = `${rawTitle.slice(0, 28)}_${counter}`.slice(0, 31);
+        tabTitle = sanitizarNomeAba(`${nomeObra.slice(0, 27)}_${counter}`);
         counter++;
       }
       usedSheetNames.add(tabTitle.toUpperCase());
-      criarWorksheetEstilizada(wb, clienteOuObra, tabTitle, [], tabTitle);
+      const fallbackMes = nomeFiltroPeriodo ? nomeFiltroPeriodo.toUpperCase() : 'MEDIÇÃO';
+      criarWorksheetEstilizada(wb, clienteOuObra, fallbackMes, [], tabTitle);
     } else {
       mesesKeys.forEach(mesNome => {
         const itens = porMes[mesNome];
-        let rawTitle = `${mesNome} - ${siglaObra}`;
-        let tabTitle = rawTitle.slice(0, 31);
+        let baseTitle = mesesKeys.length > 1
+          ? `${nomeObra.slice(0, 20)} - ${mesNome.slice(0, 7)}`
+          : nomeObra;
+        let tabTitle = sanitizarNomeAba(baseTitle);
         let counter = 1;
         while (usedSheetNames.has(tabTitle.toUpperCase())) {
-          tabTitle = `${rawTitle.slice(0, 28)}_${counter}`.slice(0, 31);
+          tabTitle = sanitizarNomeAba(`${baseTitle.slice(0, 27)}_${counter}`);
           counter++;
         }
         usedSheetNames.add(tabTitle.toUpperCase());
