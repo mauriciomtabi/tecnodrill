@@ -208,7 +208,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
 
     let htmlContent = '';
     try {
-      const respHtml = await fetch('/preview-email-diario.html');
+      const respHtml = await fetch('/preview-email-diario.html?t=' + Date.now());
       if (respHtml.ok) {
         htmlContent = await respHtml.text();
         htmlContent = htmlContent.replace(/tecnodrill-66l8\.vercel\.app/g, 'tecnodrill.vercel.app');

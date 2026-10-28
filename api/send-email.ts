@@ -61,60 +61,176 @@ export default async function handler(req: any, res: any) {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>TecnoDrill INFRA - Relatório Diário de Produção</title>
       </head>
-      <body style="margin: 0; padding: 0; background: #0F1215; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background: #0F1215; padding: 24px 10px;">
+      <body bgcolor="#0F1215" style="margin: 0; padding: 0; background-color: #0F1215; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; -webkit-font-smoothing: antialiased;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0F1215" style="background-color: #0F1215; margin: 0; padding: 24px 10px; width: 100%;">
           <tr>
-            <td align="center">
-              <table width="640" cellpadding="0" cellspacing="0" border="0" style="background: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
-                <!-- HEADER -->
+            <td align="center" style="padding: 0;">
+              <table width="660" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="width: 100%; max-width: 660px; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.35); border-collapse: separate;">
                 <tr>
-                  <td style="background: #161B22; padding: 26px 32px; border-bottom: 4px solid #F05A22;">
-                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <td bgcolor="#161B22" style="background-color: #161B22; padding: 26px 32px; border-bottom: 4px solid #F05A22;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse;">
                       <tr>
-                        <td>
-                          <div style="color: #FFFFFF; font-size: 22px; font-weight: 800;">
-                            Tecno<span style="color: #F05A22;">Drill</span> <span style="font-size: 13px; font-weight: 400; color: #94A3B8;">INFRA</span>
+                        <td align="left" valign="middle">
+                          <div style="color: #FFFFFF; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2;">
+                            Tecno<span style="color: #F05A22;">Drill</span> <span style="font-size: 14px; font-weight: 400; color: #94A3B8;">INFRA</span>
                           </div>
-                          <div style="color: #94A3B8; font-size: 11px; margin-top: 3px;">
-                            Inteligência Operacional & Perfuração Não Destrutiva
+                          <div style="color: #94A3B8; font-size: 11.5px; margin-top: 4px; font-weight: 500;">
+                            Inteligência Operacional &amp; Perfuração Não Destrutiva
                           </div>
                         </td>
                         <td align="right" valign="middle">
-                          <div style="color: #FFFFFF; font-size: 13px; font-weight: 700;">
+                          <div style="color: #F8FAFC; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px; line-height: 1.2;">
                             ${dataFormatada}
                           </div>
-                          <div style="color: #F05A22; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-top: 3px;">
-                            Fechamento Diário • 19:00h
+                          <div style="color: #F05A22; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
+                            FECHAMENTO DIÁRIO • 19:00H
                           </div>
                         </td>
                       </tr>
                     </table>
                   </td>
                 </tr>
-                <!-- CONTEUDO -->
                 <tr>
-                  <td style="padding: 24px 32px 10px;">
-                    <h2 style="margin: 0 0 6px 0; font-size: 18px; color: #161B22; font-weight: 800;">
-                      Relatório Diário de Produção & Faturamento
+                  <td style="padding: 24px 32px 10px 32px;">
+                    <h2 style="margin: 0 0 6px 0; font-size: 20px; color: #161B22; font-weight: 800; line-height: 1.3;">
+                      Relatório Diário de Produção &amp; Faturamento
                     </h2>
-                    <p style="margin: 0; color: #64748B; font-size: 13px; line-height: 1.5;">
-                      Fechamento diário consolidado com sucesso no sistema <strong>TecnoDrill INFRA</strong>.
+                    <p style="margin: 0; color: #64748B; font-size: 13.5px; line-height: 1.5;">
+                      Fechamento consolidado das obras em <strong>${dataFormatada}</strong>.
                     </p>
                   </td>
                 </tr>
-                <!-- BOTAO PORTAL -->
                 <tr>
-                  <td style="padding: 24px 32px 32px; text-align: center; background: #F8FAFC; border-top: 1px solid #E2E8F0;">
-                    <a href="https://tecnodrill.vercel.app" style="background-color: #F05A22; color: #FFFFFF !important; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; display: inline-block;">
-                      Acessar Painel do BI TecnoDrill →
-                    </a>
+                  <td style="padding: 14px 32px 20px 32px;">
+                    <table width="100%" cellpadding="0" cellspacing="12" border="0" style="width: 100%; border-collapse: separate;">
+                      <tr>
+                        <td width="50%" bgcolor="#FFF7ED" valign="top" style="background-color: #FFF7ED; border: 1px solid #FED7AA; border-radius: 10px; padding: 16px; text-align: left;">
+                          <div style="font-size: 11px; font-weight: 700; color: #C2410C; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                            METROS PERFURADOS HOJE
+                          </div>
+                          <div style="font-size: 26px; font-weight: 800; color: #EA580C; margin: 2px 0 4px 0; line-height: 1.2;">
+                            738,0 m
+                          </div>
+                          <div style="font-size: 11.5px; color: #10B981; font-weight: 600;">
+                            Produção consolidada do dia
+                          </div>
+                        </td>
+                        <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                          <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                            RECEITA ESTIMADA (HOJE)
+                          </div>
+                          <div style="font-size: 26px; font-weight: 800; color: #2ECC71; margin: 2px 0 4px 0; line-height: 1.2; white-space: nowrap;">
+                            R$ 73.800,00
+                          </div>
+                          <div style="font-size: 11.5px; color: #059669; font-weight: 600; white-space: nowrap;">
+                            Acumulado no mês: R$ 489.000,00
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                          <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                            ACUMULADO NO MÊS
+                          </div>
+                          <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
+                            4.890,0 m
+                          </div>
+                          <div style="font-size: 11.5px; color: #2563EB; font-weight: 600;">
+                            87% da meta mensal atingida
+                          </div>
+                        </td>
+                        <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                          <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                            FRENTES DE OBRA
+                          </div>
+                          <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
+                            3 Obras Hoje
+                          </div>
+                          <div style="font-size: 11.5px; color: #64748B; font-weight: 600;">
+                            de um total de 8 obras
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
-                <!-- FOOTER -->
                 <tr>
-                  <td style="background: #0F1215; padding: 18px 24px; text-align: center; color: #64748B; font-size: 11px;">
-                    Informativo automático do <strong>BI JLE Telecom — TecnoDrill INFRA</strong>.
+                  <td style="padding: 10px 32px 10px 32px;">
+                    <div style="font-size: 14px; font-weight: 800; color: #161B22; text-transform: uppercase; letter-spacing: 0.5px;">
+                      PRODUÇÃO POR OBRA NO DIA
+                    </div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 0 32px 24px 32px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; font-size: 12.5px;">
+                      <thead>
+                        <tr bgcolor="#161B22">
+                          <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Obra / Serviço</th>
+                          <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Cliente</th>
+                          <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros Hoje</th>
+                          <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
+                          <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Meta Diária</th>
+                          <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr bgcolor="#FFFFFF">
+                          <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;"><strong style="color: #0F1215;">VALE DO OURO ITABERÁ</strong></td>
+                          <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">Construtora Vale do Ouro</td>
+                          <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">243,0 m</td>
+                          <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 24.300,00</td>
+                          <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">100 m</td>
+                          <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;"><span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">Meta Batida</span></td>
+                        </tr>
+                        <tr bgcolor="#F8FAFC">
+                          <td style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;"><strong style="color: #0F1215;">SANEAMENTO DOM PEDRI</strong></td>
+                          <td style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">SABESP</td>
+                          <td align="right" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">435,0 m</td>
+                          <td align="right" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 43.500,00</td>
+                          <td align="center" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">100 m</td>
+                          <td align="center" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;"><span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">Meta Batida</span></td>
+                        </tr>
+                        <tr bgcolor="#FFFFFF">
+                          <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;"><strong style="color: #0F1215;">REDE 280 CANOAS</strong></td>
+                          <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">Telefônica</td>
+                          <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">60,0 m</td>
+                          <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 6.000,00</td>
+                          <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">54 m</td>
+                          <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;"><span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">Meta Batida</span></td>
+                        </tr>
+                        <tr bgcolor="#F05A22">
+                          <td colspan="2" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; padding: 13px 14px; font-size: 13px;">TOTAL GERAL DO DIA</td>
+                          <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 14px; padding: 13px 14px; white-space: nowrap;">738,0 m</td>
+                          <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 14px; padding: 13px 14px; white-space: nowrap;">R$ 73.800,00</td>
+                          <td colspan="2" align="center" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 12px; padding: 13px 14px; white-space: nowrap;">100% OK</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td bgcolor="#F8FAFC" align="center" style="background-color: #F8FAFC; padding: 26px 32px 30px 32px; border-top: 1px solid #E2E8F0;">
+                    <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748B; font-weight: 500;">
+                      Para consultar os detalhes completos e baixar as planilhas de medição em Excel:
+                    </p>
+                    <table cellpadding="0" cellspacing="0" border="0" align="center">
+                      <tr>
+                        <td bgcolor="#F05A22" style="background-color: #F05A22; border-radius: 6px; box-shadow: 0 4px 12px rgba(240, 90, 34, 0.35);">
+                          <a href="https://tecnodrill.vercel.app" target="_blank" style="display: inline-block; background-color: #F05A22; color: #FFFFFF !important; text-decoration: none; padding: 13px 30px; font-weight: 800; font-size: 13.5px; letter-spacing: 0.3px; border-radius: 6px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Acessar BI TecnoDrill INFRA &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td bgcolor="#0F1215" align="center" style="background-color: #0F1215; padding: 22px 32px; color: #64748B; font-size: 11px; line-height: 1.6; text-align: center;">
+                    Relatório diário gerado automaticamente pelo <strong>TecnoDrill INFRA</strong>.<br>
+                    Horário de consolidação diária: 19h00 (Horário de Brasília).
                   </td>
                 </tr>
               </table>

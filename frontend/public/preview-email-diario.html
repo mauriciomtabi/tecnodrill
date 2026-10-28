@@ -4,327 +4,278 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TecnoDrill INFRA - Relatório Diário de Produção</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #0F1215;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #334155;
-      -webkit-font-smoothing: antialiased;
-    }
-    .email-container {
-      max-width: 660px;
-      margin: 20px auto;
-      background-color: #FFFFFF;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-    }
-    .header {
-      background: linear-gradient(135deg, #161B22 0%, #0F1215 100%);
-      padding: 26px 32px;
-      border-bottom: 4px solid #F05A22;
-    }
-    .header-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .logo-text {
-      color: #FFFFFF;
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-    .logo-highlight {
-      color: #F05A22;
-    }
-
-    .intro {
-      padding: 24px 32px 10px;
-    }
-    .intro h2 {
-      margin: 0 0 6px 0;
-      font-size: 20px;
-      color: #161B22;
-      font-weight: 800;
-    }
-    .intro p {
-      margin: 0;
-      color: #64748B;
-      font-size: 13.5px;
-      line-height: 1.5;
-    }
-    .kpi-section {
-      padding: 14px 32px;
-    }
-    .kpi-table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 10px;
-    }
-    .kpi-card {
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
-      border-radius: 10px;
-      padding: 16px;
-      text-align: left;
-      vertical-align: top;
-      width: 50%;
-    }
-    .kpi-card.highlight {
-      background: #FFF7ED;
-      border-color: #FED7AA;
-    }
-    .kpi-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #64748B;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 4px;
-    }
-    .kpi-card.highlight .kpi-label {
-      color: #C2410C;
-    }
-    .kpi-value {
-      font-size: 26px;
-      font-weight: 800;
-      color: #0F1215;
-      margin: 2px 0 4px;
-    }
-    .kpi-card.highlight .kpi-value {
-      color: #EA580C;
-    }
-    .kpi-subtext {
-      font-size: 11.5px;
-      color: #10B981;
-      font-weight: 600;
-    }
-    .section-title {
-      padding: 18px 32px 10px;
-      font-size: 14px;
-      font-weight: 800;
-      color: #161B22;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .table-section {
-      padding: 0 32px 24px;
-    }
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1px solid #E2E8F0;
-      border-radius: 8px;
-      overflow: hidden;
-      font-size: 12.5px;
-    }
-    .data-table th {
-      background-color: #161B22;
-      color: #FFFFFF;
-      padding: 11px 12px;
-      font-weight: 700;
-      text-align: left;
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-    .data-table td {
-      padding: 12px;
-      border-bottom: 1px solid #E2E8F0;
-      color: #1E293B;
-      vertical-align: middle;
-    }
-    .data-table tr:nth-child(even) td {
-      background-color: #F8FAFC;
-    }
-    .data-table tr.total-row td {
-      background-color: #F05A22;
-      color: #FFFFFF;
-      font-weight: 800;
-      border: none;
-    }
-    .badge {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-size: 10.5px;
-      font-weight: 700;
-    }
-    .badge-ok {
-      background: #ECFDF5;
-      color: #059669;
-      border: 1px solid #A7F3D0;
-    }
-    .badge-andamento {
-      background: #FFFBEB;
-      color: #D97706;
-      border: 1px solid #FDE68A;
-    }
-    .cta-section {
-      padding: 24px 32px 32px;
-      text-align: center;
-      background: #F8FAFC;
-      border-top: 1px solid #E2E8F0;
-    }
-    .btn-portal {
-      display: inline-block;
-      background-color: #F05A22;
-      color: #FFFFFF !important;
-      text-decoration: none;
-      padding: 12px 28px;
-      border-radius: 6px;
-      font-weight: 800;
-      font-size: 13.5px;
-      letter-spacing: 0.3px;
-      box-shadow: 0 4px 12px rgba(240, 90, 34, 0.3);
-    }
-    .footer {
-      padding: 20px 32px;
-      text-align: center;
-      background-color: #0F1215;
-      color: #64748B;
-      font-size: 11px;
-      line-height: 1.6;
-    }
-  </style>
 </head>
-<body>
+<body bgcolor="#0F1215" style="margin: 0; padding: 0; background-color: #0F1215; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #334155; -webkit-font-smoothing: antialiased;">
 
-  <div class="email-container">
-    
-    <!-- CABEÇALHO EXECUTIVO COM LOGO TECNODRILL -->
-    <div class="header">
-      <table class="header-table">
-        <tr>
-          <td>
-            <div class="logo-text">
-              Tecno<span class="logo-highlight">Drill</span> <span style="font-size: 14px; font-weight: 400; color: #94A3B8;">INFRA</span>
-            </div>
-            <div style="color: #94A3B8; font-size: 11.5px; margin-top: 3px;">
-              Inteligência Operacional & Perfuração Não Destrutiva
-            </div>
-          </td>
-          <td style="text-align: right; vertical-align: middle;">
-            <div style="color: #F8FAFC; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px;">
-              27 de Outubro de 2026
-            </div>
-            <div style="color: #F05A22; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px;">
-              Fechamento Diário • 19:00h
-            </div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- TÍTULO -->
-    <div class="intro">
-      <h2>Relatório Diário de Produção & Faturamento</h2>
-      <p>
-        Fechamento consolidado das obras em <strong>27 de Outubro de 2026</strong>.
-      </p>
-    </div>
-
-    <!-- 4 CARDS DE INDICADORES CHAVE (KPIS DIÁRIOS & ACUMULADOS) -->
-    <div class="kpi-section">
-      <table class="kpi-table">
-        <tr>
-          <td class="kpi-card highlight">
-            <div class="kpi-label">Metros Perfurados Hoje</div>
-            <div class="kpi-value">738,0 m</div>
-            <div class="kpi-subtext">Produção consolidada do dia</div>
-          </td>
-          <td class="kpi-card">
-            <div class="kpi-label">Receita Estimada (Hoje)</div>
-            <div class="kpi-value" style="color: #2ECC71; white-space: nowrap;">R$ 73.800,00</div>
-            <div class="kpi-subtext" style="color: #059669; font-weight: 600; white-space: nowrap;">Acumulado no mês: R$ 489.000,00</div>
-          </td>
-        </tr>
-        <tr>
-          <td class="kpi-card">
-            <div class="kpi-label">Acumulado no Mês (Outubro)</div>
-            <div class="kpi-value">4.890,0 m</div>
-            <div class="kpi-subtext" style="color: #2563EB;">87% da meta mensal atingida</div>
-          </td>
-          <td class="kpi-card">
-            <div class="kpi-label">Frentes de Obra</div>
-            <div class="kpi-value">3 Obras Hoje</div>
-            <div class="kpi-subtext" style="color: #64748B; font-weight: 600;">de um total de 8 obras</div>
-          </td>
-        </tr>
-      </table>
-    </div>
-
-    <!-- TABELA DE PRODUÇÃO POR SERVIÇO / OBRA -->
-    <div class="section-title">
-      Produção por Obra no Dia
-    </div>
-
-    <div class="table-section">
-      <table class="data-table">
-        <thead>
+  <!-- TABELA CONTAINER PRINCIPAL (DARK BACKGROUND) -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0F1215" style="background-color: #0F1215; margin: 0; padding: 24px 10px; width: 100%;">
+    <tr>
+      <td align="center" style="padding: 0;">
+        
+        <!-- CARD PRINCIPAL DO RELATÓRIO (WHITE CONTAINER) -->
+        <table width="660" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="width: 100%; max-width: 660px; background-color: #FFFFFF; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.35); border-collapse: separate;">
+          
+          <!-- CABEÇALHO EXECUTIVO COM LOGO TECNODRILL -->
           <tr>
-            <th>Obra / Serviço</th>
-            <th>Cliente</th>
-            <th style="text-align: right; white-space: nowrap;">Metros Hoje</th>
-            <th style="text-align: right; white-space: nowrap;">Receita (R$)</th>
-            <th style="text-align: center; white-space: nowrap;">Meta Diária</th>
-            <th style="text-align: center; white-space: nowrap;">Status</th>
+            <td bgcolor="#161B22" style="background-color: #161B22; padding: 26px 32px; border-bottom: 4px solid #F05A22;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="left" valign="middle">
+                    <div style="color: #FFFFFF; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.2;">
+                      Tecno<span style="color: #F05A22;">Drill</span> <span style="font-size: 14px; font-weight: 400; color: #94A3B8;">INFRA</span>
+                    </div>
+                    <div style="color: #94A3B8; font-size: 11.5px; margin-top: 4px; font-weight: 500;">
+                      Inteligência Operacional &amp; Perfuração Não Destrutiva
+                    </div>
+                  </td>
+                  <td align="right" valign="middle">
+                    <div style="color: #F8FAFC; font-size: 13.5px; font-weight: 700; letter-spacing: 0.2px; line-height: 1.2;">
+                      28 de Outubro de 2026
+                    </div>
+                    <div style="color: #F05A22; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">
+                      FECHAMENTO DIÁRIO • 19:00H
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>VALE DO OURO ITABERÁ</strong></td>
-            <td style="color: #64748B;">Construtora Vale do Ouro</td>
-            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">243,0 m</td>
-            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 24.300,00</td>
-            <td style="text-align: center; color: #64748B; white-space: nowrap;">100 m</td>
-            <td style="text-align: center; white-space: nowrap;"><span class="badge badge-ok">Meta Batida</span></td>
-          </tr>
-          <tr>
-            <td><strong>SANEAMENTO DOM PEDRI</strong></td>
-            <td style="color: #64748B;">SABESP</td>
-            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">435,0 m</td>
-            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 43.500,00</td>
-            <td style="text-align: center; color: #64748B; white-space: nowrap;">100 m</td>
-            <td style="text-align: center; white-space: nowrap;"><span class="badge badge-ok">Meta Batida</span></td>
-          </tr>
-          <tr>
-            <td><strong>REDE 280 CANOAS</strong></td>
-            <td style="color: #64748B;">Telefônica</td>
-            <td style="text-align: right; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">60,0 m</td>
-            <td style="text-align: right; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">R$ 6.000,00</td>
-            <td style="text-align: center; color: #64748B; white-space: nowrap;">54 m</td>
-            <td style="text-align: center; white-space: nowrap;"><span class="badge badge-ok">Meta Batida</span></td>
-          </tr>
-          <tr class="total-row">
-            <td colspan="2" style="padding: 12px;">TOTAL GERAL DO DIA</td>
-            <td style="text-align: right; font-size: 14px; padding: 12px; white-space: nowrap;">738,0 m</td>
-            <td style="text-align: right; font-size: 14px; padding: 12px; white-space: nowrap;">R$ 73.800,00</td>
-            <td colspan="2" style="text-align: center; padding: 12px; white-space: nowrap;">100% OK</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
-    <!-- BOTÃO DE ACESSO AO PORTAL -->
-    <div class="cta-section">
-      <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748B;">
-        Para consultar os detalhes completos e baixar as planilhas de medição em Excel:
-      </p>
-      <a href="https://tecnodrill.vercel.app" class="btn-portal" target="_blank">
-        Acessar BI TecnoDrill INFRA →
-      </a>
-    </div>
+          <!-- TÍTULO DO RELATÓRIO -->
+          <tr>
+            <td style="padding: 24px 32px 10px 32px;">
+              <h2 style="margin: 0 0 6px 0; font-size: 20px; color: #161B22; font-weight: 800; line-height: 1.3;">
+                Relatório Diário de Produção &amp; Faturamento
+              </h2>
+              <p style="margin: 0; color: #64748B; font-size: 13.5px; line-height: 1.5;">
+                Fechamento consolidado das obras em <strong>28 de Outubro de 2026</strong>.
+              </p>
+            </td>
+          </tr>
 
-    <!-- RODAPÉ CORPORATIVO -->
-    <div class="footer">
-      Relatório diário gerado automaticamente pelo <strong>TecnoDrill INFRA</strong>.<br>
-      Horário de consolidação diária: 19h00 (Horário de Brasília).
-    </div>
+          <!-- 4 CARDS DE INDICADORES CHAVE (KPIS DIÁRIOS & ACUMULADOS) -->
+          <tr>
+            <td style="padding: 14px 32px 20px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="12" border="0" style="width: 100%; border-collapse: separate;">
+                <tr>
+                  <!-- CARD 1: METROS HOJE (DESTAQUE LARANJA) -->
+                  <td width="50%" bgcolor="#FFF7ED" valign="top" style="background-color: #FFF7ED; border: 1px solid #FED7AA; border-radius: 10px; padding: 16px; text-align: left;">
+                    <div style="font-size: 11px; font-weight: 700; color: #C2410C; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                      METROS PERFURADOS HOJE
+                    </div>
+                    <div style="font-size: 26px; font-weight: 800; color: #EA580C; margin: 2px 0 4px 0; line-height: 1.2;">
+                      738,0 m
+                    </div>
+                    <div style="font-size: 11.5px; color: #10B981; font-weight: 600;">
+                      Produção consolidada do dia
+                    </div>
+                  </td>
 
-  </div>
+                  <!-- CARD 2: RECEITA ESTIMADA HOJE -->
+                  <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                      RECEITA ESTIMADA (HOJE)
+                    </div>
+                    <div style="font-size: 26px; font-weight: 800; color: #2ECC71; margin: 2px 0 4px 0; line-height: 1.2; white-space: nowrap;">
+                      R$ 73.800,00
+                    </div>
+                    <div style="font-size: 11.5px; color: #059669; font-weight: 600; white-space: nowrap;">
+                      Acumulado no mês: R$ 489.000,00
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <!-- CARD 3: ACUMULADO NO MÊS -->
+                  <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                      ACUMULADO NO MÊS (OUTUBRO)
+                    </div>
+                    <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
+                      4.890,0 m
+                    </div>
+                    <div style="font-size: 11.5px; color: #2563EB; font-weight: 600;">
+                      87% da meta mensal atingida
+                    </div>
+                  </td>
+
+                  <!-- CARD 4: FRENTES DE OBRA -->
+                  <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
+                    <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                      FRENTES DE OBRA
+                    </div>
+                    <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
+                      3 Obras Hoje
+                    </div>
+                    <div style="font-size: 11.5px; color: #64748B; font-weight: 600;">
+                      de um total de 8 obras
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- TÍTULO DA SEÇÃO DA TABELA -->
+          <tr>
+            <td style="padding: 10px 32px 10px 32px;">
+              <div style="font-size: 14px; font-weight: 800; color: #161B22; text-transform: uppercase; letter-spacing: 0.5px;">
+                PRODUÇÃO POR OBRA NO DIA
+              </div>
+            </td>
+          </tr>
+
+          <!-- TABELA DE PRODUÇÃO POR SERVIÇO / OBRA -->
+          <tr>
+            <td style="padding: 0 32px 24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="width: 100%; border-collapse: collapse; border: 1px solid #E2E8F0; border-radius: 8px; overflow: hidden; font-size: 12.5px;">
+                <!-- HEADER DA TABELA -->
+                <thead>
+                  <tr bgcolor="#161B22">
+                    <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;">
+                      Obra / Serviço
+                    </th>
+                    <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;">
+                      Cliente
+                    </th>
+                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;">
+                      Metros Hoje
+                    </th>
+                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;">
+                      Receita (R$)
+                    </th>
+                    <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;">
+                      Meta Diária
+                    </th>
+                    <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 12px 14px; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap;">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- LINHA 1 -->
+                  <tr bgcolor="#FFFFFF">
+                    <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;">
+                      <strong style="color: #0F1215;">VALE DO OURO ITABERÁ</strong>
+                    </td>
+                    <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">
+                      Construtora Vale do Ouro
+                    </td>
+                    <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
+                      243,0 m
+                    </td>
+                    <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
+                      R$ 24.300,00
+                    </td>
+                    <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">
+                      100 m
+                    </td>
+                    <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;">
+                      <span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">
+                        Meta Batida
+                      </span>
+                    </td>
+                  </tr>
+
+                  <!-- LINHA 2 -->
+                  <tr bgcolor="#F8FAFC">
+                    <td style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;">
+                      <strong style="color: #0F1215;">SANEAMENTO DOM PEDRI</strong>
+                    </td>
+                    <td style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">
+                      SABESP
+                    </td>
+                    <td align="right" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
+                      435,0 m
+                    </td>
+                    <td align="right" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
+                      R$ 43.500,00
+                    </td>
+                    <td align="center" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">
+                      100 m
+                    </td>
+                    <td align="center" style="background-color: #F8FAFC; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;">
+                      <span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">
+                        Meta Batida
+                      </span>
+                    </td>
+                  </tr>
+
+                  <!-- LINHA 3 -->
+                  <tr bgcolor="#FFFFFF">
+                    <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #1E293B;">
+                      <strong style="color: #0F1215;">REDE 280 CANOAS</strong>
+                    </td>
+                    <td style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">
+                      Telefônica
+                    </td>
+                    <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
+                      60,0 m
+                    </td>
+                    <td align="right" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
+                      R$ 6.000,00
+                    </td>
+                    <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">
+                      54 m
+                    </td>
+                    <td align="center" style="padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;">
+                      <span style="display: inline-block; background-color: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">
+                        Meta Batida
+                      </span>
+                    </td>
+                  </tr>
+
+                  <!-- LINHA TOTAL GERAL -->
+                  <tr bgcolor="#F05A22">
+                    <td colspan="2" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; padding: 13px 14px; font-size: 13px;">
+                      TOTAL GERAL DO DIA
+                    </td>
+                    <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 14px; padding: 13px 14px; white-space: nowrap;">
+                      738,0 m
+                    </td>
+                    <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 14px; padding: 13px 14px; white-space: nowrap;">
+                      R$ 73.800,00
+                    </td>
+                    <td colspan="2" align="center" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 12px; padding: 13px 14px; white-space: nowrap;">
+                      100% OK
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          </tr>
+
+          <!-- BOTÃO DE ACESSO AO PORTAL -->
+          <tr>
+            <td bgcolor="#F8FAFC" align="center" style="background-color: #F8FAFC; padding: 26px 32px 30px 32px; border-top: 1px solid #E2E8F0;">
+              <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748B; font-weight: 500;">
+                Para consultar os detalhes completos e baixar as planilhas de medição em Excel:
+              </p>
+              <table cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td bgcolor="#F05A22" style="background-color: #F05A22; border-radius: 6px; box-shadow: 0 4px 12px rgba(240, 90, 34, 0.35);">
+                    <a href="https://tecnodrill.vercel.app" target="_blank" style="display: inline-block; background-color: #F05A22; color: #FFFFFF !important; text-decoration: none; padding: 13px 30px; font-weight: 800; font-size: 13.5px; letter-spacing: 0.3px; border-radius: 6px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                      Acessar BI TecnoDrill INFRA &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- RODAPÉ CORPORATIVO -->
+          <tr>
+            <td bgcolor="#0F1215" align="center" style="background-color: #0F1215; padding: 22px 32px; color: #64748B; font-size: 11px; line-height: 1.6; text-align: center;">
+              Relatório diário gerado automaticamente pelo <strong>TecnoDrill INFRA</strong>.<br>
+              Horário de consolidação diária: 19h00 (Horário de Brasília).
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
 
 </body>
 </html>
