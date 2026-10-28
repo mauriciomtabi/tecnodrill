@@ -194,53 +194,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     setSaving(false);
   };
 
-  // Disparo direto via Nuvem Resend (Idêntico ao BI JLE - 100% fail-proof e sem precisar de SMTP)
-  const dispararEmailResendDireto = async (destinatarios: string[]) => {
-    const RESEND_API_KEY = ['re_bBQyi9qa', 'C5py6HbtiYrNfPoJhZLUATRw'].join('_');
-    const FROM_EMAIL = 'bi@jletelecom.com.br';
-
-    let htmlContent = '';
-    try {
-      const respHtml = await fetch('/preview-email-diario.html');
-      if (respHtml.ok) htmlContent = await respHtml.text();
-    } catch (_) {}
-
-    if (!htmlContent) {
-      htmlContent = `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 660px; margin: 0 auto; padding: 24px; background: #0F1215; color: #FFFFFF; border-radius: 12px;">
-          <h2 style="color: #F05A22; margin-top: 0;">TecnoDrill INFRA</h2>
-          <p>Relatório Diário de Produção & Faturamento</p>
-          <p>Para visualizar todos os detalhes operacionais e tabelas, acesse o portal: <a href="https://tecnodrill-66l8.vercel.app" style="color: #F05A22; font-weight: bold;">https://tecnodrill-66l8.vercel.app</a></p>
-        </div>
-      `;
-    }
-
-    const hoje = new Date();
-    const dataFormatada = hoje.toLocaleDateString('pt-BR');
-    const subject = `📊 Relatório Diário TecnoDrill - ${dataFormatada} (220,0m - R$ 22.000,00)`;
-
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: `"TecnoDrill INFRA" <${FROM_EMAIL}>`,
-        to: destinatarios,
-        subject,
-        html: htmlContent
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.message || data.error || 'Falha na API Resend');
-    }
-    return data;
-  };
-
-  // DISPARO MANUAL DE E-MAIL (Padrão BI JLE - Resend)
+  // DISPARO MANUAL DE E-MAIL (Padrão BI JLE - Resend Serverless)
   const handleDispararEmail = async () => {
     setSendingEmail(true);
     setFeedback(null);
@@ -252,62 +206,76 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
       return;
     }
 
+    let htmlContent = '';
     try {
-      // 1. Tentar via endpoint backend
-      const token = localStorage.getItem('tecnodrill_token');
-      const res = await fetch('/api/relatorios/diario/enviar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ destinatarios: lista })
-      });
+      const respHtml = await fetch('/preview-email-diario.html');
+      if (respHtml.ok) htmlContent = await respHtml.text();
+    } catch (_) {}
 
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.sucesso) {
-          const agora = new Date().toISOString();
-          setUltimoEnvio(agora);
-          setFeedback({ 
-            type: 'success', 
-            msg: data.mensagem || `E-mail diário disparado com sucesso para ${lista.length} destinatário(s)!` 
-          });
-          if (showToast) showToast('E-mail diário disparado com sucesso!', 'success');
-          return;
+    const hoje = new Date();
+    const dataFormatada = hoje.toLocaleDateString('pt-BR');
+    const subject = `📊 Relatório Diário TecnoDrill - ${dataFormatada} (220,0m - R$ 22.000,00)`;
+
+    const endpoints = [
+      '/api/send-email',
+      '/api/relatorios/diario/enviar',
+      'https://tecnodrill.vercel.app/api/send-email'
+    ];
+
+    let sucessoEnvio = false;
+    let mensagemSucesso = '';
+    let ultimoErro = '';
+
+    const token = localStorage.getItem('tecnodrill_token');
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            destinatarios: lista,
+            to: lista,
+            subject,
+            html: htmlContent
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.sucesso || data?.success || data?.id) {
+            sucessoEnvio = true;
+            mensagemSucesso = data.mensagem || `E-mail diário enviado com sucesso para ${lista.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`;
+            break;
+          } else if (data?.error || data?.mensagem) {
+            ultimoErro = data.error || data.mensagem;
+          }
         }
+      } catch (errEp: any) {
+        ultimoErro = errEp.message;
       }
+    }
 
-      // 2. Se a rota do backend estiver offline ou retornar 404, dispara direto via API Resend (Padrão BI JLE)
-      await dispararEmailResendDireto(lista);
+    if (sucessoEnvio) {
       const agora = new Date().toISOString();
       setUltimoEnvio(agora);
       setFeedback({
         type: 'success',
-        msg: `E-mail diário enviado com sucesso para ${lista.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`
+        msg: mensagemSucesso
       });
-      if (showToast) showToast('E-mail disparado com sucesso via Nuvem!', 'success');
-    } catch (e: any) {
-      try {
-        await dispararEmailResendDireto(lista);
-        const agora = new Date().toISOString();
-        setUltimoEnvio(agora);
-        setFeedback({
-          type: 'success',
-          msg: `E-mail diário enviado com sucesso para ${lista.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`
-        });
-        if (showToast) showToast('E-mail disparado com sucesso via Nuvem!', 'success');
-      } catch (errResend: any) {
-        console.error('Erro ao enviar e-mail via Resend:', errResend);
-        setFeedback({
-          type: 'error',
-          msg: 'Não foi possível disparar o e-mail: ' + (errResend.message || 'Erro de rede')
-        });
-        if (showToast) showToast('Falha no disparo do e-mail', 'error');
-      }
-    } finally {
-      setSendingEmail(false);
+      if (showToast) showToast('E-mail disparado com sucesso!', 'success');
+    } else {
+      setFeedback({
+        type: 'error',
+        msg: 'Não foi possível disparar o e-mail: ' + (ultimoErro || 'Erro de comunicação com o servidor de envio.')
+      });
+      if (showToast) showToast('Falha no disparo do e-mail', 'error');
     }
+
+    setSendingEmail(false);
   };
 
   // Abrir template no navegador
