@@ -206,19 +206,9 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
       return;
     }
 
-    let htmlContent = '';
-    try {
-      const respHtml = await fetch('/preview-email-diario.html?t=' + Date.now());
-      if (respHtml.ok) {
-        htmlContent = await respHtml.text();
-        htmlContent = htmlContent.replace(/tecnodrill-66l8\.vercel\.app/g, 'tecnodrill.vercel.app');
-      }
-    } catch (_) {}
-
     const hoje = new Date();
     const dataFormatada = hoje.toLocaleDateString('pt-BR');
     const subject = `Relatório Diário TecnoDrill - Produção & Faturamento - ${dataFormatada}`;
-    const text = `Relatório Diário TecnoDrill - Produção & Faturamento - ${dataFormatada}\n\nFechamento diário consolidado com sucesso.\nAcesse o painel do BI TecnoDrill: https://tecnodrill.vercel.app`;
 
     const endpoints = [
       '/api/send-email',
@@ -243,9 +233,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
           body: JSON.stringify({
             destinatarios: lista,
             to: lista,
-            subject,
-            html: htmlContent,
-            text
+            subject
           })
         });
 
@@ -253,7 +241,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
           const data = await res.json().catch(() => null);
           if (data?.sucesso || data?.success || data?.id) {
             sucessoEnvio = true;
-            mensagemSucesso = data.mensagem || `E-mail diário enviado com sucesso para ${lista.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`;
+            mensagemSucesso = data.mensagem || `E-mail diário com dados reais enviado com sucesso para ${lista.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`;
             break;
           } else if (data?.error || data?.mensagem) {
             ultimoErro = data.error || data.mensagem;
