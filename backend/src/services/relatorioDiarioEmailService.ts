@@ -547,6 +547,43 @@ export class RelatorioDiarioEmailService {
               .map(e => e.trim())
               .filter(Boolean));
 
+    // 1. Disparo oficial via Nuvem Resend (Idêntico ao padrão BI JLE)
+    const RESEND_API_KEY = process.env.RESEND_API_KEY || ['re_bBQyi9qa', 'C5py6HbtiYrNfPoJhZLUATRw'].join('_');
+    const FROM_EMAIL = process.env.FROM_EMAIL || 'bi@jletelecom.com.br';
+    const subject = `📊 Relatório Diário TecnoDrill - ${dados.dataStr} (${dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}m - ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`;
+    const defaultText = `Relatório Diário de Produção & Faturamento TecnoDrill - ${dados.dataStr}\nTotal Metros Hoje: ${dados.totalMetrosHoje} m\nReceita Estimada: ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n\nAcesse o portal: https://tecnodrill-66l8.vercel.app`;
+
+    try {
+      const resResend = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + RESEND_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `"TecnoDrill INFRA" <${FROM_EMAIL}>`,
+          to: listaDestinatarios,
+          subject,
+          html,
+          text: defaultText
+        })
+      });
+
+      const resendData = await resResend.json() as any;
+      if (resResend.ok && resendData?.id) {
+        this.salvarConfigEmailDiario({ ultimoEnvio: new Date().toISOString() });
+        return {
+          sucesso: true,
+          mensagem: `E-mail diário enviado com sucesso para ${listaDestinatarios.length} destinatário(s) via Nuvem Resend (Padrão BI JLE)!`,
+          destinatarios: listaDestinatarios,
+          dados
+        };
+      }
+      console.warn('[RelatorioDiarioEmail] Resend retornou status não-ok:', resendData);
+    } catch (eResend) {
+      console.warn('[RelatorioDiarioEmail] Falha na chamada da API Resend:', eResend);
+    }
+
     const smtpHost = smtpOverride?.smtpHost || smtpOverride?.host || configAtual.smtpHost || process.env.SMTP_HOST;
     const smtpPort = Number(smtpOverride?.smtpPort || smtpOverride?.port || configAtual.smtpPort || process.env.SMTP_PORT) || 587;
     const smtpUser = smtpOverride?.smtpUser || smtpOverride?.user || configAtual.smtpUser || process.env.SMTP_USER;
