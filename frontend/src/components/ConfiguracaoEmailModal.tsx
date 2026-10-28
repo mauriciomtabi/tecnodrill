@@ -209,12 +209,16 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     let htmlContent = '';
     try {
       const respHtml = await fetch('/preview-email-diario.html');
-      if (respHtml.ok) htmlContent = await respHtml.text();
+      if (respHtml.ok) {
+        htmlContent = await respHtml.text();
+        htmlContent = htmlContent.replace(/tecnodrill-66l8\.vercel\.app/g, 'tecnodrill.vercel.app');
+      }
     } catch (_) {}
 
     const hoje = new Date();
     const dataFormatada = hoje.toLocaleDateString('pt-BR');
-    const subject = `📊 Relatório Diário TecnoDrill - ${dataFormatada} (220,0m - R$ 22.000,00)`;
+    const subject = `Relatório Diário TecnoDrill - Produção & Faturamento - ${dataFormatada}`;
+    const text = `Relatório Diário TecnoDrill - Produção & Faturamento - ${dataFormatada}\n\nFechamento diário consolidado com sucesso.\nAcesse o painel do BI TecnoDrill: https://tecnodrill.vercel.app`;
 
     const endpoints = [
       '/api/send-email',
@@ -240,7 +244,8 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
             destinatarios: lista,
             to: lista,
             subject,
-            html: htmlContent
+            html: htmlContent,
+            text
           })
         });
 
@@ -744,7 +749,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
               <span>Remetente Oficial:</span>
-              <strong style={{ color: 'var(--text-main)' }}>TecnoDrill INFRA &lt;bi@jletelecom.com.br&gt;</strong>
+              <strong style={{ color: 'var(--text-main)' }}>BI JLE Telecom &lt;bi@jletelecom.com.br&gt;</strong>
               <span style={{ color: 'var(--border-color)' }}>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
                 <Sparkles size={12} />

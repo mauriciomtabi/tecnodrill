@@ -60,7 +60,7 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
   smtpPort: 587,
   smtpUser: '',
   smtpPass: '',
-  smtpFrom: '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>',
+  smtpFrom: '"BI JLE Telecom" <bi@jletelecom.com.br>',
   smtpSecure: false
 };
 
@@ -96,7 +96,7 @@ export class RelatorioDiarioEmailService {
         smtpPort: Number(saved.smtpPort || process.env.SMTP_PORT) || 587,
         smtpUser: saved.smtpUser || process.env.SMTP_USER || '',
         smtpPass: saved.smtpPass || process.env.SMTP_PASS || '',
-        smtpFrom: saved.smtpFrom || process.env.SMTP_FROM || '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>',
+        smtpFrom: saved.smtpFrom || process.env.SMTP_FROM || '"BI JLE Telecom" <bi@jletelecom.com.br>',
         smtpSecure: saved.smtpSecure !== undefined ? saved.smtpSecure : (Number(saved.smtpPort || process.env.SMTP_PORT) === 465)
       };
     } catch (e) {
@@ -454,7 +454,7 @@ export class RelatorioDiarioEmailService {
       <p style="margin: 0 0 14px 0; font-size: 13px; color: #64748B;">
         Para consultar os detalhes completos e baixar as planilhas de medição em Excel:
       </p>
-      <a href="https://tecnodrill-66l8.vercel.app" style="display: inline-block; background-color: #F05A22; color: #FFFFFF !important; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 800; font-size: 13.5px; letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(240, 90, 34, 0.3);" target="_blank">
+      <a href="https://tecnodrill.vercel.app" style="display: inline-block; background-color: #F05A22; color: #FFFFFF !important; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-weight: 800; font-size: 13.5px; letter-spacing: 0.3px; box-shadow: 0 4px 12px rgba(240, 90, 34, 0.3);" target="_blank">
         Acessar BI TecnoDrill INFRA →
       </a>
     </div>
@@ -550,22 +550,28 @@ export class RelatorioDiarioEmailService {
     // 1. Disparo oficial via Nuvem Resend (Idêntico ao padrão BI JLE)
     const RESEND_API_KEY = process.env.RESEND_API_KEY || ['re_bBQyi9qa', 'C5py6HbtiYrNfPoJhZLUATRw'].join('_');
     const FROM_EMAIL = process.env.FROM_EMAIL || 'bi@jletelecom.com.br';
-    const subject = `📊 Relatório Diário TecnoDrill - ${dados.dataStr} (${dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 })}m - ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`;
-    const defaultText = `Relatório Diário de Produção & Faturamento TecnoDrill - ${dados.dataStr}\nTotal Metros Hoje: ${dados.totalMetrosHoje} m\nReceita Estimada: ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n\nAcesse o portal: https://tecnodrill-66l8.vercel.app`;
+    const subject = `Relatório Diário TecnoDrill - Produção & Faturamento - ${dados.dataStr}`;
+    const defaultText = `Relatório Diário de Produção & Faturamento TecnoDrill - ${dados.dataStr}\nTotal Metros Hoje: ${dados.totalMetrosHoje} m\nReceita Estimada: ${dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}\n\nAcesse o portal do BI: https://tecnodrill.vercel.app`;
 
     try {
       const resResend = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + RESEND_API_KEY,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
         body: JSON.stringify({
-          from: `"TecnoDrill INFRA" <${FROM_EMAIL}>`,
+          from: `"BI JLE Telecom" <${FROM_EMAIL}>`,
           to: listaDestinatarios,
           subject,
           html,
-          text: defaultText
+          text: defaultText,
+          headers: {
+            'X-Entity-Ref-ID': `tecnodrill-report-${Date.now()}`,
+            'X-Auto-Response-Suppress': 'OOF, AutoReply',
+            'Precedence': 'bulk'
+          }
         })
       });
 

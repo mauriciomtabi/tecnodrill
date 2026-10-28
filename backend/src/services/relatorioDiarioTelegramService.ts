@@ -189,7 +189,7 @@ export class RelatorioDiarioTelegramService {
           [
             {
               text: '📊 Acessar BI TecnoDrill INFRA',
-              url: 'https://tecnodrill-66l8.vercel.app'
+              url: 'https://tecnodrill.vercel.app'
             }
           ]
         ]
