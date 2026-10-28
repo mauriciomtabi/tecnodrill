@@ -63,7 +63,7 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
     if (b.observacao && b.observacao.includes('BARRA_META:')) {
       const match = b.observacao.match(/<!--BARRA_META:(.*?)-->/);
       if (match) {
-        try { d = JSON.parse(match[1]).data_referencia || ''; } catch (_) {}
+        try { d = JSON.parse(match[1]).data_referencia || ''; } catch (_) { }
       }
     }
     if (!d && b.horario_registro) d = b.horario_registro.slice(0, 10);
@@ -492,31 +492,16 @@ function buildHtmlRelatorioCompleto(dados: any): string {
 </html>`;
 }
 
-export default async function handler(req: any, res: any) {
-  // Configurar Headers de CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function enviarRelatorioEmailExec(options?: {
+  to?: string[] | string;
+  destinatarios?: string[] | string;
+  subject?: string;
+  html?: string;
+  text?: string;
+  dataRef?: string;
+}): Promise<{ sucesso: boolean; id?: string; error?: string; dados?: any; mensagem?: string }> {
   try {
-    let body = req.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch (_) {}
-    }
-
-    const { to, destinatarios, subject, html, text, dataRef } = body || {};
+    const { to, destinatarios, subject, html, text, dataRef } = options || {};
 
     const rawList = to || destinatarios || [
       'mauricio.maciel@jletelecom.com.br',
@@ -529,7 +514,7 @@ export default async function handler(req: any, res: any) {
       .filter((e: string) => e && e.includes('@'));
 
     if (cleanRecipients.length === 0) {
-      return res.status(400).json({ error: 'Nenhum destinatário válido informado.' });
+      return { sucesso: false, error: 'Nenhum destinatário válido informado.' };
     }
 
     // Obter dados dinâmicos consolidados do Supabase
@@ -587,18 +572,61 @@ export default async function handler(req: any, res: any) {
     const resendData = (await resendRes.json()) as any;
     if (!resendRes.ok) {
       console.error('[send-email] Erro na API Resend:', resendData);
-      return res.status(resendRes.status).json({ error: resendData?.message || 'Falha no envio pela API Resend' });
+      return { sucesso: false, error: resendData?.message || 'Falha no envio pela API Resend' };
+    }
+
+    return {
+      sucesso: true,
+      id: resendData?.id,
+      dados,
+      mensagem: `E-mail com histórico dos últimos 5 dias enviado com sucesso para ${cleanRecipients.length} destinatário(s) via Nuvem Resend!`
+    };
+  } catch (err: any) {
+    console.error('[send-email] Erro interno no envio:', err);
+    return { sucesso: false, error: err.message || 'Erro interno no servidor ao disparar e-mail' };
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  // Configurar Headers de CORS
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  try {
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { }
+    }
+
+    const payload = {
+      ...(body || {}),
+      dataRef: req.query?.data || body?.dataRef
+    };
+
+    const resultado = await enviarRelatorioEmailExec(payload);
+
+    if (!resultado.sucesso) {
+      return res.status(400).json({ error: resultado.error || 'Falha no envio de e-mail' });
     }
 
     return res.status(200).json({
       success: true,
       sucesso: true,
-      id: resendData?.id,
-      dados,
-      mensagem: `E-mail com histórico dos últimos 5 dias enviado com sucesso para ${cleanRecipients.length} destinatário(s) via Nuvem Resend!`
+      id: resultado.id,
+      dados: resultado.dados,
+      mensagem: resultado.mensagem
     });
   } catch (err: any) {
-    console.error('[send-email] Erro interno:', err);
+    console.error('[send-email] Erro no handler:', err);
     return res.status(500).json({ error: err.message || 'Erro interno no servidor ao disparar e-mail' });
   }
 }

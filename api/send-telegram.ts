@@ -71,29 +71,19 @@ export function buildTelegramMessage(dados: any): string {
   return msg;
 }
 
-export default async function handler(req: any, res: any) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido. Use POST.' });
-  }
-
+export async function enviarRelatorioTelegramExec(options?: {
+  chatId?: string;
+  botToken?: string;
+  dataRef?: string;
+}): Promise<{ sucesso: boolean; id?: number; error?: string; dados?: any; mensagem?: string }> {
   try {
-    const { chatId, botToken, dataRef } = req.body || {};
+    const { chatId, botToken, dataRef } = options || {};
 
     const token = botToken || DEFAULT_BOT_TOKEN;
     const targetChatId = chatId || DEFAULT_CHAT_ID;
 
     if (!token || !targetChatId) {
-      return res.status(400).json({ error: 'Token ou Chat ID do Telegram não configurados.' });
+      return { sucesso: false, error: 'Token ou Chat ID do Telegram não configurados.' };
     }
 
     const dados = await getDadosCompletosSupabase(dataRef);
@@ -125,19 +115,65 @@ export default async function handler(req: any, res: any) {
 
     if (!tgData.ok) {
       console.error('[send-telegram] Erro API Telegram:', tgData);
+      return {
+        sucesso: false,
+        error: tgData.description || 'Falha ao entregar mensagem no Telegram'
+      };
+    }
+
+    return {
+      sucesso: true,
+      id: tgData.result?.message_id,
+      dados,
+      mensagem: 'Relatório diário com histórico dos últimos 5 dias enviado com sucesso para o grupo do Telegram!'
+    };
+  } catch (err: any) {
+    console.error('[send-telegram] Erro interno no envio:', err);
+    return {
+      sucesso: false,
+      error: err.message || 'Erro interno no envio Telegram'
+    };
+  }
+}
+
+export default async function handler(req: any, res: any) {
+  // CORS
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  try {
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (_) { }
+    }
+
+    const payload = {
+      ...(body || {}),
+      dataRef: req.query?.data || body?.dataRef
+    };
+
+    const resultado = await enviarRelatorioTelegramExec(payload);
+
+    if (!resultado.sucesso) {
       return res.status(502).json({
         success: false,
         sucesso: false,
-        error: tgData.description || 'Falha ao entregar mensagem no Telegram'
+        error: resultado.error
       });
     }
 
     return res.status(200).json({
       success: true,
       sucesso: true,
-      id: tgData.result?.message_id,
-      dados,
-      mensagem: 'Relatório diário com histórico dos últimos 5 dias enviado com sucesso para o grupo do Telegram!'
+      id: resultado.id,
+      dados: resultado.dados,
+      mensagem: resultado.mensagem
     });
   } catch (err: any) {
     console.error('[send-telegram] Erro interno:', err);
@@ -148,3 +184,4 @@ export default async function handler(req: any, res: any) {
     });
   }
 }
+
