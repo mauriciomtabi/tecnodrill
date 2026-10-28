@@ -3,15 +3,15 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJh
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ['re_bBQyi9qa', 'C5py6HbtiYrNfPoJhZLUATRw'].join('_');
 const FROM_EMAIL = process.env.FROM_EMAIL || 'bi@jletelecom.com.br';
 
-function formatCurrency(val: number): string {
+export function formatCurrency(val: number): string {
   return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-function formatMeters(val: number): string {
+export function formatMeters(val: number): string {
   return (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
-async function getDadosCompletosSupabase(dataRef?: string) {
+export async function getDadosCompletosSupabase(dataRef?: string) {
   const headers = {
     'apikey': SUPABASE_SERVICE_ROLE_KEY,
     'Authorization': 'Bearer ' + SUPABASE_SERVICE_ROLE_KEY

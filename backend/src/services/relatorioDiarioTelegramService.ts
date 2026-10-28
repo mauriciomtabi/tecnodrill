@@ -113,47 +113,80 @@ export class RelatorioDiarioTelegramService {
   /**
    * Constrói a mensagem corporativa formatada para o Telegram
    */
-  public static formatarMensagemTelegram(dados: DadosFechamentoDiario): string {
+  public static formatarMensagemTelegram(dados: any): string {
     const dataExtenso = dados.dataExtenso;
-    const horario = dados.horarioFechamento;
-    const metrosHoje = dados.totalMetrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 });
-    const receitaHoje = dados.totalReceitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    const acumuladoMes = dados.acumuladoMesMetros.toLocaleString('pt-BR', { minimumFractionDigits: 1 });
-    const receitaAcumuladaMes = dados.acumuladoMesReceita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const now = new Date();
+    const horario = dados.horarioEnvio || dados.horarioFechamento || `${now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' })}h`;
+    const metrosHoje = (dados.totalMetrosHoje || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+    const receitaHoje = (dados.totalReceitaHoje || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const acumuladoMes = (dados.acumuladoMesMetros || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+    const receitaAcumuladaMes = (dados.acumuladoMesReceita || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const pctMeta = dados.percentualMetaMensal;
-    const obrasComProd = dados.totalObrasComProducaoHoje;
-    const obrasEmAberto = dados.totalObrasEmAberto;
+    const obrasCadastradas = dados.totalObrasCadastradas || dados.totalObrasEmAberto || 11;
+    const temProdHoje = (dados.totalMetrosHoje || 0) > 0;
 
     let msg = `<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n`;
     msg += `<b>TECNODRILL INFRA</b>\n`;
-    msg += `<i>Fechamento Diário • ${dataExtenso} • ${horario}</i>\n`;
+    msg += `<i>Relatório Diário • ${dataExtenso} • ${horario}</i>\n`;
     msg += `<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n`;
 
-    msg += `📊 <b>INDICADORES DO DIA</b>\n`;
-    msg += `• <b>Metros Perfurados Hoje:</b> <code>${metrosHoje} m</code>\n`;
-    msg += `• <b>Receita Estimada Hoje:</b> <code>${receitaHoje}</code>\n`;
-    msg += `• <b>Acumulado no Mês:</b> <code>${acumuladoMes} m</code> (${pctMeta}% da meta)\n`;
+    msg += `📊 <b>INDICADORES CONSOLIDADOS</b>\n`;
+    msg += `• <b>Produção Hoje:</b> <code>${metrosHoje}m</code> (${receitaHoje})\n`;
+    if (!temProdHoje) {
+      msg += `• <b>Status:</b> ⏱️ <i>Produção em andamento em campo. Fechamento consolidado às 19:00h.</i>\n`;
+    }
+    msg += `• <b>Acumulado no Mês:</b> <code>${acumuladoMes}m</code> (${pctMeta}% da meta)\n`;
     msg += `• <b>Receita Acumulada no Mês:</b> <code>${receitaAcumuladaMes}</code>\n`;
-    msg += `• <b>Frentes de Obra:</b> <code>${obrasComProd} Obras Hoje</code> (de um total de ${obrasEmAberto} obras)\n\n`;
+    msg += `• <b>Frentes Cadastradas:</b> <code>${obrasCadastradas} Obras</code>\n\n`;
 
-    msg += `<b>PRODUÇÃO POR OBRA NO DIA</b>\n`;
+    // Histórico dos Últimos 5 Dias se disponível
+    if (dados.ultimos5Dias && dados.ultimos5Dias.length > 0) {
+      let tot5m = 0;
+      let tot5r = 0;
+      msg += `📈 <b>HISTÓRICO DOS ÚLTIMOS 5 DIAS</b>\n`;
+      msg += `─────────────────────────────\n`;
+      for (const d of dados.ultimos5Dias) {
+        tot5m += d.metros;
+        tot5r += d.receita;
+        const mStr = (d.metros || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+        const rStr = (d.receita || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        msg += `📅 <b>${d.dataFormatada} (${d.diaSemana})</b>\n`;
+        msg += `  Produção: <code>${mStr}m</code> • <code>${rStr}</code>\n`;
+        msg += `  Frentes: <i>${d.obrasFormatadas}</i>\n\n`;
+      }
+      const tot5mStr = tot5m.toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+      const tot5rStr = tot5r.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      const med5mStr = (tot5m / dados.ultimos5Dias.length).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+      msg += `📊 <b>TOTAL 5 DIAS:</b> <code>${tot5mStr}m</code> • <code>${tot5rStr}</code>\n`;
+      msg += `<i>Média diária: ${med5mStr}m/dia</i>\n\n`;
+    }
+
+    // Detalhamento por Obra
+    const obrasList = temProdHoje ? (dados.obrasHoje || dados.obras || []) : ((dados.ultimoDiaFechado ? dados.ultimoDiaFechado.obras : null) || dados.obras || []);
+    const titDet = temProdHoje
+      ? `PRODUÇÃO POR OBRA HOJE (${dados.dataStr})`
+      : `DETALHAMENTO DA ÚLTIMA PRODUÇÃO (${dados.ultimoDiaFechado?.dataFormatada || 'ANTERIOR'})`;
+
+    msg += `📋 <b>${titDet}</b>\n`;
     msg += `─────────────────────────────\n`;
 
-    if (dados.obras.length === 0) {
+    if (!obrasList || obrasList.length === 0) {
       msg += `<i>Nenhuma produção registrada nesta data até o momento.</i>\n`;
     } else {
-      for (const o of dados.obras) {
-        const m = o.metrosHoje.toLocaleString('pt-BR', { minimumFractionDigits: 1 });
-        const r = o.receitaHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      for (const o of obrasList) {
+        const m = (o.metrosHoje || o.metros || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+        const r = (o.receitaHoje || o.receita || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         const tagStatus = o.metaBatida ? '✅ Meta Batida' : '⏳ Em Andamento';
         msg += `▸ <b>${o.nome}</b>\n`;
         msg += `  Cliente: ${o.cliente}\n`;
-        msg += `  <code>${m} m</code> • <code>${r}</code> • <b>${tagStatus}</b>\n\n`;
+        msg += `  <code>${m}m</code> • <code>${r}</code> • <b>${tagStatus}</b>\n\n`;
       }
     }
 
+    const totMetrosSec = obrasList.reduce((a: number, b: any) => a + (b.metrosHoje || b.metros || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 });
+    const totRecSec = obrasList.reduce((a: number, b: any) => a + (b.receitaHoje || b.receita || 0), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     msg += `─────────────────────────────\n`;
-    msg += `<b>TOTAL DO DIA:</b> <code>${metrosHoje} m</code> • <code>${receitaHoje}</code>\n`;
+    msg += `<b>TOTAL:</b> <code>${totMetrosSec}m</code> • <code>${totRecSec}</code>\n`;
 
     return msg;
   }

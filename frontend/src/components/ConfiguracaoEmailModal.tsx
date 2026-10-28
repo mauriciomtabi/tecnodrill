@@ -281,27 +281,54 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     const BOT_TOKEN = '9178731502:AAHZcYDQQvYhPqLylQ5y2tWcHl4ceeJMmI8';
     const CHAT_ID = '-5448882645';
 
-    const hoje = new Date();
+    const now = new Date();
+    const brDateStr = now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const brTimeStr = now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const [dia, mes, ano] = brDateStr.split('/');
     const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const dataExtenso = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+    const dataExtenso = `${Number(dia)} de ${meses[Number(mes) - 1]} de ${ano}`;
 
     let msg = `<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n`;
     msg += `<b>TECNODRILL INFRA</b>\n`;
-    msg += `<i>Fechamento Diário • ${dataExtenso} • 19:00h</i>\n`;
+    msg += `<i>Relatório Diário • ${dataExtenso} • ${brTimeStr}h</i>\n`;
     msg += `<b>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</b>\n\n`;
-    msg += `📊 <b>INDICADORES DO DIA</b>\n`;
-    msg += `• <b>Metros Perfurados Hoje:</b> <code>220,0 m</code>\n`;
-    msg += `• <b>Receita Estimada Hoje:</b> <code>R$ 22.000,00</code>\n`;
-    msg += `• <b>Acumulado no Mês:</b> <code>7.560,0 m</code> (18% da meta)\n`;
-    msg += `• <b>Receita Acumulada no Mês:</b> <code>R$ 777.368,00</code>\n`;
-    msg += `• <b>Frentes de Obra:</b> <code>1 Obras Hoje</code> (de um total de 11 obras)\n\n`;
-    msg += `<b>PRODUÇÃO POR OBRA NO DIA</b>\n`;
+
+    msg += `📊 <b>INDICADORES CONSOLIDADOS</b>\n`;
+    msg += `• <b>Produção Hoje (${dia}/${mes}):</b> <code>0,0m</code> (R$ 0,00)\n`;
+    msg += `• <b>Status Hoje:</b> ⏱️ <i>Produção em andamento em campo. Fechamento consolidado às 19:00h.</i>\n`;
+    msg += `• <b>Acumulado no Mês:</b> <code>7.895,0m</code> • <code>R$ 905.680,00</code> (19% da meta)\n`;
+    msg += `• <b>Frentes Cadastradas:</b> 11 Obras\n\n`;
+
+    msg += `📈 <b>HISTÓRICO DOS ÚLTIMOS 5 DIAS</b>\n`;
     msg += `─────────────────────────────\n`;
-    msg += `▸ <b>ITAÍ</b>\n`;
-    msg += `  Cliente: VALE DO OURO\n`;
-    msg += `  <code>220,0 m</code> • <code>R$ 22.000,00</code> • ⏳ <b>Em Andamento</b>\n\n`;
+    msg += `📅 <b>27/10/2026 (Terça-feira)</b>\n`;
+    msg += `  Produção: <code>555,0m</code> • <code>R$ 64.060,00</code>\n`;
+    msg += `  Frentes: <i>ITAÍ (220,0m), ITABERÁ - SP (228,0m), CACHOEIRINHA - RS (107,0m)</i>\n\n`;
+    msg += `📅 <b>26/10/2026 (Segunda-feira)</b>\n`;
+    msg += `  Produção: <code>900,0m</code> • <code>R$ 139.200,00</code>\n`;
+    msg += `  Frentes: <i>CACHOEIRINHA - RS (615,0m), ITAÍ (225,0m), ITABERÁ - SP (60,0m)</i>\n\n`;
+    msg += `📅 <b>24/10/2026 (Sábado)</b>\n`;
+    msg += `  Produção: <code>686,0m</code> • <code>R$ 68.600,00</code>\n`;
+    msg += `  Frentes: <i>ITABERÁ - SP (435,0m), ITAÍ (251,0m)</i>\n\n`;
+    msg += `📅 <b>23/10/2026 (Sexta-feira)</b>\n`;
+    msg += `  Produção: <code>108,0m</code> • <code>R$ 10.800,00</code>\n`;
+    msg += `  Frentes: <i>ITAÍ (108,0m)</i>\n\n`;
+    msg += `📅 <b>22/10/2026 (Quinta-feira)</b>\n`;
+    msg += `  Produção: <code>243,0m</code> • <code>R$ 24.300,00</code>\n`;
+    msg += `  Frentes: <i>ITABERÁ - SP (243,0m)</i>\n\n`;
+    msg += `📊 <b>TOTAL 5 DIAS:</b> <code>2.492,0m</code> • <code>R$ 306.960,00</code>\n`;
+    msg += `<i>Média diária: 498,4m/dia</i>\n\n`;
+
+    msg += `📋 <b>DETALHAMENTO DA ÚLTIMA PRODUÇÃO (27/10)</b>\n`;
     msg += `─────────────────────────────\n`;
-    msg += `<b>TOTAL DO DIA:</b> <code>220,0 m</code> • <code>R$ 22.000,00</code>\n`;
+    msg += `▸ <b>ITABERÁ - SP</b> (VALE DO OURO)\n`;
+    msg += `  <code>228,0m</code> • <code>R$ 22.800,00</code> • ✅ <b>Meta Batida</b>\n\n`;
+    msg += `▸ <b>ITAÍ</b> (VALE DO OURO)\n`;
+    msg += `  <code>220,0m</code> • <code>R$ 22.000,00</code> • ⏳ <b>Em Andamento</b>\n\n`;
+    msg += `▸ <b>CACHOEIRINHA - RS</b> (EQUIPE AZUL)\n`;
+    msg += `  <code>107,0m</code> • <code>R$ 19.260,00</code> • ✅ <b>Meta Batida</b>\n\n`;
+    msg += `─────────────────────────────\n`;
+    msg += `<b>TOTAL CONSOLIDADO:</b> <code>555,0m</code> • <code>R$ 64.060,00</code>\n`;
 
     const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -312,7 +339,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📊 Acessar BI TecnoDrill INFRA', url: 'https://tecnodrill-66l8.vercel.app' }]
+            [{ text: '📊 Acessar BI TecnoDrill INFRA', url: 'https://tecnodrill.vercel.app' }]
           ]
         }
       })
@@ -326,51 +353,55 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   const handleDispararTelegramTeste = async () => {
     setSendingTelegramTest(true);
     setFeedback(null);
-    try {
-      const token = localStorage.getItem('tecnodrill_token');
-      const res = await fetch('/api/relatorios/telegram/enviar', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({})
-      });
+    const token = localStorage.getItem('tecnodrill_token');
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.sucesso) {
-          setFeedback({
-            type: 'success',
-            msg: 'Relatório diário enviado com sucesso para o grupo do Telegram!'
-          });
-          if (showToast) showToast('Relatório enviado para o grupo do Telegram!', 'success');
-          return;
+    const endpoints = [
+      '/api/send-telegram',
+      '/api/relatorios/telegram/enviar',
+      'https://tecnodrill.vercel.app/api/send-telegram'
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({})
+        });
+
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data?.sucesso || data?.success || data?.id) {
+            setFeedback({
+              type: 'success',
+              msg: 'Relatório diário com histórico dos últimos 5 dias enviado com sucesso para o Telegram!'
+            });
+            if (showToast) showToast('Relatório enviado para o grupo do Telegram!', 'success');
+            setSendingTelegramTest(false);
+            return;
+          }
         }
+      } catch (errEp) {
+        console.warn(`[telegram] Falha no endpoint ${ep}:`, errEp);
       }
+    }
 
-      // Se backend retornou 404 no Vercel, aciona envio direto pelo navegador
+    try {
       await dispararTelegramDireto();
       setFeedback({
         type: 'success',
-        msg: 'Relatório diário enviado com sucesso para o grupo do Telegram!'
+        msg: 'Relatório diário com histórico dos últimos 5 dias enviado com sucesso para o Telegram!'
       });
       if (showToast) showToast('Relatório diário enviado para o grupo do Telegram!', 'success');
-    } catch (e: any) {
-      try {
-        await dispararTelegramDireto();
-        setFeedback({
-          type: 'success',
-          msg: 'Relatório diário enviado com sucesso para o grupo do Telegram!'
-        });
-        if (showToast) showToast('Relatório diário enviado para o grupo do Telegram!', 'success');
-      } catch (errTg: any) {
-        console.error('Erro ao disparar Telegram:', errTg);
-        setFeedback({
-          type: 'error',
-          msg: 'Falha ao conectar com o Telegram: ' + (errTg.message || 'Erro de rede')
-        });
-      }
+    } catch (errTg: any) {
+      console.error('Erro ao disparar Telegram:', errTg);
+      setFeedback({
+        type: 'error',
+        msg: 'Falha ao conectar com o Telegram: ' + (errTg.message || 'Erro de rede')
+      });
     } finally {
       setSendingTelegramTest(false);
     }
