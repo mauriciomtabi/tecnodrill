@@ -21,6 +21,14 @@ app.use(cors({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
+// Vercel rewrite / proxy path normalizer
+app.use((req, _res, next) => {
+  if (req.query?.__path && typeof req.query.__path === 'string') {
+    req.url = req.query.__path;
+  }
+  next();
+});
+
 // Request logger
 app.use((req, _res, next) => {
   console.log(`[Tecnodrill API] ${req.method} ${req.path}`);

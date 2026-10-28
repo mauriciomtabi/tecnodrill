@@ -37,6 +37,13 @@ export interface ConfigEmailDiario {
   diasSemana: number[];
   ultimoEnvio?: string;
   updatedAt?: string;
+  // Configurações do servidor SMTP
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  smtpSecure?: boolean;
 }
 
 const DEFAULT_CONFIG: ConfigEmailDiario = {
@@ -48,7 +55,13 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
     'carlos@tecnodrill.com.br'
   ],
   horario: '19:00',
-  diasSemana: [1, 2, 3, 4, 5, 6] // Seg a Sáb
+  diasSemana: [1, 2, 3, 4, 5, 6], // Seg a Sáb
+  smtpHost: '',
+  smtpPort: 587,
+  smtpUser: '',
+  smtpPass: '',
+  smtpFrom: '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>',
+  smtpSecure: false
 };
 
 function getEmailConfigFilePath(): string {
@@ -71,10 +84,21 @@ export class RelatorioDiarioEmailService {
   public static getConfigEmailDiario(): ConfigEmailDiario {
     try {
       const configPath = getEmailConfigFilePath();
+      let saved: Partial<ConfigEmailDiario> = {};
       if (fs.existsSync(configPath)) {
         const raw = fs.readFileSync(configPath, 'utf-8');
-        return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+        saved = JSON.parse(raw);
       }
+      return {
+        ...DEFAULT_CONFIG,
+        ...saved,
+        smtpHost: saved.smtpHost || process.env.SMTP_HOST || '',
+        smtpPort: Number(saved.smtpPort || process.env.SMTP_PORT) || 587,
+        smtpUser: saved.smtpUser || process.env.SMTP_USER || '',
+        smtpPass: saved.smtpPass || process.env.SMTP_PASS || '',
+        smtpFrom: saved.smtpFrom || process.env.SMTP_FROM || '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>',
+        smtpSecure: saved.smtpSecure !== undefined ? saved.smtpSecure : (Number(saved.smtpPort || process.env.SMTP_PORT) === 465)
+      };
     } catch (e) {
       console.warn('[RelatorioDiarioEmail] Erro ao ler config, usando default:', e);
     }
@@ -86,9 +110,16 @@ export class RelatorioDiarioEmailService {
    */
   public static salvarConfigEmailDiario(novaConfig: Partial<ConfigEmailDiario>): ConfigEmailDiario {
     const atual = this.getConfigEmailDiario();
+    
+    // Se nova senha não for informada mas já existir uma salva, mantém a existente
+    const smtpPassMerged = (novaConfig.smtpPass !== undefined && novaConfig.smtpPass !== '')
+      ? novaConfig.smtpPass
+      : atual.smtpPass;
+
     const mesclada: ConfigEmailDiario = {
       ...atual,
       ...novaConfig,
+      smtpPass: smtpPassMerged,
       updatedAt: new Date().toISOString()
     };
     try {
@@ -442,11 +473,65 @@ export class RelatorioDiarioEmailService {
   }
 
   /**
+   * Testa a conectividade com o servidor SMTP usando as credenciais informadas
+   */
+  public static async testarConexaoSmtp(params: {
+    host?: string;
+    port?: number;
+    user?: string;
+    pass?: string;
+    secure?: boolean;
+  }): Promise<{ sucesso: boolean; mensagem: string }> {
+    const configAtual = this.getConfigEmailDiario();
+    const host = params.host || configAtual.smtpHost || process.env.SMTP_HOST;
+    const port = Number(params.port || configAtual.smtpPort || process.env.SMTP_PORT) || 587;
+    const user = params.user || configAtual.smtpUser || process.env.SMTP_USER;
+    const pass = params.pass || configAtual.smtpPass || process.env.SMTP_PASS;
+    const secure = params.secure !== undefined ? params.secure : (port === 465);
+
+    if (!host || !user || !pass) {
+      return {
+        sucesso: false,
+        mensagem: 'Por favor, informe Host, Usuário e Senha do servidor SMTP para testar.'
+      };
+    }
+
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false }
+      });
+
+      await transporter.verify();
+      return {
+        sucesso: true,
+        mensagem: `Conexão SMTP com ${host}:${port} validada com sucesso! Pronto para envio.`
+      };
+    } catch (err: any) {
+      console.error('[RelatorioDiarioEmail] Erro ao testar SMTP:', err);
+      let msg = err.message || 'Falha ao autenticar no servidor SMTP.';
+      if (msg.includes('Invalid login') || msg.includes('authentication failed') || msg.includes('535')) {
+        msg = 'Falha de autenticação (535): Usuário ou senha incorretos. (Se usar Gmail, ative Verificação em 2 etapas e use uma Senha de App de 16 letras).';
+      } else if (msg.includes('ETIMEDOUT') || msg.includes('ECONNREFUSED')) {
+        msg = `Tempo limite esgotado ao conectar no servidor ${host}:${port}. Verifique o endereço e a porta.`;
+      }
+      return {
+        sucesso: false,
+        mensagem: msg
+      };
+    }
+  }
+
+  /**
    * Envia o relatório de produção por e-mail para a lista de destinatários
    */
   public static async enviarRelatorioEmail(
     destinatarios?: string[],
-    dataRef?: string
+    dataRef?: string,
+    smtpOverride?: any
   ): Promise<{ sucesso: boolean; mensagem: string; destinatarios: string[]; dados: DadosFechamentoDiario }> {
     const dados = await this.getDadosFechamentoDiario(dataRef);
     const html = this.gerarHtmlEmailDiario(dados);
@@ -462,21 +547,25 @@ export class RelatorioDiarioEmailService {
               .map(e => e.trim())
               .filter(Boolean));
 
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = Number(process.env.SMTP_PORT) || 587;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const smtpFrom = process.env.SMTP_FROM || '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>';
+    const smtpHost = smtpOverride?.smtpHost || smtpOverride?.host || configAtual.smtpHost || process.env.SMTP_HOST;
+    const smtpPort = Number(smtpOverride?.smtpPort || smtpOverride?.port || configAtual.smtpPort || process.env.SMTP_PORT) || 587;
+    const smtpUser = smtpOverride?.smtpUser || smtpOverride?.user || configAtual.smtpUser || process.env.SMTP_USER;
+    const smtpPass = smtpOverride?.smtpPass || smtpOverride?.pass || configAtual.smtpPass || process.env.SMTP_PASS;
+    const smtpFrom = smtpOverride?.smtpFrom || smtpOverride?.from || configAtual.smtpFrom || process.env.SMTP_FROM || (smtpUser ? `"TecnoDrill INFRA" <${smtpUser}>` : '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>');
+    const smtpSecure = smtpOverride?.smtpSecure !== undefined ? smtpOverride.smtpSecure : (smtpOverride?.secure !== undefined ? smtpOverride.secure : (configAtual.smtpSecure !== undefined ? configAtual.smtpSecure : (smtpPort === 465)));
 
     if (smtpHost && smtpUser && smtpPass) {
       try {
         const transporter = nodemailer.createTransport({
           host: smtpHost,
           port: smtpPort,
-          secure: smtpPort === 465,
+          secure: smtpSecure,
           auth: {
             user: smtpUser,
             pass: smtpPass
+          },
+          tls: {
+            rejectUnauthorized: false
           }
         });
 
@@ -491,24 +580,28 @@ export class RelatorioDiarioEmailService {
 
         return {
           sucesso: true,
-          mensagem: `E-mail diário enviado com sucesso para ${listaDestinatarios.length} destinatário(s).`,
+          mensagem: `E-mail diário enviado com sucesso para ${listaDestinatarios.length} destinatário(s)!`,
           destinatarios: listaDestinatarios,
           dados
         };
       } catch (err: any) {
         console.error('[RelatorioDiarioEmail] Erro ao enviar SMTP:', err);
+        let msg = err.message || 'Falha no envio de e-mail';
+        if (msg.includes('Invalid login') || msg.includes('authentication failed') || msg.includes('535')) {
+          msg = 'Falha de autenticação SMTP: Usuário ou senha incorretos. Verifique suas credenciais de e-mail.';
+        }
         return {
           sucesso: false,
-          mensagem: `Falha no envio SMTP: ${err.message || 'Erro desconhecido'}`,
+          mensagem: `Falha no envio SMTP: ${msg}`,
           destinatarios: listaDestinatarios,
           dados
         };
       }
     } else {
-      console.log(`[RelatorioDiarioEmail] Modo simulação ativo. E-mail gerado para:`, listaDestinatarios);
+      console.warn(`[RelatorioDiarioEmail] SMTP não configurado. Tentativa para:`, listaDestinatarios);
       return {
-        sucesso: true,
-        mensagem: `Relatório diário gerado com sucesso para ${listaDestinatarios.length} destinatário(s) (modo pré-visualização ativo; configure SMTP_HOST para envio em produção).`,
+        sucesso: false,
+        mensagem: 'Servidor SMTP não configurado. Por favor, configure o Host, Usuário e Senha do SMTP nas configurações para enviar o e-mail real.',
         destinatarios: listaDestinatarios,
         dados
       };

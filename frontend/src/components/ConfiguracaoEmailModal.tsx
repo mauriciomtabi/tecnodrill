@@ -5,13 +5,20 @@ import {
   X, 
   Send, 
   Eye, 
+  EyeOff,
   Check, 
   Clock, 
   Calendar as CalendarIcon, 
   AlertCircle, 
   Users, 
   Save, 
-  CheckCircle2
+  CheckCircle2,
+  Server,
+  Key,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 
 interface ConfiguracaoEmailModalProps {
@@ -28,6 +35,13 @@ export interface ConfigEmailDiario {
   diasSemana: number[]; // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sab
   ultimoEnvio?: string;
   updatedAt?: string;
+  // Configurações SMTP
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpFrom?: string;
+  smtpSecure?: boolean;
 }
 
 const DIAS_SEMANA_OPCOES = [
@@ -49,8 +63,49 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
     'carlos@tecnodrill.com.br'
   ],
   horario: '19:00',
-  diasSemana: [1, 2, 3, 4, 5, 6]
+  diasSemana: [1, 2, 3, 4, 5, 6],
+  smtpHost: '',
+  smtpPort: 587,
+  smtpUser: '',
+  smtpPass: '',
+  smtpFrom: '"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>',
+  smtpSecure: false
 };
+
+const SMTP_PRESETS = [
+  {
+    id: 'GMAIL',
+    nome: 'Gmail / Google Workspace',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    dica: 'Gere uma Senha de App de 16 caracteres em sua Conta Google (Segurança > Verificação em 2 etapas > Senhas de app).'
+  },
+  {
+    id: 'TITAN',
+    nome: 'Titan / Hostinger',
+    host: 'smtp.titan.email',
+    port: 465,
+    secure: true,
+    dica: 'Servidor Titan Mail / Hostinger na porta segura SSL 465 com seu e-mail e senha normais.'
+  },
+  {
+    id: 'OUTLOOK',
+    nome: 'Microsoft 365 / Outlook',
+    host: 'smtp.office365.com',
+    port: 587,
+    secure: false,
+    dica: 'Servidor Microsoft 365 na porta TLS 587 com autenticação do usuário corporativo.'
+  },
+  {
+    id: 'LOCAWEB',
+    nome: 'Locaweb',
+    host: 'email-ssl.com.br',
+    port: 465,
+    secure: true,
+    dica: 'Servidor seguro da Locaweb na porta 465 SSL.'
+  }
+];
 
 export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   isOpen,
@@ -64,8 +119,21 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   const [diasSemana, setDiasSemana] = useState<number[]>(DEFAULT_CONFIG.diasSemana);
   const [ultimoEnvio, setUltimoEnvio] = useState<string | null>(null);
 
+  // Estados de SMTP
+  const [smtpHost, setSmtpHost] = useState<string>('');
+  const [smtpPort, setSmtpPort] = useState<number>(587);
+  const [smtpUser, setSmtpUser] = useState<string>('');
+  const [smtpPass, setSmtpPass] = useState<string>('');
+  const [smtpFrom, setSmtpFrom] = useState<string>('"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>');
+  const [smtpSecure, setSmtpSecure] = useState<boolean>(false);
+  const [showSmtpConfig, setShowSmtpConfig] = useState<boolean>(false);
+  const [showSmtpPass, setShowSmtpPass] = useState<boolean>(false);
+
+  // Estados de Operação
   const [saving, setSaving] = useState<boolean>(false);
-  const [sendingTest, setSendingTest] = useState<boolean>(false);
+  const [testingSmtp, setTestingSmtp] = useState<boolean>(false);
+  const [sendingEmail, setSendingEmail] = useState<boolean>(false);
+  const [sendingTelegramTest, setSendingTelegramTest] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   // Trava a rolagem do body enquanto o modal estiver aberto
@@ -124,6 +192,17 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     setHorario(cfg.horario || DEFAULT_CONFIG.horario);
     setDiasSemana(cfg.diasSemana || DEFAULT_CONFIG.diasSemana);
     setUltimoEnvio(cfg.ultimoEnvio || null);
+
+    if (cfg.smtpHost) setSmtpHost(cfg.smtpHost);
+    if (cfg.smtpPort) setSmtpPort(Number(cfg.smtpPort) || 587);
+    if (cfg.smtpUser) setSmtpUser(cfg.smtpUser);
+    if (cfg.smtpPass) setSmtpPass(cfg.smtpPass);
+    if (cfg.smtpFrom) setSmtpFrom(cfg.smtpFrom);
+    if (cfg.smtpSecure !== undefined) {
+      setSmtpSecure(cfg.smtpSecure);
+    } else if (cfg.smtpPort) {
+      setSmtpSecure(Number(cfg.smtpPort) === 465);
+    }
   };
 
   const getDestinatariosArray = (): string[] => {
@@ -147,6 +226,16 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     else if (tipo === 'SEG_SAB') setDiasSemana([1, 2, 3, 4, 5, 6]);
   };
 
+  const aplicarPresetSmtp = (preset: typeof SMTP_PRESETS[0]) => {
+    setSmtpHost(preset.host);
+    setSmtpPort(preset.port);
+    setSmtpSecure(preset.secure);
+    setFeedback({
+      type: 'success',
+      msg: `Preset "${preset.nome}" aplicado! ${preset.dica}`
+    });
+  };
+
   // Salvar configuração (persistência local + nuvem resiliente)
   const handleSalvar = async () => {
     setSaving(true);
@@ -165,7 +254,13 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
       destinatarios: lista,
       horario,
       diasSemana,
-      ultimoEnvio: ultimoEnvio || undefined
+      ultimoEnvio: ultimoEnvio || undefined,
+      smtpHost: smtpHost.trim(),
+      smtpPort: Number(smtpPort) || 587,
+      smtpUser: smtpUser.trim(),
+      smtpPass: smtpPass,
+      smtpFrom: smtpFrom.trim() || `"TecnoDrill INFRA" <${smtpUser.trim() || 'relatorios@tecnodrill.com.br'}>`,
+      smtpSecure
     };
 
     // Salvar localmente com prioridade máxima
@@ -182,72 +277,137 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
         body: JSON.stringify(payload)
       });
     } catch (_) {
-      // Ignora falhas da rota se offline/Vercel
+      // Silencioso se offline
     }
 
-    setFeedback({ type: 'success', msg: 'Configurações de agendamento salvas com sucesso!' });
-    if (showToast) showToast('Configurações de agendamento salvas!', 'success');
+    setFeedback({ type: 'success', msg: 'Configurações de e-mail e agendamento salvas com sucesso!' });
+    if (showToast) showToast('Configurações salvas com sucesso!', 'success');
     setSaving(false);
   };
 
-  // Disparo manual de teste de e-mail com fallback para Telegram
-  const handleDispararTeste = async () => {
-    setSendingTest(true);
+  // Testar conexão SMTP
+  const handleTestarSmtp = async () => {
+    if (!smtpHost.trim() || !smtpUser.trim() || !smtpPass) {
+      setFeedback({
+        type: 'error',
+        msg: 'Preencha Host SMTP, Usuário/E-mail e Senha para testar a conexão.'
+      });
+      return;
+    }
+
+    setTestingSmtp(true);
+    setFeedback(null);
+
+    try {
+      const token = localStorage.getItem('tecnodrill_token');
+      const res = await fetch('/api/relatorios/diario/test-smtp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          host: smtpHost.trim(),
+          port: Number(smtpPort) || 587,
+          user: smtpUser.trim(),
+          pass: smtpPass,
+          secure: smtpSecure
+        })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.sucesso) {
+        setFeedback({
+          type: 'success',
+          msg: data.mensagem || 'Conexão com servidor SMTP estabelecida com sucesso!'
+        });
+        if (showToast) showToast('Conexão SMTP validada com sucesso!', 'success');
+      } else {
+        const erroMsg = data?.mensagem || data?.error || 'Não foi possível conectar ao servidor SMTP.';
+        setFeedback({ type: 'error', msg: erroMsg });
+        if (showToast) showToast(erroMsg, 'error');
+      }
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        msg: 'Falha ao conectar à API de teste SMTP. Verifique sua conexão de rede.'
+      });
+    } finally {
+      setTestingSmtp(false);
+    }
+  };
+
+  // DISPARO MANUAL DE E-MAIL (Específico e transparente)
+  const handleDispararEmail = async () => {
+    setSendingEmail(true);
     setFeedback(null);
     const lista = getDestinatariosArray();
 
     if (lista.length === 0) {
       setFeedback({ type: 'error', msg: 'Insira pelo menos um e-mail válido para testar o envio.' });
-      setSendingTest(false);
+      setSendingEmail(false);
+      return;
+    }
+
+    // Alerta se não houver SMTP configurado
+    if (!smtpHost.trim() || !smtpUser.trim()) {
+      setShowSmtpConfig(true);
+      setFeedback({
+        type: 'error',
+        msg: 'Servidor SMTP não configurado. Preencha as configurações de Host e Usuário SMTP abaixo para realizar o envio real.'
+      });
+      if (showToast) showToast('Configure o servidor SMTP para enviar e-mails', 'error');
+      setSendingEmail(false);
       return;
     }
 
     try {
       const token = localStorage.getItem('tecnodrill_token');
+      const payload = {
+        destinatarios: lista,
+        smtp: {
+          host: smtpHost.trim(),
+          port: Number(smtpPort) || 587,
+          user: smtpUser.trim(),
+          pass: smtpPass,
+          from: smtpFrom.trim() || `"TecnoDrill INFRA" <${smtpUser.trim()}>`,
+          secure: smtpSecure
+        }
+      };
+
       const res = await fetch('/api/relatorios/diario/enviar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ destinatarios: lista })
+        body: JSON.stringify(payload)
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.sucesso) {
-          const agora = new Date().toISOString();
-          setUltimoEnvio(agora);
-          setFeedback({ 
-            type: 'success', 
-            msg: data.mensagem || `Relatório enviado com sucesso para ${lista.length} destinatário(s)!` 
-          });
-          if (showToast) showToast('Relatório disparado com sucesso!', 'success');
-          return;
-        }
-      }
+      const data = await res.json().catch(() => null);
 
-      // Se API não respondeu ou deu 404, dispara direto para o Telegram para não deixar o gestor na mão
-      await dispararTelegramDireto();
-      setFeedback({
-        type: 'success',
-        msg: `Relatório de teste enviado para o grupo do Telegram! (Para envio por e-mail, verifique a conexão com o servidor SMTP).`
-      });
-    } catch (e: any) {
-      try {
-        await dispararTelegramDireto();
-        setFeedback({
-          type: 'success',
-          msg: `Relatório de teste enviado para o grupo do Telegram! (Para envio por e-mail, verifique a conexão com o servidor SMTP).`
-        });
-      } catch (errTg: any) {
+      if (res.ok && data?.sucesso) {
+        const agora = new Date().toISOString();
+        setUltimoEnvio(agora);
         setFeedback({ 
-          type: 'error', 
-          msg: 'Não foi possível conectar ao servidor. Verifique a conexão com a API.' 
+          type: 'success', 
+          msg: data.mensagem || `E-mail diário disparado com sucesso para ${lista.length} destinatário(s)!` 
         });
+        if (showToast) showToast('E-mail diário disparado com sucesso!', 'success');
+      } else {
+        const erroMsg = data?.mensagem || data?.error || 'Falha no envio de e-mail. Verifique suas credenciais SMTP.';
+        setFeedback({ type: 'error', msg: erroMsg });
+        if (showToast) showToast(erroMsg, 'error');
       }
+    } catch (e: any) {
+      setFeedback({
+        type: 'error',
+        msg: 'Erro ao tentar enviar e-mail. Verifique se o servidor backend está online e se as credenciais SMTP estão corretas.'
+      });
+      if (showToast) showToast('Erro de comunicação ao disparar e-mail', 'error');
     } finally {
-      setSendingTest(false);
+      setSendingEmail(false);
     }
   };
 
@@ -255,8 +415,6 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   const handleVisualizarTemplate = () => {
     window.open('/preview-email-diario.html', '_blank');
   };
-
-  const [sendingTelegramTest, setSendingTelegramTest] = useState(false);
 
   // Disparo direto da API do Telegram (100% fail-proof, funciona direto do navegador em qualquer ambiente)
   const dispararTelegramDireto = async () => {
@@ -326,7 +484,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
             type: 'success',
             msg: 'Relatório diário enviado com sucesso para o grupo do Telegram!'
           });
-          if (showToast) showToast('Relatório diário enviado para o grupo do Telegram!', 'success');
+          if (showToast) showToast('Relatório enviado para o grupo do Telegram!', 'success');
           return;
         }
       }
@@ -358,6 +516,8 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
     }
   };
 
+  const smtpEstaConfigurado = Boolean(smtpHost.trim() && smtpUser.trim());
+
   if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
@@ -386,9 +546,9 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
           backgroundColor: 'var(--bg-card)',
           borderRadius: '16px',
           border: '1px solid var(--border-color)',
-          width: '620px',
-          maxWidth: 'calc(100vw - 40px)',
-          maxHeight: 'min(90vh, 750px)',
+          width: '660px',
+          maxWidth: 'calc(100vw - 32px)',
+          maxHeight: 'min(92vh, 820px)',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 24px 60px rgba(0, 0, 0, 0.5)',
@@ -459,7 +619,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
         </div>
 
         {/* Corpo com Scroll */}
-        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '18px' }}>
           
           {feedback && (
             <div 
@@ -477,7 +637,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
               }}
             >
               {feedback.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-              <span>{feedback.msg}</span>
+              <span style={{ flex: 1 }}>{feedback.msg}</span>
             </div>
           )}
 
@@ -512,7 +672,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
                 </span>
               </div>
               <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                Quando ativo, envia o resumo diário automaticamente no horário programado.
+                Quando ativo, envia o resumo diário automaticamente no horário programado (19:00).
               </p>
             </div>
 
@@ -575,7 +735,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                 <Users size={14} color="var(--primary)" />
-                Destinatários (separados por vírgula)
+                Destinatários de E-mail (separados por vírgula)
               </label>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 {getDestinatariosArray().length} destinatário(s) válido(s)
@@ -691,6 +851,290 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
               </div>
             </div>
 
+          </div>
+
+          {/* Servidor SMTP (Envio de E-mails) */}
+          <div
+            style={{
+              borderRadius: '10px',
+              border: '1px solid var(--border-color)',
+              backgroundColor: 'var(--bg-app)',
+              overflow: 'hidden',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {/* Header do Card SMTP com Toggle */}
+            <div
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                backgroundColor: showSmtpConfig ? 'rgba(240, 90, 34, 0.05)' : 'transparent',
+                borderBottom: showSmtpConfig ? '1px solid var(--border-color)' : 'none'
+              }}
+              onClick={() => setShowSmtpConfig(!showSmtpConfig)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Server size={18} color="var(--primary)" />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--text-main)' }}>
+                      Servidor de E-mail (SMTP)
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '10.5px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        backgroundColor: smtpEstaConfigurado ? 'rgba(46, 204, 113, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: smtpEstaConfigurado ? '#2ECC71' : '#F59E0B',
+                        border: `1px solid ${smtpEstaConfigurado ? 'rgba(46, 204, 113, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`
+                      }}
+                    >
+                      {smtpEstaConfigurado ? 'Configurado' : 'Configuração Necessária'}
+                    </span>
+                  </div>
+                  <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {smtpEstaConfigurado 
+                      ? `${smtpHost}:${smtpPort} • ${smtpUser}` 
+                      : 'Configure o Host e Usuário para enviar os e-mails automaticamente'}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)' }}>
+                  {showSmtpConfig ? 'Recolher' : 'Configurar Servidor'}
+                </span>
+                {showSmtpConfig ? <ChevronUp size={16} color="var(--primary)" /> : <ChevronDown size={16} color="var(--primary)" />}
+              </div>
+            </div>
+
+            {/* Conteúdo Expansível do SMTP */}
+            {showSmtpConfig && (
+              <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                
+                {/* Presets de 1 clique */}
+                <div>
+                  <span style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Provedores de E-mail Recomendados (1 Clique):
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {SMTP_PRESETS.map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => aplicarPresetSmtp(preset)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: smtpHost === preset.host ? '1px solid var(--primary)' : '1px solid var(--border-color)',
+                          backgroundColor: smtpHost === preset.host ? 'rgba(240, 90, 34, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                          color: smtpHost === preset.host ? 'var(--primary)' : 'var(--text-main)',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        <span>{preset.nome}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Linha 1: Host & Porta */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Host SMTP (Servidor)
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                      placeholder="Ex: smtp.titan.email ou smtp.gmail.com"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '12.5px',
+                        color: 'var(--text-main)',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Porta SMTP
+                    </label>
+                    <input
+                      type="number"
+                      value={smtpPort}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setSmtpPort(val);
+                        if (val === 465) setSmtpSecure(true);
+                        else if (val === 587) setSmtpSecure(false);
+                      }}
+                      placeholder="465 ou 587"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '12.5px',
+                        color: 'var(--text-main)',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Linha 2: Usuário & Senha */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Usuário / E-mail de Envio
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                      placeholder="relatorios@tecnodrill.com.br"
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '12.5px',
+                        color: 'var(--text-main)',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Senha do E-mail / App Password
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showSmtpPass ? 'text' : 'password'}
+                        value={smtpPass}
+                        onChange={(e) => setSmtpPass(e.target.value)}
+                        placeholder="••••••••••••"
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          backgroundColor: 'var(--bg-card)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          padding: '8px 36px 8px 12px',
+                          fontSize: '12.5px',
+                          color: 'var(--text-main)',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSmtpPass(!showSmtpPass)}
+                        style={{
+                          position: 'absolute',
+                          right: '8px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '4px'
+                        }}
+                      >
+                        {showSmtpPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Linha 3: Remetente Personalizado & Opção SSL */}
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '12px', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Nome de Exibição do Remetente
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpFrom}
+                      onChange={(e) => setSmtpFrom(e.target.value)}
+                      placeholder='"TecnoDrill INFRA" <relatorios@tecnodrill.com.br>'
+                      style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        padding: '8px 12px',
+                        fontSize: '12.5px',
+                        color: 'var(--text-main)',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+                    <input
+                      type="checkbox"
+                      id="smtpSecureCheckbox"
+                      checked={smtpSecure}
+                      onChange={(e) => setSmtpSecure(e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--primary)', cursor: 'pointer' }}
+                    />
+                    <label htmlFor="smtpSecureCheckbox" style={{ fontSize: '12px', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 600 }}>
+                      SSL Direto (Porta 465)
+                    </label>
+                  </div>
+                </div>
+
+                {/* Botão de teste da conexão SMTP */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '6px', borderTop: '1px solid var(--border-color)' }}>
+                  <button
+                    type="button"
+                    onClick={handleTestarSmtp}
+                    disabled={testingSmtp}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '7px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: testingSmtp ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <ShieldCheck size={14} color="var(--primary)" />
+                    <span>{testingSmtp ? 'Verificando conexão...' : 'Testar Conexão SMTP'}</span>
+                  </button>
+                </div>
+
+              </div>
+            )}
           </div>
 
           {/* Canal de Disparo Telegram */}
@@ -813,35 +1257,36 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
           </button>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Botão Testar Disparo Agora */}
+            {/* BOTÃO EXCLUSIVO DE DISPARO MANUAL DE E-MAIL */}
             <button
               type="button"
-              onClick={handleDispararTeste}
-              disabled={sendingTest}
+              onClick={handleDispararEmail}
+              disabled={sendingEmail}
+              title="Disparar relatório diário por e-mail imediatamente para a lista de destinatários"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '7px',
                 padding: '9px 16px',
                 borderRadius: '8px',
-                border: '1px solid rgba(46, 204, 113, 0.4)',
-                backgroundColor: 'rgba(46, 204, 113, 0.12)',
+                border: '1px solid rgba(46, 204, 113, 0.5)',
+                backgroundColor: 'rgba(46, 204, 113, 0.15)',
                 color: '#2ECC71',
                 fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: sendingTest ? 'not-allowed' : 'pointer',
-                opacity: sendingTest ? 0.6 : 1,
+                fontWeight: 800,
+                cursor: sendingEmail ? 'not-allowed' : 'pointer',
+                opacity: sendingEmail ? 0.6 : 1,
                 transition: 'all 0.2s ease'
               }}
               onMouseOver={(e) => {
-                if (!sendingTest) e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.22)';
+                if (!sendingEmail) e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.25)';
               }}
               onMouseOut={(e) => {
-                if (!sendingTest) e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.12)';
+                if (!sendingEmail) e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.15)';
               }}
             >
-              <Send size={15} />
-              <span>{sendingTest ? 'Enviando...' : 'Testar Envio Agora'}</span>
+              <Mail size={15} />
+              <span>{sendingEmail ? 'Enviando E-mail...' : 'Disparar E-mail Agora'}</span>
             </button>
 
             {/* Botão Salvar Configurações */}

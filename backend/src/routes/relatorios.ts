@@ -52,12 +52,23 @@ router.get('/diario/preview', async (req: Request, res: Response): Promise<any> 
 // POST /api/relatorios/diario/enviar
 router.post('/diario/enviar', async (req: Request, res: Response): Promise<any> => {
   try {
-    const { destinatarios, dataRef } = req.body;
-    const resultado = await RelatorioDiarioEmailService.enviarRelatorioEmail(destinatarios, dataRef);
-    return res.json(resultado);
+    const { destinatarios, dataRef, smtp } = req.body;
+    const resultado = await RelatorioDiarioEmailService.enviarRelatorioEmail(destinatarios, dataRef, smtp);
+    return res.status(resultado.sucesso ? 200 : 400).json(resultado);
   } catch (err: any) {
     console.error('[Relatorio Diario Enviar] Erro:', err);
-    return res.status(500).json({ error: 'Erro ao disparar relatório diário por e-mail.' });
+    return res.status(500).json({ sucesso: false, mensagem: 'Erro interno ao disparar relatório diário por e-mail.' });
+  }
+});
+
+// POST /api/relatorios/diario/test-smtp
+router.post('/diario/test-smtp', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const resultado = await RelatorioDiarioEmailService.testarConexaoSmtp(req.body);
+    return res.status(resultado.sucesso ? 200 : 400).json(resultado);
+  } catch (err: any) {
+    console.error('[Relatorio Diario Test SMTP] Erro:', err);
+    return res.status(500).json({ sucesso: false, mensagem: 'Erro interno ao testar conexão SMTP: ' + (err.message || 'Erro de rede') });
   }
 });
 
