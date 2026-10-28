@@ -177,11 +177,11 @@ function buildHtmlRelatorioCompleto(dados: any): string {
       <td style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; color: #64748B; font-size: 11.5px; white-space: nowrap;">
         ${d.diaSemana}
       </td>
-      <td align="right" style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
-        ${formatMeters(d.metros)} m
+      <td width="90" align="right" style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
+        <nobr style="white-space: nowrap;">${formatMeters(d.metros)}m</nobr>
       </td>
-      <td align="right" style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
-        ${formatCurrency(d.receita)}
+      <td width="115" align="right" style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
+        <nobr style="white-space: nowrap;">${formatCurrency(d.receita)}</nobr>
       </td>
       <td style="background-color: ${bgRow}; padding: 11px 12px; border-bottom: 1px solid #E2E8F0; color: #1E293B; font-size: 11.5px;">
         ${d.obrasFormatadas}
@@ -222,14 +222,14 @@ function buildHtmlRelatorioCompleto(dados: any): string {
       <td style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B;">
         ${o.cliente || 'Tecnodrill'}
       </td>
-      <td align="right" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
-        ${formatMeters(o.metros)} m
+      <td width="90" align="right" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #F05A22; font-size: 13px; white-space: nowrap;">
+        <nobr style="white-space: nowrap;">${formatMeters(o.metros)}m</nobr>
       </td>
-      <td align="right" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
-        ${formatCurrency(o.receita)}
+      <td width="115" align="right" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; font-weight: 700; color: #2ECC71; font-size: 13px; white-space: nowrap;">
+        <nobr style="white-space: nowrap;">${formatCurrency(o.receita)}</nobr>
       </td>
-      <td align="center" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">
-        ${o.metaDiaria} m
+      <td width="85" align="center" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; color: #64748B; white-space: nowrap;">
+        <nobr style="white-space: nowrap;">${o.metaDiaria}m</nobr>
       </td>
       <td align="center" style="background-color: ${bgRow}; padding: 12px 14px; border-bottom: 1px solid #E2E8F0; white-space: nowrap;">
         <span style="display: inline-block; background-color: ${o.metaBatida ? '#ECFDF5' : '#FFFBEB'}; color: ${o.metaBatida ? '#059669' : '#D97706'}; border: 1px solid ${o.metaBatida ? '#A7F3D0' : '#FDE68A'}; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; font-weight: 700;">
@@ -309,7 +309,7 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                       METROS PERFURADOS HOJE (${dados.dataStr.slice(0, 5)})
                     </div>
                     <div style="font-size: 26px; font-weight: 800; color: #EA580C; margin: 2px 0 4px 0; line-height: 1.2;">
-                      ${formatMeters(dados.totalMetrosHoje)} m
+                      <nobr style="white-space: nowrap;">${formatMeters(dados.totalMetrosHoje)}m</nobr>
                     </div>
                     <div style="font-size: 11.5px; color: ${temProdHoje ? '#10B981' : '#64748B'}; font-weight: 600;">
                       ${temProdHoje ? 'Produção registrada hoje' : '0 apontamentos até o momento'}
@@ -337,7 +337,7 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                       ACUMULADO NO MÊS (OUTUBRO)
                     </div>
                     <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
-                      ${formatMeters(dados.acumuladoMesMetros)} m
+                      <nobr style="white-space: nowrap;">${formatMeters(dados.acumuladoMesMetros)}m</nobr>
                     </div>
                     <div style="font-size: 11.5px; color: #2563EB; font-weight: 600;">
                       ${dados.percentualMetaMensal}% da meta mensal atingida
@@ -382,8 +382,8 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                   <tr bgcolor="#161B22">
                     <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Data</th>
                     <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Dia da Semana</th>
-                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros</th>
-                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
+                    <th width="90" align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros</th>
+                    <th width="115" align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
                     <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Frentes com Produção</th>
                     <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Status</th>
                   </tr>
@@ -395,14 +395,14 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                     <td colspan="2" style="background-color: #1E293B; color: #FFFFFF; font-weight: 800; padding: 12px; font-size: 12px;">
                       TOTAL DOS 5 DIAS
                     </td>
-                    <td align="right" style="background-color: #1E293B; color: #F05A22; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
-                      ${formatMeters(total5DiasMetros)} m
+                    <td width="90" align="right" style="background-color: #1E293B; color: #F05A22; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
+                      <nobr style="white-space: nowrap;">${formatMeters(total5DiasMetros)}m</nobr>
                     </td>
-                    <td align="right" style="background-color: #1E293B; color: #2ECC71; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
-                      ${formatCurrency(total5DiasReceita)}
+                    <td width="115" align="right" style="background-color: #1E293B; color: #2ECC71; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
+                      <nobr style="white-space: nowrap;">${formatCurrency(total5DiasReceita)}</nobr>
                     </td>
                     <td colspan="2" align="left" style="background-color: #1E293B; color: #94A3B8; font-size: 11.5px; padding: 12px;">
-                      Média diária: <strong>${formatMeters(total5DiasMetros / 5)} m/dia</strong>
+                      Média diária: <strong><nobr style="white-space: nowrap;">${formatMeters(total5DiasMetros / 5)}m/dia</nobr></strong>
                     </td>
                   </tr>
                 </tbody>
@@ -429,9 +429,9 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                   <tr bgcolor="#161B22">
                     <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Obra / Serviço</th>
                     <th align="left" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase;">Cliente</th>
-                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros</th>
-                    <th align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
-                    <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Meta Diária</th>
+                    <th width="90" align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Metros</th>
+                    <th width="115" align="right" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Receita (R$)</th>
+                    <th width="85" align="center" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Meta Diária</th>
                     <th align="center" style="background-color: #161B22; color: #FFFFFF; padding: 11px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; white-space: nowrap;">Status</th>
                   </tr>
                 </thead>
@@ -442,11 +442,11 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                     <td colspan="2" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; padding: 12px; font-size: 12.5px;">
                       TOTAL CONSOLIDADO
                     </td>
-                    <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
-                      ${formatMeters(totDetalhamentoMetros)} m
+                    <td width="90" align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
+                      <nobr style="white-space: nowrap;">${formatMeters(totDetalhamentoMetros)}m</nobr>
                     </td>
-                    <td align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
-                      ${formatCurrency(totDetalhamentoReceita)}
+                    <td width="115" align="right" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 13.5px; padding: 12px; white-space: nowrap;">
+                      <nobr style="white-space: nowrap;">${formatCurrency(totDetalhamentoReceita)}</nobr>
                     </td>
                     <td colspan="2" align="center" style="background-color: #F05A22; color: #FFFFFF; font-weight: 800; font-size: 12px; padding: 12px; white-space: nowrap;">
                       100% OK
