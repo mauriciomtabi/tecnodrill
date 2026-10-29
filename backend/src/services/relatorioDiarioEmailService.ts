@@ -60,7 +60,7 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
   smtpPort: 587,
   smtpUser: '',
   smtpPass: '',
-  smtpFrom: '"BI JLE Telecom" <bi@jletelecom.com.br>',
+  smtpFrom: '"BI TecnoDrill" <bi@jletelecom.com.br>',
   smtpSecure: false
 };
 
@@ -96,7 +96,7 @@ export class RelatorioDiarioEmailService {
         smtpPort: Number(saved.smtpPort || process.env.SMTP_PORT) || 587,
         smtpUser: saved.smtpUser || process.env.SMTP_USER || '',
         smtpPass: saved.smtpPass || process.env.SMTP_PASS || '',
-        smtpFrom: saved.smtpFrom || process.env.SMTP_FROM || '"BI JLE Telecom" <bi@jletelecom.com.br>',
+        smtpFrom: saved.smtpFrom || process.env.SMTP_FROM || '"BI TecnoDrill" <bi@jletelecom.com.br>',
         smtpSecure: saved.smtpSecure !== undefined ? saved.smtpSecure : (Number(saved.smtpPort || process.env.SMTP_PORT) === 465)
       };
     } catch (e) {
@@ -590,7 +590,7 @@ export class RelatorioDiarioEmailService {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         },
         body: JSON.stringify({
-          from: `"BI JLE Telecom" <${FROM_EMAIL}>`,
+          from: `"BI TecnoDrill" <${FROM_EMAIL}>`,
           to: listaDestinatarios,
           subject,
           html,

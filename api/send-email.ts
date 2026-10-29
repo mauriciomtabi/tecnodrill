@@ -580,9 +580,9 @@ export async function enviarRelatorioEmailExec(options?: {
       cleanSubject = `Relatorio Diario TecnoDrill - Producao e Faturamento - ${dados?.dataStr || ''} (${dados?.horarioEnvio || ''})`.trim();
     }
 
-    const defaultText = finalText || `${cleanSubject}\n\nEste é um relatório gerado automaticamente pelo BI JLE Telecom.\nAcesse o painel do BI TecnoDrill: https://tecnodrill.vercel.app`;
+    const defaultText = finalText || `${cleanSubject}\n\nEste é um relatório gerado automaticamente pelo BI TecnoDrill.\nAcesse o painel do BI TecnoDrill: https://tecnodrill.vercel.app`;
 
-    const fromAddress = `"BI JLE Telecom" <${FROM_EMAIL}>`;
+    const fromAddress = `"BI TecnoDrill" <${FROM_EMAIL}>`;
 
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',

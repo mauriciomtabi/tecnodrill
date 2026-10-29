@@ -768,7 +768,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
               <span>Remetente Oficial:</span>
-              <strong style={{ color: 'var(--text-main)' }}>BI JLE Telecom &lt;bi@jletelecom.com.br&gt;</strong>
+              <strong style={{ color: 'var(--text-main)' }}>BI TecnoDrill &lt;bi@jletelecom.com.br&gt;</strong>
               <span style={{ color: 'var(--border-color)' }}>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
                 <Sparkles size={12} />
