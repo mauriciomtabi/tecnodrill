@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Barra, Servico } from '../types';
-import { parseBarraObservacao, ApiService } from '../services/api';
+import { parseBarraObservacao, ApiService, calcularValorMetroBarra } from '../services/api';
 import { useModalBackButton } from '../hooks/useModalBackButton';
 import { decToDMSForWatermark, reverseGeocode, formatFullAddress, AddressDetails } from '../utils/watermark';
 import { 
@@ -346,7 +346,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   let custoBarra = 0;
   if (servico) {
     if (servico.cenario_financeiro === 'VALOR_METRO') {
-      valorBarra = m * (Number(servico.valor_metro) || 0);
+      valorBarra = m * calcularValorMetroBarra(servico, effectiveDiametro);
     } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
       const diamDefault = Number(servico.diametro_furo_mm) || 150;
       const fator = Number(servico.fator_financeiro) || 0.8;

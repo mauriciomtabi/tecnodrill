@@ -72,7 +72,43 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
     const f = fMap.get(b.furo_id);
     const s = f ? sMap.get(f.servico_id) : null;
     const m = Number(b.metros) || 0;
-    const vMetro = Number(s?.valor_metro) || (Number(s?.fator_financeiro || 0.8) * Number(s?.diametro_furo_mm || 150)) || 100;
+
+    let vMetro = Number(s?.valor_metro) || 100;
+    if (s) {
+      if (s.cenario_financeiro === 'VALOR_METRO' || !s.cenario_financeiro) {
+        let tabela = s.tabela_diametros;
+        if (!tabela && s.descricao && s.descricao.includes('TD_META:')) {
+          try {
+            const match = s.descricao.match(/<!--TD_META:(.*?)-->/);
+            if (match) {
+              const meta = JSON.parse(match[1]);
+              tabela = meta.tabela_diametros;
+            }
+          } catch (_) { }
+        }
+        if (tabela && Array.isArray(tabela) && tabela.length > 0) {
+          const rawNum = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, ''));
+          const normStr = String(b.diametro || '').toLowerCase().trim();
+          const matchItem = tabela.find((it: any) => {
+            if (it.diametro_mm && rawNum && it.diametro_mm === rawNum) return true;
+            const itNum = parseFloat(String(it.diametro).replace(/[^\d.]/g, ''));
+            if (itNum && rawNum && itNum === rawNum) return true;
+            return String(it.diametro || '').toLowerCase().trim() === normStr;
+          });
+          if (matchItem && Number(matchItem.valor_metro) > 0) {
+            vMetro = Number(matchItem.valor_metro);
+          } else if (tabela[0]?.valor_metro) {
+            vMetro = Number(tabela[0].valor_metro);
+          }
+        }
+      } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+        const fator = Number(s.fator_financeiro) || 0.8;
+        const defaultDiam = Number(s.diametro_furo_mm) || 150;
+        const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || defaultDiam;
+        vMetro = fator * numDiam;
+      }
+    }
+
     const rec = m * vMetro;
 
     if (d.startsWith(`${ano}-${mes.padStart(2, '0')}`)) {

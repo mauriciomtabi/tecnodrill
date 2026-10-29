@@ -79,6 +79,7 @@ export interface TecnodrillServico {
   status: 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
   cenario_financeiro: 'VALOR_METRO' | 'FATOR_DIAMETRO_METRO' | 'VALOR_FECHADO';
   valor_metro: number;
+  tabela_diametros?: any[];
   fator_financeiro: number;
   diametro_furo_mm: number;
   valor_total_fechado: number;

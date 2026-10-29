@@ -2,7 +2,7 @@ import { summarizeDiameterRevenue } from './produtividadeDiameters';
 import { summarizeAuthorRevenue } from './produtividadeAuthors';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ApiService, parseBarraObservacao } from '../services/api';
+import { ApiService, parseBarraObservacao, calcularValorMetroBarra } from '../services/api';
 import { Servico, Barra, TipoServico } from '../types';
 import * as XLSX from 'xlsx';
 import { 
@@ -294,7 +294,17 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       // Cálculo de Receita para o período
       let receitaPeriodo = 0;
       if (s.cenario_financeiro === 'VALOR_METRO') {
-        receitaPeriodo = metrosPeriodo * (Number(s.valor_metro) || 0);
+        if (s.tabela_diametros && s.tabela_diametros.length > 0) {
+          let somaRec = 0;
+          for (const b of barrasPeriodo) {
+            if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
+            const m = Number(b.metros) || 3;
+            somaRec += m * calcularValorMetroBarra(s, b.diametro);
+          }
+          receitaPeriodo = somaRec;
+        } else {
+          receitaPeriodo = metrosPeriodo * (Number(s.valor_metro) || 0);
+        }
       } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
         const diamDefault = Number(s.diametro_furo_mm) || 150;
         const fator = Number(s.fator_financeiro) || 0.8;
@@ -411,7 +421,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
               let rec = 0;
               if (s.cenario_financeiro === 'VALOR_METRO') {
-                rec = m * (Number(s.valor_metro) || 0);
+                rec = m * calcularValorMetroBarra(s, b.diametro);
               } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
                 const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
                 rec = m * fator * numDiam;
@@ -472,7 +482,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
               let rec = 0;
               if (s.cenario_financeiro === 'VALOR_METRO') {
-                rec = m * (Number(s.valor_metro) || 0);
+                rec = m * calcularValorMetroBarra(s, b.diametro);
               } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
                 const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
                 rec = m * fator * numDiam;
@@ -525,7 +535,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
             let rec = 0;
             if (s.cenario_financeiro === 'VALOR_METRO') {
-              rec = m * (Number(s.valor_metro) || 0);
+              rec = m * calcularValorMetroBarra(s, b.diametro);
             } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
               const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
               rec = m * fator * numDiam;

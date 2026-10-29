@@ -2,7 +2,7 @@ import { canReadRegistro } from '../services/registroAccess';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Servico, Furo, Barra } from '../types';
-import { ApiService, sanitizeLocalidade, parseBarraObservacao } from '../services/api';
+import { ApiService, sanitizeLocalidade, parseBarraObservacao, calcularValorMetroBarra } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { RodEntryModal } from '../components/RodEntryModal';
 import { getRodDraft } from '../utils/draftStorage';
@@ -421,7 +421,17 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   // Cálculo de Retorno Financeiro Real (somando diâmetros reais das barras)
   let retornoCalculado = 0;
   if (servico.cenario_financeiro === 'VALOR_METRO') {
-    retornoCalculado = metrosExecutadosTotal * (Number(servico.valor_metro) || 180);
+    if (servico.tabela_diametros && servico.tabela_diametros.length > 0) {
+      let soma = 0;
+      for (const b of barras) {
+        if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
+        const m = b.metros !== undefined ? Number(b.metros) : 3;
+        soma += m * calcularValorMetroBarra(servico, b.diametro);
+      }
+      retornoCalculado = soma;
+    } else {
+      retornoCalculado = metrosExecutadosTotal * (Number(servico.valor_metro) || 180);
+    }
   } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
     const diamDefault = Number(servico.diametro_furo_mm) || 150;
     const fator = Number(servico.fator_financeiro) || 0.8;
@@ -438,6 +448,50 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
     retornoCalculado = (metrosExecutadosTotal / (metrosTotalPrevisto || 1)) * (Number(servico.valor_total_fechado) || 0);
   }
+
+  // Progresso individual por diâmetro (quando a obra possui tabela_diametros no modelo VALOR_METRO)
+  const progressoDiametros = React.useMemo(() => {
+    if (servico?.cenario_financeiro !== 'VALOR_METRO' || !servico?.tabela_diametros || servico.tabela_diametros.length === 0) {
+      return [];
+    }
+
+    const mapMetrosExecutados = new Map<string, number>();
+    for (const b of barras) {
+      if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
+      const m = b.metros !== undefined ? Number(b.metros) : 3;
+      const dRaw = (b.diametro || '').trim();
+      const numRaw = parseFloat(dRaw.replace(/[^\d.]/g, ''));
+
+      let matchedKey = '';
+      for (const item of servico.tabela_diametros) {
+        if (item.diametro_mm && numRaw && item.diametro_mm === numRaw) {
+          matchedKey = item.diametro;
+          break;
+        }
+        if (item.diametro.toLowerCase() === dRaw.toLowerCase()) {
+          matchedKey = item.diametro;
+          break;
+        }
+      }
+
+      const chave = matchedKey || (dRaw || 'Outros');
+      mapMetrosExecutados.set(chave, (mapMetrosExecutados.get(chave) || 0) + m);
+    }
+
+    return servico.tabela_diametros.map(item => {
+      const exec = mapMetrosExecutados.get(item.diametro) || 0;
+      const prev = Number(item.metragem_prevista) || 0;
+      const pct = prev > 0 ? Math.min(100, Math.round((exec / prev) * 100)) : 0;
+      const faturamento = exec * (Number(item.valor_metro) || 0);
+
+      return {
+        ...item,
+        executado: exec,
+        percentual: pct,
+        faturamento
+      };
+    });
+  }, [servico, barras]);
 
   // Regra Oficial de Custo: Multiplicado sempre por 2 (rateio 50% Navegador e 50% Operador)
   const custoMetro = Number(servico.custo_metro) || 0;
@@ -875,7 +929,11 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
               R$ {retornoCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </strong>
             <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-              {servico.cenario_financeiro === 'VALOR_METRO' && `R$ ${servico.valor_metro}/m`}
+              {servico.cenario_financeiro === 'VALOR_METRO' && (
+                servico.tabela_diametros && servico.tabela_diametros.length > 1
+                  ? `${servico.tabela_diametros.length} Diâmetros Contratados`
+                  : `R$ ${servico.valor_metro}/m`
+              )}
               {servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO' && `Fator ${servico.fator_financeiro || 0.8} (diâmetro real)`}
               {servico.cenario_financeiro === 'VALOR_FECHADO' && `Valor Fechado`}
             </span>
@@ -905,6 +963,93 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </div>
         )}
       </div>
+
+      {/* Quadro: Progresso por Diâmetro Contratado (Apenas Gestores/Admin) */}
+      {isGestor && progressoDiametros.length > 0 && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-md)',
+            padding: '16px 20px',
+            boxShadow: 'var(--shadow-sm)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Progresso por Diâmetro Contratado
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                ({progressoDiametros.length} diâmetros configurados)
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+            {progressoDiametros.map(p => (
+              <div
+                key={p.diametro}
+                style={{
+                  backgroundColor: 'var(--bg-app)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{
+                      backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                      color: 'var(--primary)',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      fontWeight: 800
+                    }}>
+                      {p.diametro}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      R$ {p.valor_metro.toFixed(2)}/m
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    color: p.percentual >= 100 ? 'var(--success)' : 'var(--primary)'
+                  }}>
+                    {p.percentual}%
+                  </span>
+                </div>
+
+                {/* Barra de Progresso */}
+                <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      width: `${p.percentual}%`,
+                      height: '100%',
+                      backgroundColor: p.percentual >= 100 ? 'var(--success)' : 'var(--primary)',
+                      transition: 'width 0.3s ease'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', marginTop: '2px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    <strong>{p.executado.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}m</strong> de {p.metragem_prevista}m
+                  </span>
+                  <strong style={{ color: 'var(--success)' }}>
+                    R$ {p.faturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 4. SUBHEADER TABS: FOTOS | MAPA (PADRÃO JLE) */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1060,7 +1205,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                   const mBarra = (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? 0 : (b.metros ?? 3);
                   let valorCard = 0;
                   if (servico.cenario_financeiro === 'VALOR_METRO') {
-                    valorCard = mBarra * (Number(servico.valor_metro) || 0);
+                    valorCard = mBarra * calcularValorMetroBarra(servico, b.diametro);
                   } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
                     const diamDefault = Number(servico.diametro_furo_mm) || 150;
                     const fator = Number(servico.fator_financeiro) || 0.8;

@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
 import { withPrivatePhotos } from './privatePhotos';
-import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra, TerceiroLancamento } from '../types';
+import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra, TerceiroLancamento, TabelaDiametroItem } from '../types';
 
 export interface ServicoMetaTag {
   tipo_servico?: TipoServico;
@@ -15,6 +15,66 @@ export interface ServicoMetaTag {
   custo_outros_diario?: number;
   navegadores?: Array<{ id: string; nome: string }>;
   operadores?: Array<{ id: string; nome: string }>;
+  tabela_diametros?: TabelaDiametroItem[];
+}
+
+/**
+ * Calcula o valor por metro (R$/m) aplicável a uma barra/lance com base no modelo
+ * financeiro do serviço e no diâmetro registrado.
+ */
+export function calcularValorMetroBarra(
+  servico?: Partial<Servico> | null,
+  diametroBarra?: string | null
+): number {
+  if (!servico) return 0;
+
+  // 1. Cenário: VALOR_METRO
+  if (servico.cenario_financeiro === 'VALOR_METRO' || !servico.cenario_financeiro) {
+    const tabela = servico.tabela_diametros;
+    if (tabela && Array.isArray(tabela) && tabela.length > 0) {
+      if (diametroBarra) {
+        const rawNum = parseFloat(String(diametroBarra).replace(/[^\d.]/g, ''));
+        const normStr = String(diametroBarra).toLowerCase().trim();
+
+        // Busca exata por número em mm ou string correspondente
+        const match = tabela.find(item => {
+          if (item.diametro_mm && rawNum && item.diametro_mm === rawNum) return true;
+          const itemNum = parseFloat(String(item.diametro).replace(/[^\d.]/g, ''));
+          if (itemNum && rawNum && itemNum === rawNum) return true;
+          return item.diametro?.toLowerCase().trim() === normStr;
+        });
+
+        if (match && Number(match.valor_metro) > 0) {
+          return Number(match.valor_metro);
+        }
+      }
+      // Se não informou diâmetro ou não encontrou na tabela, usa o 1º item como fallback
+      if (tabela[0]?.valor_metro) {
+        return Number(tabela[0].valor_metro);
+      }
+    }
+    return Number(servico.valor_metro) || 0;
+  }
+
+  // 2. Cenário: FATOR_DIAMETRO_METRO
+  if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+    const fator = Number(servico.fator_financeiro) || 0.8;
+    const defaultDiam = Number(servico.diametro_furo_mm) || 150;
+    let diamNum = defaultDiam;
+    if (diametroBarra) {
+      const parsed = parseFloat(String(diametroBarra).replace(/[^\d.]/g, ''));
+      if (!isNaN(parsed) && parsed > 0) diamNum = parsed;
+    }
+    return fator * diamNum;
+  }
+
+  // 3. Cenário: VALOR_FECHADO
+  if (servico.cenario_financeiro === 'VALOR_FECHADO') {
+    const prevMetros = Number(servico.metragem_prevista_total) || 1;
+    return prevMetros > 0 ? (Number(servico.valor_total_fechado) || 0) / prevMetros : 0;
+  }
+
+  return Number(servico.valor_metro) || 0;
 }
 
 export function parseServicoDescricao(raw?: string | null): { descricao: string; meta: ServicoMetaTag } {
@@ -410,7 +470,27 @@ export class ApiService {
 
       let retornoCalculado = 0;
       if (s.cenario_financeiro === 'VALOR_METRO') {
-        retornoCalculado = metrosExecutados * (Number(s.valor_metro) || 0);
+        const tabelaDiametrosServico = (meta.tabela_diametros && Array.isArray(meta.tabela_diametros)) ? meta.tabela_diametros : s.tabela_diametros;
+        const servicoCalcRef = { ...s, tabela_diametros: tabelaDiametrosServico };
+        if (tabelaDiametrosServico && tabelaDiametrosServico.length > 0) {
+          let somaRetorno = 0;
+          let countBarras = 0;
+          for (const f of furos) {
+            const bList = allBarras.filter(b => b.furo_id === f.id);
+            for (const b of bList) {
+              const isCaixa = b.tipo_registro === 'CAIXA' || b.tem_caixa;
+              if (isCaixa) continue;
+              const m = Number(b.metros) || 3;
+              const { meta: bMeta } = parseBarraObservacao(b.observacao);
+              const dStr = b.diametro || bMeta.diametro;
+              somaRetorno += m * calcularValorMetroBarra(servicoCalcRef, dStr);
+              countBarras++;
+            }
+          }
+          retornoCalculado = countBarras > 0 ? somaRetorno : (metrosExecutados * (Number(s.valor_metro) || 0));
+        } else {
+          retornoCalculado = metrosExecutados * (Number(s.valor_metro) || 0);
+        }
       } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
         const diamDefault = Number(s.diametro_furo_mm) || 150;
         const fator = Number(s.fator_financeiro) || 0.8;
@@ -482,6 +562,7 @@ export class ApiService {
         status: s.status,
         cenario_financeiro: s.cenario_financeiro,
         valor_metro: Number(s.valor_metro) || 0,
+        tabela_diametros: (meta.tabela_diametros && Array.isArray(meta.tabela_diametros)) ? meta.tabela_diametros : s.tabela_diametros,
         fator_financeiro: Number(s.fator_financeiro) || 0,
         diametro_furo_mm: Number(s.diametro_furo_mm) || 0,
         valor_total_fechado: Number(s.valor_total_fechado) || 0,
@@ -584,6 +665,7 @@ export class ApiService {
       status: s.status,
       cenario_financeiro: s.cenario_financeiro,
       valor_metro: Number(s.valor_metro) || 0,
+      tabela_diametros: (meta.tabela_diametros && Array.isArray(meta.tabela_diametros)) ? meta.tabela_diametros : s.tabela_diametros,
       fator_financeiro: Number(s.fator_financeiro) || 0,
       diametro_furo_mm: Number(s.diametro_furo_mm) || 0,
       valor_total_fechado: Number(s.valor_total_fechado) || 0,
@@ -638,7 +720,8 @@ export class ApiService {
       custo_equipamento_diario: Number(data.custo_equipamento_diario) || 0,
       custo_outros_diario: Number(data.custo_outros_diario) || 0,
       navegadores: data.navegadores,
-      operadores: data.operadores
+      operadores: data.operadores,
+      tabela_diametros: data.tabela_diametros
     });
 
     const supabasePayload: any = {
@@ -686,7 +769,8 @@ export class ApiService {
           navegador_id: data.navegador_id,
           navegador_nome: data.navegador_nome,
           operador_id: data.operador_id,
-          operador_nome: data.operador_nome
+          operador_nome: data.operador_nome,
+          tabela_diametros: data.tabela_diametros
         };
 
     const { error: furoError } = await supabase.from('tecnodrill_furos').insert({
@@ -759,7 +843,8 @@ export class ApiService {
       custo_equipamento_diario: data.custo_equipamento_diario !== undefined ? Number(data.custo_equipamento_diario) : (existingMeta.custo_equipamento_diario || 0),
       custo_outros_diario: data.custo_outros_diario !== undefined ? Number(data.custo_outros_diario) : (existingMeta.custo_outros_diario || 0),
       navegadores: data.navegadores !== undefined ? data.navegadores : (existingMeta.navegadores || []),
-      operadores: data.operadores !== undefined ? data.operadores : (existingMeta.operadores || [])
+      operadores: data.operadores !== undefined ? data.operadores : (existingMeta.operadores || []),
+      tabela_diametros: data.tabela_diametros !== undefined ? data.tabela_diametros : existingMeta.tabela_diametros
     };
     supabasePayload.descricao = buildServicoDescricao(cleanDesc, metaToSave);
 
@@ -793,6 +878,7 @@ export class ApiService {
           navegadores: metaToSave.navegadores || [],
           operador_id: data.operador_id !== undefined ? data.operador_id : updated.operador_id,
           operador_nome: data.operador_nome !== undefined ? data.operador_nome : updated.operador_nome,
+          tabela_diametros: metaToSave.tabela_diametros,
           operadores: metaToSave.operadores || []
         };
       } else if (error) {
@@ -814,7 +900,7 @@ export class ApiService {
           navegador_id: data.navegador_id || null,
           navegador_nome: data.navegador_nome || null,
           operador_id: data.operador_id || null,
-          operador_nome: data.operador_nome || null
+          operador_nome: data.operador_nome
         };
 
         if (furosExistentes && furosExistentes.length > 0) {

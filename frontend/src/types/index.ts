@@ -16,6 +16,14 @@ export type StatusServico = 'EM_ANDAMENTO' | 'CONCLUIDO' | 'PAUSADO';
 export type TipoServico = 'SANEAMENTO' | 'RODOVIA' | 'TELECOM';
 export type TipoRegistroBarra = 'CANALIZACAO' | 'CAIXA';
 
+export interface TabelaDiametroItem {
+  id?: string;
+  diametro: string;
+  diametro_mm: number;
+  metragem_prevista: number;
+  valor_metro: number;
+}
+
 export interface Servico {
   id: string;
   nome: string;
@@ -40,6 +48,7 @@ export interface Servico {
   os_obrigatoria?: boolean;
   cenario_financeiro: CenarioFinanceiro;
   valor_metro: number;
+  tabela_diametros?: TabelaDiametroItem[];
   fator_financeiro: number;
   diametro_furo_mm: number;
   valor_total_fechado: number;

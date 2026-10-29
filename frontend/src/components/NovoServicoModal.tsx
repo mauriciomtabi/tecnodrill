@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Servico, CenarioFinanceiro, Usuario, TipoServico } from '../types';
+import { Servico, CenarioFinanceiro, Usuario, TipoServico, TabelaDiametroItem } from '../types';
 import { ApiService, sanitizeLocalidade } from '../services/api';
 import { generateWatermarkPreview } from '../utils/watermark';
 import { useModalBackButton } from '../hooks/useModalBackButton';
-import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon, Minus, Plus } from 'lucide-react';
+import { X, Check, Search, ChevronDown, Calendar, TrendingUp, Clock, Edit, UserCheck, HardHat, Upload, Eye, Image as ImageIcon, Minus, Plus, Trash2 } from 'lucide-react';
 
 interface NovoServicoModalProps {
   isOpen: boolean;
@@ -111,6 +111,18 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
   const [diametroMm, setDiametroMm] = useState('150');
   const [valorFechado, setValorFechado] = useState('50000');
 
+  // Tabela Dinâmica de Diâmetros para o Cenário VALOR_METRO
+  const DIAMETROS_OPCOES = ['63mm', '90mm', '110mm', '125mm', '150mm', '160mm', '200mm', '250mm', '315mm', '400mm', 'PERSONALIZADO'];
+  const [tabelaDiametros, setTabelaDiametros] = useState<TabelaDiametroItem[]>([
+    {
+      id: 'diam_1',
+      diametro: '110mm',
+      diametro_mm: 110,
+      metragem_prevista: 1000,
+      valor_metro: 180
+    }
+  ]);
+
   // Carregar usuários para seleção de equipe
   useEffect(() => {
     if (isOpen) {
@@ -205,6 +217,22 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setFator(String(initialData.fator_financeiro || 2.85));
         setDiametroMm(String(initialData.diametro_furo_mm || 150));
         setValorFechado(String(initialData.valor_total_fechado || 50000));
+
+        if (initialData.tabela_diametros && Array.isArray(initialData.tabela_diametros) && initialData.tabela_diametros.length > 0) {
+          setTabelaDiametros(initialData.tabela_diametros);
+        } else {
+          const initDiam = initialData.diametro_furo_mm ? `${initialData.diametro_furo_mm}mm` : '150mm';
+          const initDiamNum = Number(initialData.diametro_furo_mm) || 150;
+          setTabelaDiametros([
+            {
+              id: 'diam_1',
+              diametro: initDiam,
+              diametro_mm: initDiamNum,
+              metragem_prevista: Number(initialData.metragem_prevista_total) || 1000,
+              valor_metro: Number(initialData.valor_metro) || 180
+            }
+          ]);
+        }
       } else {
         setNome('');
         setCliente('');
@@ -227,6 +255,15 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         setFator('2.85');
         setDiametroMm('150');
         setValorFechado('50000');
+        setTabelaDiametros([
+          {
+            id: 'diam_1',
+            diametro: '110mm',
+            diametro_mm: 110,
+            metragem_prevista: 1000,
+            valor_metro: 180
+          }
+        ]);
       }
       setCurrentStep(1);
       setFormError(null);
@@ -337,6 +374,49 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     }
   };
 
+  const handleAddDiametro = () => {
+    const nextId = `diam_${Date.now()}`;
+    const used = new Set(tabelaDiametros.map(t => t.diametro));
+    const nextDiam = DIAMETROS_OPCOES.find(d => d !== 'PERSONALIZADO' && !used.has(d)) || '160mm';
+    const nextNum = parseFloat(nextDiam.replace(/[^\d.]/g, '')) || 160;
+
+    setTabelaDiametros(prev => [
+      ...prev,
+      {
+        id: nextId,
+        diametro: nextDiam,
+        diametro_mm: nextNum,
+        metragem_prevista: 500,
+        valor_metro: Number(valorMetro) || 180
+      }
+    ]);
+  };
+
+  const handleRemoveDiametro = (index: number) => {
+    if (tabelaDiametros.length <= 1) return;
+    setTabelaDiametros(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUpdateDiametro = (index: number, updates: Partial<TabelaDiametroItem>) => {
+    setTabelaDiametros(prev => prev.map((item, i) => {
+      if (i !== index) return item;
+      const updated = { ...item, ...updates };
+      if (updates.diametro && updates.diametro !== 'PERSONALIZADO') {
+        const num = parseFloat(updates.diametro.replace(/[^\d.]/g, ''));
+        if (!isNaN(num)) updated.diametro_mm = num;
+      }
+      return updated;
+    }));
+  };
+
+  // Mantém a Metragem Prevista (M) sincronizada com a soma dos diâmetros no cenário VALOR_METRO
+  useEffect(() => {
+    if (cenario === 'VALOR_METRO' && tabelaDiametros.length > 0) {
+      const soma = tabelaDiametros.reduce((acc, it) => acc + (Number(it.metragem_prevista) || 0), 0);
+      setMetragemPrevista(String(soma));
+    }
+  }, [tabelaDiametros, cenario]);
+
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nome.trim() || !cliente.trim()) {
@@ -400,11 +480,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
         operador_id: opIdFinal,
         operador_nome: opNomeFinal,
         cenario_financeiro: cenario,
-        valor_metro: Number(valorMetro) || 0,
+        valor_metro: cenario === 'VALOR_METRO' && tabelaDiametros.length > 0 ? (Number(tabelaDiametros[0].valor_metro) || 0) : (Number(valorMetro) || 0),
+        tabela_diametros: cenario === 'VALOR_METRO' ? tabelaDiametros : undefined,
         fator_financeiro: Number(fator) || 0,
-        diametro_furo_mm: 0,
+        diametro_furo_mm: cenario === 'VALOR_METRO' && tabelaDiametros.length > 0 ? (tabelaDiametros[0].diametro_mm || 150) : 0,
         valor_total_fechado: Number(valorFechado) || 0,
-        metragem_prevista_total: mTotal,
+        metragem_prevista_total: cenario === 'VALOR_METRO' && tabelaDiametros.length > 0 ? tabelaDiametros.reduce((acc, it) => acc + (Number(it.metragem_prevista) || 0), 0) : mTotal,
         tipo_meta: 'DIARIA',
         meta_metros: mDia,
         custo_metro: Number(custoMetro) || 0
@@ -418,6 +499,11 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
   const valorUnitarioEstimado = () => {
     if (cenario === 'VALOR_METRO') {
+      if (tabelaDiametros && tabelaDiametros.length > 0) {
+        const totalM = tabelaDiametros.reduce((acc, it) => acc + (Number(it.metragem_prevista) || 0), 0);
+        const totalR = tabelaDiametros.reduce((acc, it) => acc + ((Number(it.metragem_prevista) || 0) * (Number(it.valor_metro) || 0)), 0);
+        return totalM > 0 ? totalR / totalM : (Number(valorMetro) || 0);
+      }
       return Number(valorMetro) || 0;
     }
     if (cenario === 'FATOR_DIAMETRO_METRO') {
@@ -432,6 +518,12 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
 
   const retornoPrevistoTotal = () => {
     const m = Number(metragemPrevista) || 0;
+    if (cenario === 'VALOR_METRO') {
+      if (tabelaDiametros && tabelaDiametros.length > 0) {
+        return tabelaDiametros.reduce((acc, item) => acc + ((Number(item.metragem_prevista) || 0) * (Number(item.valor_metro) || 0)), 0);
+      }
+      return m * (Number(valorMetro) || 0);
+    }
     if (cenario === 'VALOR_FECHADO') return Number(valorFechado) || 0;
     return m * valorUnitarioEstimado();
   };
@@ -1019,13 +1111,14 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                       value={metragemPrevista}
                       onChange={(e) => setMetragemPrevista(e.target.value)}
                       min="1"
+                      readOnly={cenario === 'VALOR_METRO'}
                       required
                       style={{ fontSize: '18px', fontWeight: 800, color: 'var(--primary)', fontFamily: 'var(--font-mono)' }}
                     />
                     <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-muted)' }}>m</span>
                   </div>
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-                    Total planejado para a obra
+                    {cenario === 'VALOR_METRO' ? '⚡ Soma automática da tabela de diâmetros' : 'Total planejado para a obra'}
                   </span>
                 </div>
 
@@ -1040,6 +1133,7 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
                       value={metaDiaria}
                       onChange={(e) => setMetaDiaria(e.target.value)}
                       min="1"
+                      readOnly={cenario === 'VALOR_METRO'}
                       required
                       style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)', fontFamily: 'var(--font-mono)' }}
                     />
@@ -1168,22 +1262,230 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
               {/* Row 3: Inputs específicos do modelo selecionado */}
               <div style={{ backgroundColor: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                 
-                {cenario === 'VALOR_METRO' && (
+                                {cenario === 'VALOR_METRO' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '6px' }}>
-                      VALOR POR METRO (R$) *
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-muted)' }}>R$</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={valorMetro}
-                        onChange={(e) => setValorMetro(e.target.value)}
-                        placeholder="180.00"
-                        required
-                        style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}
-                      />
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 700, color: 'var(--text-main)', textTransform: 'uppercase' }}>
+                          Tabela de Diâmetros, Metragens & Preços *
+                        </label>
+                        <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          Cadastre os diâmetros contratados nesta obra com suas respectivas metragens previstas e valores por metro
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleAddDiametro}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          padding: '6px 10px',
+                          backgroundColor: 'rgba(240, 90, 34, 0.1)',
+                          border: '1px solid var(--primary)',
+                          borderRadius: '6px',
+                          color: 'var(--primary)',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Plus size={14} />
+                        Adicionar Diâmetro
+                      </button>
+                    </div>
+
+                    {/* Lista Dinâmica de Diâmetros */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+                      {tabelaDiametros.map((item, index) => {
+                        const subtotal = (Number(item.metragem_prevista) || 0) * (Number(item.valor_metro) || 0);
+                        const isCustom = !DIAMETROS_OPCOES.slice(0, -1).includes(item.diametro);
+
+                        return (
+                          <div
+                            key={item.id || `item_${index}`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1.2fr 1fr 1fr 1.1fr 36px',
+                              gap: '8px',
+                              alignItems: 'center',
+                              backgroundColor: 'var(--bg-card)',
+                              padding: '10px 12px',
+                              borderRadius: '8px',
+                              border: '1px solid var(--border-color)'
+                            }}
+                          >
+                            {/* Coluna 1: Diâmetro */}
+                            <div>
+                              <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                Diâmetro
+                              </span>
+                              {!isCustom ? (
+                                <select
+                                  value={item.diametro}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'PERSONALIZADO') {
+                                      handleUpdateDiametro(index, { diametro: 'PERSONALIZADO' });
+                                    } else {
+                                      handleUpdateDiametro(index, { diametro: val });
+                                    }
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '7px 8px',
+                                    fontSize: '12.5px',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-app)',
+                                    color: 'var(--text-main)'
+                                  }}
+                                >
+                                  {DIAMETROS_OPCOES.map(d => (
+                                    <option key={d} value={d}>
+                                      {d === 'PERSONALIZADO' ? '✏️ Outro (Personalizado)' : d}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                  <input
+                                    type="text"
+                                    value={item.diametro === 'PERSONALIZADO' ? '' : item.diametro}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const num = parseFloat(val.replace(/[^\d.]/g, '')) || 0;
+                                      handleUpdateDiametro(index, { diametro: val, diametro_mm: num });
+                                    }}
+                                    placeholder="Ex: 500mm"
+                                    required
+                                    style={{
+                                      width: '100%',
+                                      padding: '6px 8px',
+                                      fontSize: '12px',
+                                      fontWeight: 700,
+                                      borderRadius: '6px',
+                                      border: '1px solid var(--primary)',
+                                      backgroundColor: 'var(--bg-app)',
+                                      color: 'var(--text-main)'
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    title="Voltar ao catálogo padrão"
+                                    onClick={() => handleUpdateDiametro(index, { diametro: '110mm' })}
+                                    style={{
+                                      border: 'none',
+                                      background: 'none',
+                                      cursor: 'pointer',
+                                      color: 'var(--text-muted)',
+                                      fontSize: '11px',
+                                      padding: '2px'
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Coluna 2: Metragem Prevista (m) */}
+                            <div>
+                              <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                Metragem (m)
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  step="1"
+                                  value={item.metragem_prevista || ''}
+                                  onChange={(e) => handleUpdateDiametro(index, { metragem_prevista: Number(e.target.value) || 0 })}
+                                  placeholder="Metros"
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '6px 8px',
+                                    fontSize: '13px',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-app)',
+                                    color: 'var(--primary)',
+                                    fontFamily: 'var(--font-mono)'
+                                  }}
+                                />
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>m</span>
+                              </div>
+                            </div>
+
+                            {/* Coluna 3: Valor por Metro (R$) */}
+                            <div>
+                              <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                Valor (R$/m)
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>R$</span>
+                                <input
+                                  type="number"
+                                  min="0.01"
+                                  step="0.01"
+                                  value={item.valor_metro || ''}
+                                  onChange={(e) => handleUpdateDiametro(index, { valor_metro: parseFloat(e.target.value) || 0 })}
+                                  placeholder="Preço"
+                                  required
+                                  style={{
+                                    width: '100%',
+                                    padding: '6px 8px',
+                                    fontSize: '13px',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    border: '1px solid var(--border-color)',
+                                    backgroundColor: 'var(--bg-app)',
+                                    color: 'var(--text-main)',
+                                    fontFamily: 'var(--font-mono)'
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Coluna 4: Subtotal */}
+                            <div>
+                              <span style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                                Subtotal
+                              </span>
+                              <div style={{ fontSize: '12.5px', fontWeight: 800, color: 'var(--success)', whiteSpace: 'nowrap', paddingTop: '6px' }}>
+                                R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </div>
+
+                            {/* Coluna 5: Ação Excluir */}
+                            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '16px' }}>
+                              <button
+                                type="button"
+                                disabled={tabelaDiametros.length <= 1}
+                                onClick={() => handleRemoveDiametro(index)}
+                                title={tabelaDiametros.length <= 1 ? 'Mínimo de 1 diâmetro obrigatório' : 'Remover este diâmetro'}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  color: tabelaDiametros.length <= 1 ? 'var(--border-color)' : '#EF4444',
+                                  cursor: tabelaDiametros.length <= 1 ? 'not-allowed' : 'pointer',
+                                  padding: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '4px'
+                                }}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

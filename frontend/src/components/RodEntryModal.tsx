@@ -67,6 +67,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
 
   // Dados Técnicos
   const [diametro, setDiametro] = useState<string>(() => {
+    if (servico?.tabela_diametros && servico.tabela_diametros.length > 0) {
+      return servico.tabela_diametros[0].diametro;
+    }
     if (servico?.diametro_furo_mm) return `${servico.diametro_furo_mm}mm`;
     return '150mm';
   });
@@ -217,7 +220,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         setTipoRegistro('CANALIZACAO');
         setFotosList([]);
         rawPhotosListRef.current = [];
-        const defaultDiam = servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm';
+        const defaultDiam = (servico?.tabela_diametros && servico.tabela_diametros.length > 0)
+          ? servico.tabela_diametros[0].diametro
+          : (servico?.diametro_furo_mm ? `${servico.diametro_furo_mm}mm` : '150mm');
         setDiametro(defaultDiam);
         setCustomDiametro('');
         setNumeroOs('');
@@ -1374,46 +1379,66 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </label>
 
               {/* Quick Chips */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
-                {COMMON_DIAMETERS.map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => {
-                      setDiametro(d);
-                      setCustomDiametro('');
-                    }}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: '6px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      border: `1px solid ${diametro === d ? 'var(--primary)' : 'var(--border-color)'}`,
-                      backgroundColor: diametro === d ? 'var(--primary)' : 'var(--bg-app)',
-                      color: diametro === d ? '#FFFFFF' : 'var(--text-main)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {d}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setDiametro('OUTRO')}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: '6px',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    border: `1px solid ${diametro === 'OUTRO' ? 'var(--primary)' : 'var(--border-color)'}`,
-                    backgroundColor: diametro === 'OUTRO' ? 'var(--primary)' : 'var(--bg-app)',
-                    color: diametro === 'OUTRO' ? '#FFFFFF' : 'var(--text-main)',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Outro
-                </button>
-              </div>
+              {(() => {
+                const listaDiametrosBotoes = (servico?.tabela_diametros && servico.tabela_diametros.length > 0)
+                  ? Array.from(new Set(servico.tabela_diametros.map(t => t.diametro)))
+                  : COMMON_DIAMETERS;
+
+                return (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                    {listaDiametrosBotoes.map(d => {
+                      const itemTab = servico?.tabela_diametros?.find(t => t.diametro === d);
+                      const isSelected = diametro === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => {
+                            setDiametro(d);
+                            setCustomDiametro('');
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
+                            backgroundColor: isSelected ? 'var(--primary)' : 'var(--bg-app)',
+                            color: isSelected ? '#FFFFFF' : 'var(--text-main)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}
+                        >
+                          {d}
+                          {itemTab?.valor_metro ? (
+                            <span style={{ fontSize: '10.5px', opacity: isSelected ? 0.9 : 0.7, fontWeight: 600 }}>
+                              (R$ {itemTab.valor_metro}/m)
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setDiametro('OUTRO')}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        border: `1px solid ${diametro === 'OUTRO' ? 'var(--primary)' : 'var(--border-color)'}`,
+                        backgroundColor: diametro === 'OUTRO' ? 'var(--primary)' : 'var(--bg-app)',
+                        color: diametro === 'OUTRO' ? '#FFFFFF' : 'var(--text-main)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Outro
+                    </button>
+                  </div>
+                );
+              })()}
 
               {diametro === 'OUTRO' && (
                 <input

@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { Servico, Barra } from '../types';
-import { parseBarraObservacao } from '../services/api';
+import { parseBarraObservacao, calcularValorMetroBarra } from '../services/api';
 import { TECNODRILL_LOGO_BASE64 } from './tecnodrillLogoBase64';
 
 const MESES_NOMES = [
@@ -138,7 +138,7 @@ export function processarBarrasParaMedicao(servico: Servico, barras: Barra[]): R
       // Cálculo do valor unitário por metro conforme cenário financeiro
       let valorMetro = 0;
       if (servico.cenario_financeiro === 'VALOR_METRO') {
-        valorMetro = Number(servico.valor_metro) || 0;
+        valorMetro = calcularValorMetroBarra(servico, String(item.diametroNum));
       } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
         valorMetro = fatorFinanceiro * item.diametroNum;
       } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {

@@ -191,8 +191,36 @@ export class RelatorioDiarioEmailService {
 
           // Cálculo do valor unitário por metro conforme cenário financeiro
           let vMetro = 0;
-          if (servico.cenario_financeiro === 'VALOR_METRO') {
-            vMetro = Number(servico.valor_metro) || 0;
+          if (servico.cenario_financeiro === 'VALOR_METRO' || !servico.cenario_financeiro) {
+            let tabela = (servico as any).tabela_diametros;
+            if (!tabela && servico.descricao && servico.descricao.includes('TD_META:')) {
+              try {
+                const match = servico.descricao.match(/<!--TD_META:(.*?)-->/);
+                if (match) {
+                  const meta = JSON.parse(match[1]);
+                  tabela = meta.tabela_diametros;
+                }
+              } catch (_) { }
+            }
+            if (tabela && Array.isArray(tabela) && tabela.length > 0) {
+              const rawNum = diamNum;
+              const normStr = String(diam || '').toLowerCase().trim();
+              const matchItem = tabela.find((it: any) => {
+                if (it.diametro_mm && rawNum && it.diametro_mm === rawNum) return true;
+                const itNum = parseFloat(String(it.diametro).replace(/[^\d.]/g, ''));
+                if (itNum && rawNum && itNum === rawNum) return true;
+                return String(it.diametro || '').toLowerCase().trim() === normStr;
+              });
+              if (matchItem && Number(matchItem.valor_metro) > 0) {
+                vMetro = Number(matchItem.valor_metro);
+              } else if (tabela[0]?.valor_metro) {
+                vMetro = Number(tabela[0].valor_metro);
+              } else {
+                vMetro = Number(servico.valor_metro) || 0;
+              }
+            } else {
+              vMetro = Number(servico.valor_metro) || 0;
+            }
           } else if (servico.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
             vMetro = fatorFinanceiro * diamNum;
           } else if (servico.cenario_financeiro === 'VALOR_FECHADO') {
