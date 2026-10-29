@@ -93,6 +93,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const isProcessingPhotoRef = useRef<boolean>(false);
+  const isSubmittingRef = useRef<boolean>(false);
 
   // In-App Live Camera State
   const [showInAppCamera, setShowInAppCamera] = useState<boolean>(false);
@@ -458,6 +460,16 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     locationInfo?: { lat: number | null; lon: number | null; addr: AddressDetails | null },
     statusPrefix: string = ''
   ) => {
+    // Previne foto duplicada por duplo toque ou clique repetido
+    const prefixToCheck = rawBase64.slice(0, 300);
+    const isDup = rawPhotosListRef.current.some(
+      existing => existing === rawBase64 || (existing.length === rawBase64.length && existing.slice(0, 300) === prefixToCheck)
+    );
+    if (isDup) {
+      console.warn('[processAndAddPhoto] Foto duplicada rejeitada para evitar repetição.');
+      return;
+    }
+
     let curLat = locationInfo ? locationInfo.lat : latitude;
     let curLon = locationInfo ? locationInfo.lon : longitude;
     let curAddr = locationInfo ? locationInfo.addr : addressDetails;
@@ -644,7 +656,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handleSaveCaixaDireto = async () => {
-    if (submitting) return;
+    if (submitting || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     if (fotosList.length < minFotos) return;
     if (isOsRequired && !numeroOs.trim()) return;
 
@@ -691,11 +704,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setSubmitError(err?.message || 'Erro ao transmitir registro para o servidor. Tente novamente.');
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
   const handleFinalSubmit = async () => {
-    if (submitting) return;
+    if (submitting || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     if (isOsRequired && !numeroOs.trim()) return;
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     const finalDiametro = getEffectiveDiametro();
@@ -743,6 +758,7 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       setSubmitError(err?.message || 'Erro ao transmitir registro para o servidor. Tente novamente.');
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -787,6 +803,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         isOpen={showInAppCamera}
         onClose={() => setShowInAppCamera(false)}
         onCapture={async (base64Photo) => {
+          if (isProcessingPhotoRef.current) return;
+          isProcessingPhotoRef.current = true;
           setShowInAppCamera(false);
           setProcessingWatermark(true);
           try {
@@ -796,19 +814,27 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             console.error('[InAppCamera Capture Error]:', err);
           } finally {
             setProcessingWatermark(false);
+            isProcessingPhotoRef.current = false;
           }
         }}
         onSelectFromGallery={() => {
           setShowInAppCamera(false);
           galleryInputRef.current?.click();
         }}
+        onFallbackToNativeCamera={() => {
+          setShowInAppCamera(false);
+          setTimeout(() => {
+            cameraInputRef.current?.click();
+          }, 100);
+        }}
       />
 
-      {/* Input de Fallback da Câmera do Celular */}
+      {/* Input de Fallback da Câmera Nativa do Celular (100% à prova de falhas) */}
       <input
         type="file"
         ref={cameraInputRef}
-        accept="image/jpeg,image/png,image/webp,image/*"
+        accept="image/*"
+        capture="environment"
         style={{ display: 'none' }}
         onChange={handlePhotoUpload}
       />
@@ -1218,6 +1244,30 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               >
                 <ImageIcon size={16} />
                 <span>Escolher da Galeria (uma ou várias fotos)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={processingWatermark}
+                onClick={() => cameraInputRef.current?.click()}
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                  color: 'var(--text-muted)',
+                  fontWeight: 600,
+                  fontSize: '11.5px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: '1px dashed var(--border-color)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: processingWatermark ? 'wait' : 'pointer'
+                }}
+                title="Abre o aplicativo de câmera nativo do celular diretamente pelo sistema"
+              >
+                <Camera size={14} style={{ color: 'var(--primary)' }} />
+                <span>A câmera ao vivo falhou? Usar Câmera Nativa do Celular</span>
               </button>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>

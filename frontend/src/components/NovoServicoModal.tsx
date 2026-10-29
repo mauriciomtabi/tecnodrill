@@ -309,6 +309,14 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Mantém a Metragem Prevista (M) sincronizada com a soma dos diâmetros no cenário VALOR_METRO
+  useEffect(() => {
+    if (cenario === 'VALOR_METRO' && tabelaDiametros.length > 0) {
+      const soma = tabelaDiametros.reduce((acc, it) => acc + (Number(it.metragem_prevista) || 0), 0);
+      setMetragemPrevista(String(soma));
+    }
+  }, [tabelaDiametros, cenario]);
+
   if (!isOpen) return null;
 
   const handleSelectCidade = (selectedCidade: string) => {
@@ -408,14 +416,6 @@ export const NovoServicoModal: React.FC<NovoServicoModalProps> = ({
       return updated;
     }));
   };
-
-  // Mantém a Metragem Prevista (M) sincronizada com a soma dos diâmetros no cenário VALOR_METRO
-  useEffect(() => {
-    if (cenario === 'VALOR_METRO' && tabelaDiametros.length > 0) {
-      const soma = tabelaDiametros.reduce((acc, it) => acc + (Number(it.metragem_prevista) || 0), 0);
-      setMetragemPrevista(String(soma));
-    }
-  }, [tabelaDiametros, cenario]);
 
   const handleNext = (e: React.FormEvent) => {
     e.preventDefault();

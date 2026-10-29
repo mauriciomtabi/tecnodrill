@@ -450,7 +450,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   }
 
   // Progresso individual por diâmetro (quando a obra possui tabela_diametros no modelo VALOR_METRO)
-  const progressoDiametros = React.useMemo(() => {
+  const progressoDiametros = (() => {
     if (servico?.cenario_financeiro !== 'VALOR_METRO' || !servico?.tabela_diametros || servico.tabela_diametros.length === 0) {
       return [];
     }
@@ -491,7 +491,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         faturamento
       };
     });
-  }, [servico, barras]);
+  })();
 
   // Regra Oficial de Custo: Multiplicado sempre por 2 (rateio 50% Navegador e 50% Operador)
   const custoMetro = Number(servico.custo_metro) || 0;

@@ -7,16 +7,19 @@ interface InAppCameraProps {
   onClose: () => void;
   onCapture: (base64Photo: string) => void;
   onSelectFromGallery?: () => void;
+  onFallbackToNativeCamera?: () => void;
 }
 
 export const InAppCamera: React.FC<InAppCameraProps> = ({
   isOpen,
   onClose,
   onCapture,
-  onSelectFromGallery
+  onSelectFromGallery,
+  onFallbackToNativeCamera
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isCapturingRef = useRef<boolean>(false);
 
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [torchOn, setTorchOn] = useState<boolean>(false);
@@ -40,25 +43,31 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    isCapturingRef.current = false;
+    setIsCapturing(false);
   }, []);
 
   // Inicializa o stream da câmera com resolução controlada para economizar RAM
-  const startCamera = useCallback(async (mode: 'environment' | 'user') => {
+  const startCamera = useCallback(async (mode: 'environment' | 'user', isRetry: boolean = false) => {
     stopStream();
     setIsInitializing(true);
     setCameraError(null);
     setTorchOn(false);
     setHasTorch(false);
+    isCapturingRef.current = false;
+    setIsCapturing(false);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Seu navegador ou aparelho não suporta a câmera ao vivo direta. Utilize a opção de galeria.');
+      setCameraError('Seu navegador ou aparelho não suporta a câmera ao vivo direta. Utilize a câmera do celular.');
       setIsInitializing(false);
       return;
     }
 
     try {
-      // Tenta primeiro com restrições otimizadas (Full HD ideal, ambiente/traseira)
-      let stream: MediaStream;
+      // Tenta 3 níveis de compatibilidade de restrições de vídeo
+      let stream: MediaStream | null = null;
+
+      // Nível 1: Resolução ideal Full HD e facingMode
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -69,10 +78,25 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
           audio: false
         });
       } catch (firstErr) {
-        // Fallback simplificado se restrições rígidas falharem
-        console.warn('[Camera] Fallback para constraints básicas:', firstErr);
+        console.warn('[Camera] Fallback nível 1 falhou, tentando nível 2:', firstErr);
+      }
+
+      // Nível 2: facingMode ideal sem restrição de resolução
+      if (!stream) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: mode } },
+            audio: false
+          });
+        } catch (secondErr) {
+          console.warn('[Camera] Fallback nível 2 falhou, tentando nível 3 genérico:', secondErr);
+        }
+      }
+
+      // Nível 3: Qualquer câmera de vídeo disponível no aparelho (sem restrições)
+      if (!stream) {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: mode },
+          video: true,
           audio: false
         });
       }
@@ -82,8 +106,16 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true'); // Essencial para iOS Safari
+        videoRef.current.setAttribute('webkit-playsinline', 'true');
         videoRef.current.muted = true;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('[Camera] video.play() await falhou, anexando onloadedmetadata:', playErr);
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch(e => console.warn('[Camera] Play tardio falhou:', e));
+          };
+        }
       }
 
       // Verifica capacidade de Lanterna / Flash (Android Chrome suporta na traseira)
@@ -98,13 +130,21 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
       setIsInitializing(false);
     } catch (err: any) {
       console.error('[InAppCamera Start Error]:', err);
+
+      // Auto-retry com backoff de 450ms se o sensor estiver temporariamente bloqueado pelo SO
+      if (!isRetry && (err.name === 'NotReadableError' || err.name === 'TrackStartError' || err.name === 'AbortError')) {
+        console.warn('[Camera] Sensor travado pelo SO. Aguardando 450ms para auto-recuperação...');
+        await new Promise(res => setTimeout(res, 450));
+        return startCamera(mode, true);
+      }
+
       let msg = 'Não foi possível acessar a câmera do celular.';
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        msg = 'Permissão da câmera negada. Conceda acesso à câmera nas configurações do navegador.';
+        msg = 'Permissão da câmera negada. Conceda acesso nas configurações do navegador ou use a câmera nativa do celular.';
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         msg = 'Nenhuma câmera encontrada no dispositivo.';
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        msg = 'A câmera está sendo usada por outro aplicativo ou o sistema reiniciou.';
+        msg = 'A câmera ainda estava ocupada pelo sistema. Toque em "Tentar Novamente" ou use a Câmera do Celular.';
       }
       setCameraError(msg);
       setIsInitializing(false);
@@ -148,9 +188,10 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
 
   // Captura o frame direto do elemento <video> para um Canvas de baixo consumo de memória
   const takePhoto = () => {
-    if (!videoRef.current || isCapturing) return;
+    if (!videoRef.current || isCapturingRef.current) return;
 
     try {
+      isCapturingRef.current = true;
       setIsCapturing(true);
 
       // Vibração tátil no celular ao disparar a foto (quando suportado)
@@ -209,6 +250,7 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
     } catch (err) {
       console.error('[Take Photo Error]:', err);
       setCameraError('Erro ao capturar foto. Tente novamente.');
+      isCapturingRef.current = false;
       setIsCapturing(false);
     }
   };
@@ -472,6 +514,35 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '6px' }}>
+              {onFallbackToNativeCamera && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopStream();
+                    onClose();
+                    onFallbackToNativeCamera();
+                  }}
+                  style={{
+                    backgroundColor: 'var(--primary)',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    fontSize: '13.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(240, 90, 34, 0.4)'
+                  }}
+                >
+                  <Camera size={18} />
+                  <span>Tirar Foto com a Câmera do Celular</span>
+                </button>
+              )}
+
               {onSelectFromGallery && (
                 <button
                   type="button"
@@ -581,7 +652,8 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
             opacity: (cameraError || isInitializing) ? 0.4 : 1,
             boxShadow: '0 0 20px rgba(240, 90, 34, 0.5)',
             transform: isCapturing ? 'scale(0.92)' : 'scale(1)',
-            transition: 'transform 0.1s ease'
+            transition: 'transform 0.1s ease',
+            pointerEvents: (cameraError || isInitializing || isCapturing) ? 'none' : 'auto'
           }}
           title="Tirar Foto"
         >
