@@ -19,9 +19,11 @@ import {
   Coins,
   FileSpreadsheet,
   Calendar,
-  Mail
+  Mail,
+  Camera
 } from 'lucide-react';
 import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado } from '../utils/relatorioMedicaoExcel';
+import { exportarRelatorioFotograficoExcel } from '../utils/relatorioFotograficoExcel';
 import { ConfiguracaoEmailModal } from '../components/ConfiguracaoEmailModal';
 
 interface ProdutividadePageProps {
@@ -1966,6 +1968,41 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                           >
                             <FileSpreadsheet size={13} />
                             <span>Excel</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const barrasDaObra = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
+                              await exportarRelatorioFotograficoExcel(s, barrasDaObra);
+                            }}
+                            title={`Exportar Relatório Fotográfico em Excel (${s.nome})`}
+                            style={{
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                              border: '1px solid rgba(240, 90, 34, 0.4)',
+                              color: 'var(--primary)',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--primary)';
+                              e.currentTarget.style.color = '#FFFFFF';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.12)';
+                              e.currentTarget.style.color = 'var(--primary)';
+                            }}
+                          >
+                            <Camera size={13} />
+                            <span>Fotos</span>
                           </button>
 
                           <button

@@ -25,8 +25,11 @@ import {
   UserPlus,
   Users,
   DollarSign,
-  X
+  X,
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
+import { exportarRelatorioFotograficoExcel } from '../utils/relatorioFotograficoExcel';
 
 const getEquipeList = (
   list?: Array<{ id: string; nome: string }>,
@@ -73,6 +76,23 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
   const [selectedBarraDetails, setSelectedBarraDetails] = useState<Barra | null>(null);
+  const [gerandoRelatorioFoto, setGerandoRelatorioFoto] = useState(false);
+
+  const handleExportarRelatorioFotografico = async () => {
+    if (!servico || gerandoRelatorioFoto) return;
+    setGerandoRelatorioFoto(true);
+    showToast(`Gerando Relatório Fotográfico de "${servico.nome}"...`, 'info');
+
+    try {
+      await exportarRelatorioFotograficoExcel(servico, barras);
+      showToast('Relatório Fotográfico em Excel gerado com sucesso!', 'success');
+    } catch (err: any) {
+      console.error('Erro ao exportar relatório fotográfico:', err);
+      showToast('Falha ao gerar relatório fotográfico. Tente novamente.', 'error');
+    } finally {
+      setGerandoRelatorioFoto(false);
+    }
+  };
 
   useEffect(() => {
     localStorage.setItem(`tecnodrill_tab_${servicoId}`, activeTab);
@@ -740,6 +760,47 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
             </>
           )}
 
+          {/* Botão Relatório Fotográfico em Excel */}
+          <button
+            type="button"
+            onClick={handleExportarRelatorioFotografico}
+            disabled={gerandoRelatorioFoto}
+            className="btn-secondary"
+            style={{
+              padding: '8px 14px',
+              fontSize: '12.5px',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: 'rgba(240, 90, 34, 0.12)',
+              border: '1px solid rgba(240, 90, 34, 0.4)',
+              color: 'var(--primary)',
+              cursor: gerandoRelatorioFoto ? 'wait' : 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title="Gerar e baixar Relatório Fotográfico Oficial em Excel (.xlsx)"
+            onMouseEnter={(e) => {
+              if (!gerandoRelatorioFoto) {
+                e.currentTarget.style.backgroundColor = 'var(--primary)';
+                e.currentTarget.style.color = '#FFFFFF';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!gerandoRelatorioFoto) {
+                e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.12)';
+                e.currentTarget.style.color = 'var(--primary)';
+              }
+            }}
+          >
+            {gerandoRelatorioFoto ? (
+              <Loader2 size={15} className="animate-spin" />
+            ) : (
+              <FileSpreadsheet size={15} />
+            )}
+            <span>{gerandoRelatorioFoto ? 'Gerando...' : 'Relatório Fotográfico (.xlsx)'}</span>
+          </button>
+
           {/* Botão Novo Registro */}
           <button
             onClick={() => setShowAddModal(true)}
@@ -1151,11 +1212,51 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                 </button>
               </div>
 
-              {/* Right: Count and Sort */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Right: Count, Export Excel and Sort */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
                   {filteredBarras.length} fotos
                 </span>
+
+                <button
+                  type="button"
+                  onClick={handleExportarRelatorioFotografico}
+                  disabled={gerandoRelatorioFoto}
+                  title="Exportar fotos deste serviço em planilha Excel (.xlsx)"
+                  style={{
+                    padding: '5px 10px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                    border: '1px solid rgba(240, 90, 34, 0.35)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--primary)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: gerandoRelatorioFoto ? 'wait' : 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!gerandoRelatorioFoto) {
+                      e.currentTarget.style.backgroundColor = 'var(--primary)';
+                      e.currentTarget.style.color = '#FFFFFF';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!gerandoRelatorioFoto) {
+                      e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.12)';
+                      e.currentTarget.style.color = 'var(--primary)';
+                    }
+                  }}
+                >
+                  {gerandoRelatorioFoto ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <FileSpreadsheet size={12} />
+                  )}
+                  <span>{gerandoRelatorioFoto ? 'Gerando...' : 'Fotos Excel'}</span>
+                </button>
 
                 <button
                   onClick={() => setSortOrder(prev => prev === 'DESC' ? 'ASC' : 'DESC')}

@@ -16,8 +16,12 @@ import {
   UserCheck, 
   DollarSign, 
   Radio, 
-  WifiOff 
+  WifiOff,
+  Camera,
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
+import { exportarRelatorioFotograficoExcel } from '../utils/relatorioFotograficoExcel';
 
 interface ObrasListProps {
   setHeaderInfo: (title: string, subtitle: string) => void;
@@ -39,8 +43,40 @@ export const ObrasList: React.FC<ObrasListProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('TODAS');
   const [activeTab, setActiveTab] = useState<'ATIVAS' | 'CONCLUIDAS'>('ATIVAS');
+  const [exportandoId, setExportandoId] = useState<string | null>(null);
 
   const isGestor = user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN';
+
+  const handleExportarFotosServico = async (e: React.MouseEvent, servico: Servico) => {
+    e.stopPropagation();
+    if (exportandoId) return;
+
+    setExportandoId(servico.id);
+    showToast(`Gerando Relatório Fotográfico de "${servico.nome}"...`, 'info');
+
+    try {
+      let targetFuros = furos.filter(f => f.servico_id === servico.id);
+      if (targetFuros.length === 0) {
+        targetFuros = await ApiService.getFuros(servico.id);
+      }
+
+      let barrasServico: Barra[] = [];
+      if (targetFuros.length > 0) {
+        const listasBarras = await Promise.all(targetFuros.map(f => ApiService.getBarras(f.id)));
+        barrasServico = listasBarras.flat();
+      } else if (minhasBarrasPorServico[servico.id]) {
+        barrasServico = minhasBarrasPorServico[servico.id];
+      }
+
+      await exportarRelatorioFotograficoExcel(servico, barrasServico);
+      showToast(`Relatório Fotográfico de "${servico.nome}" gerado com sucesso!`, 'success');
+    } catch (err: any) {
+      console.error('Erro ao gerar relatório fotográfico:', err);
+      showToast('Falha ao gerar relatório fotográfico. Tente novamente.', 'error');
+    } finally {
+      setExportandoId(null);
+    }
+  };
 
   const fetchServicos = async () => {
     setLoading(true);
@@ -508,9 +544,51 @@ export const ObrasList: React.FC<ObrasListProps> = ({
                     </span>
                   </div>
                   
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--primary-light)', fontWeight: 600 }}>
-                    <span>Ver Detalhes</span>
-                    <ChevronRight size={12} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={(e) => handleExportarFotosServico(e, servico)}
+                      disabled={exportandoId === servico.id}
+                      title={`Gerar e baixar Relatório Fotográfico em Excel (${servico.nome})`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '3px 8px',
+                        borderRadius: '5px',
+                        backgroundColor: 'rgba(240, 90, 34, 0.12)',
+                        border: '1px solid rgba(240, 90, 34, 0.35)',
+                        color: 'var(--primary)',
+                        fontWeight: 700,
+                        fontSize: '10px',
+                        cursor: exportandoId === servico.id ? 'wait' : 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (exportandoId !== servico.id) {
+                          e.currentTarget.style.backgroundColor = 'var(--primary)';
+                          e.currentTarget.style.color = '#FFFFFF';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (exportandoId !== servico.id) {
+                          e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.12)';
+                          e.currentTarget.style.color = 'var(--primary)';
+                        }
+                      }}
+                    >
+                      {exportandoId === servico.id ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <FileSpreadsheet size={11} />
+                      )}
+                      <span>{exportandoId === servico.id ? 'Gerando...' : 'Fotos Excel'}</span>
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px', color: 'var(--primary-light)', fontWeight: 600 }}>
+                      <span>Ver Detalhes</span>
+                      <ChevronRight size={12} />
+                    </div>
                   </div>
                 </div>
               </div>

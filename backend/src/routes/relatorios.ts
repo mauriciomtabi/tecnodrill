@@ -30,6 +30,19 @@ router.get('/furo/:id/excel', async (req: Request, res: Response): Promise<any> 
   }
 });
 
+// GET /api/relatorios/servico/:id/fotografico-excel
+router.get('/servico/:id/fotografico-excel', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { buffer, filename } = await ExportService.gerarRelatorioFotograficoServico(req.params.id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    return res.send(buffer);
+  } catch (err: any) {
+    console.error('[Relatorio Fotografico Excel] Erro:', err);
+    return res.status(500).json({ error: err.message || 'Erro ao gerar relatório fotográfico em Excel.' });
+  }
+});
+
 // GET /api/relatorios/diario/preview
 router.get('/diario/preview', async (req: Request, res: Response): Promise<any> => {
   try {
