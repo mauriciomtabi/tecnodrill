@@ -46,6 +46,19 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
     const isCaixa = tipo_registro === 'CAIXA' || Boolean(tem_caixa && !diametro);
     const metrosNumerico = isCaixa ? 0 : (metros !== undefined ? Number(metros) : 3);
 
+    // Deduplica lista de fotos para garantir que nunca sejam gravadas duplicadas
+    const rawFotos = Array.isArray(fotos) ? fotos : (foto_url ? [foto_url] : []);
+    const cleanFotos: string[] = [];
+    const seenFotoKeys = new Set<string>();
+    for (const f of rawFotos) {
+      if (!f || typeof f !== 'string') continue;
+      const key = f.length > 500 ? (f.length + '_' + f.slice(0, 150) + '_' + f.slice(-100)) : f;
+      if (!seenFotoKeys.has(key) && !cleanFotos.includes(f)) {
+        seenFotoKeys.add(key);
+        cleanFotos.push(f);
+      }
+    }
+
     // Adiciona o novo registro de campo
     const novaBarra = await DBManager.addBarra({
       furo_id: furoId,
@@ -57,8 +70,8 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       tem_caixa: Boolean(tem_caixa || isCaixa),
       tipo_caixa: tipo_caixa || '',
       observacao: observacao || '',
-      foto_url: foto_url || (Array.isArray(fotos) && fotos.length > 0 ? fotos[0] : ''),
-      fotos: Array.isArray(fotos) ? fotos : (foto_url ? [foto_url] : []),
+      foto_url: cleanFotos.length > 0 ? cleanFotos[0] : (foto_url || ''),
+      fotos: cleanFotos,
       angulo_pitch: angulo_pitch || '+0.00',
       profundidade_cm: profundidade_cm !== undefined ? Number(profundidade_cm) : undefined,
       distancia_pista_cm: distancia_pista_cm !== undefined ? Number(distancia_pista_cm) : undefined,

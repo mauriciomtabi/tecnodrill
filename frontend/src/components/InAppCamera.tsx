@@ -29,7 +29,7 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
 
   // Para todo e qualquer stream e libera hardware de câmera
-  const stopStream = useCallback(() => {
+  const stopStream = useCallback((keepCapturingLock: boolean = false) => {
     if (streamRef.current) {
       try {
         streamRef.current.getTracks().forEach((track) => {
@@ -43,8 +43,10 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    isCapturingRef.current = false;
-    setIsCapturing(false);
+    if (!keepCapturingLock) {
+      isCapturingRef.current = false;
+      setIsCapturing(false);
+    }
   }, []);
 
   // Inicializa o stream da câmera com resolução controlada para economizar RAM
@@ -188,7 +190,7 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
 
   // Captura o frame direto do elemento <video> para um Canvas de baixo consumo de memória
   const takePhoto = () => {
-    if (!videoRef.current || isCapturingRef.current) return;
+    if (!videoRef.current || isCapturingRef.current || isCapturing) return;
 
     try {
       isCapturingRef.current = true;
@@ -242,8 +244,8 @@ export const InAppCamera: React.FC<InAppCameraProps> = ({
       canvas.width = 1;
       canvas.height = 1;
 
-      // Para a câmera imediatamente
-      stopStream();
+      // Para a câmera mantendo a trava de disparo ativa contra disparos duplos
+      stopStream(true);
 
       // Envia foto capturada para processamento
       onCapture(base64Photo);

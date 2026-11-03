@@ -55,8 +55,13 @@ function openDB(): Promise<IDBDatabase> {
  * e mantém cópia dos metadados no localStorage para verificação instantânea.
  */
 export async function saveRodDraft(draft: Omit<RodDraft, 'id' | 'updatedAt'>): Promise<void> {
+  // Deduplica lista de fotos garantindo unicidade no rascunho
+  const rawList = Array.isArray(draft.fotosList) ? draft.fotosList : [];
+  const dedupedList = Array.from(new Set(rawList.filter(Boolean)));
+
   const fullDraft: RodDraft = {
     ...draft,
+    fotosList: dedupedList,
     id: DRAFT_STORAGE_KEY,
     updatedAt: Date.now()
   };
@@ -130,6 +135,11 @@ export async function getRodDraft(servicoId?: string): Promise<RodDraft | null> 
   // Se foi requisitado para um serviço específico, confere compatibilidade
   if (servicoId && draft.servicoId && draft.servicoId !== servicoId) {
     return null;
+  }
+
+  // Deduplica fotos salvas no rascunho
+  if (Array.isArray(draft.fotosList)) {
+    draft.fotosList = Array.from(new Set(draft.fotosList.filter(Boolean)));
   }
 
   return draft;

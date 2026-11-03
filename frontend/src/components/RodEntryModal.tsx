@@ -11,6 +11,7 @@ import {
   formatFullAddress
 } from '../utils/watermark';
 import { isHeicFile, convertHeicToJpeg } from '../utils/imageConverter';
+import { checkIsDuplicatePhoto, deduplicatePhotoList } from '../utils/imageFingerprint';
 import { 
   Camera, 
   Image as ImageIcon, 
@@ -29,7 +30,8 @@ import {
   Trash2,
   ArrowRight,
   Edit3,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 interface RodEntryModalProps {
@@ -99,6 +101,21 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   // In-App Live Camera State
   const [showInAppCamera, setShowInAppCamera] = useState<boolean>(false);
   const [draftRecovered, setDraftRecovered] = useState<boolean>(false);
+
+  // Alerta de Foto Duplicada Rejeitada
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const duplicateWarningTimerRef = useRef<any>(null);
+
+  const showDuplicateAlert = useCallback((msg: string) => {
+    setDuplicateWarning(msg);
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try { navigator.vibrate([100, 60, 100]); } catch (_) {}
+    }
+    if (duplicateWarningTimerRef.current) clearTimeout(duplicateWarningTimerRef.current);
+    duplicateWarningTimerRef.current = setTimeout(() => {
+      setDuplicateWarning(null);
+    }, 6500);
+  }, []);
 
   // Ref para fotos brutas
   const rawPhotosListRef = useRef<string[]>([]);
@@ -190,8 +207,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         const draft = await getRodDraft(servico?.id);
         if (draft && isMounted && (draft.fotosList.length > 0 || draft.numeroOs || draft.observacao || draft.step > 0)) {
           if (draft.fotosList && draft.fotosList.length > 0) {
-            setFotosList(draft.fotosList);
-            rawPhotosListRef.current = draft.fotosList;
+            const cleanList = await deduplicatePhotoList(draft.fotosList);
+            setFotosList(cleanList);
+            rawPhotosListRef.current = cleanList;
+            if (cleanList.length < draft.fotosList.length) {
+              showDuplicateAlert('Fotos duplicadas foram removidas automaticamente do rascunho recuperado.');
+            }
           }
           if (draft.tipoRegistro) setTipoRegistro(draft.tipoRegistro);
           if (draft.diametro) setDiametro(draft.diametro);
@@ -356,6 +377,8 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const handleDiscardDraft = async () => {
     await clearRodDraft();
     setDraftRecovered(false);
+    setDuplicateWarning(null);
+    if (duplicateWarningTimerRef.current) clearTimeout(duplicateWarningTimerRef.current);
     setFotosList([]);
     rawPhotosListRef.current = [];
     setNumeroOs('');
@@ -459,15 +482,14 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
     rawBase64: string,
     locationInfo?: { lat: number | null; lon: number | null; addr: AddressDetails | null },
     statusPrefix: string = ''
-  ) => {
-    // Previne foto duplicada por duplo toque ou clique repetido
-    const prefixToCheck = rawBase64.slice(0, 300);
-    const isDup = rawPhotosListRef.current.some(
-      existing => existing === rawBase64 || (existing.length === rawBase64.length && existing.slice(0, 300) === prefixToCheck)
-    );
-    if (isDup) {
-      console.warn('[processAndAddPhoto] Foto duplicada rejeitada para evitar repetição.');
-      return;
+  ): Promise<boolean> => {
+    // 1. Verificação profunda de foto duplicada contra todas as fotos já capturadas no registro
+    const existingPool = [...rawPhotosListRef.current, ...fotosList];
+    const dupCheck = await checkIsDuplicatePhoto(rawBase64, existingPool, 0.82);
+    if (dupCheck.isDuplicate) {
+      console.warn(`[processAndAddPhoto] Foto duplicada rejeitada (similaridade ${(dupCheck.similarity * 100).toFixed(1)}%).`);
+      showDuplicateAlert('Esta foto (ou ângulo idêntico) já foi adicionada neste registro. Capture um novo ângulo da obra.');
+      return false;
     }
 
     let curLat = locationInfo ? locationInfo.lat : latitude;
@@ -493,12 +515,20 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         servico?.logo_escala || 1.0
       );
 
-      setFotosList((prev) => [...prev, watermarked]);
+      setFotosList((prev) => {
+        if (prev.includes(watermarked)) return prev;
+        return [...prev, watermarked];
+      });
       rawPhotosListRef.current.push(rawBase64);
+      return true;
     } catch (err) {
       console.error('[Watermark Error]:', err);
-      setFotosList((prev) => [...prev, rawBase64]);
+      setFotosList((prev) => {
+        if (prev.includes(rawBase64)) return prev;
+        return [...prev, rawBase64];
+      });
       rawPhotosListRef.current.push(rawBase64);
+      return true;
     }
   };
 
@@ -586,11 +616,24 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files ? Array.from(e.target.files) : [];
-    if (files.length === 0) return;
+    const rawFiles = e.target.files ? Array.from(e.target.files) : [];
+    if (rawFiles.length === 0) return;
 
     // Reset input so same photos can be reselected if needed
     e.target.value = '';
+
+    // 1. Filtra arquivos duplicados dentro do próprio lote selecionado (mesmo nome, tamanho e data)
+    const seenFileKeys = new Set<string>();
+    const files = rawFiles.filter(f => {
+      const key = `${f.name}_${f.size}_${f.lastModified}`;
+      if (seenFileKeys.has(key)) return false;
+      seenFileKeys.add(key);
+      return true;
+    });
+
+    if (files.length < rawFiles.length) {
+      showDuplicateAlert('Arquivos idênticos selecionados na galeria foram descartados.');
+    }
 
     setProcessingWatermark(true);
 
@@ -598,6 +641,9 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       const total = files.length;
       // Garante que GPS e endereço sejam resolvidos uma única vez antes do loop do lote
       const locInfo = await ensureLocationAndAddress();
+
+      let addedCount = 0;
+      let dupCount = 0;
 
       for (let i = 0; i < total; i++) {
         let file = files[i];
@@ -634,8 +680,17 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
         }
 
         if (compressedBase64) {
-          await processAndAddPhoto(compressedBase64, locInfo, countPrefix);
+          const added = await processAndAddPhoto(compressedBase64, locInfo, countPrefix);
+          if (added) {
+            addedCount++;
+          } else {
+            dupCount++;
+          }
         }
+      }
+
+      if (dupCount > 0 && addedCount > 0) {
+        showDuplicateAlert(`${dupCount} foto(s) idêntica(s) já existiam no registro e foram ignoradas.`);
       }
     } catch (batchErr) {
       console.error('[Batch Photo Upload Error]:', batchErr);
@@ -1100,6 +1155,44 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Banner de Foto Duplicada Rejeitada */}
+            {duplicateWarning && (
+              <div
+                style={{
+                  backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                  border: '1px solid #E74C3C',
+                  borderRadius: '8px',
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '12px',
+                  color: '#FF6B6B',
+                  fontWeight: 600
+                }}
+              >
+                <AlertTriangle size={18} style={{ flexShrink: 0, color: '#E74C3C' }} />
+                <span style={{ flex: 1 }}>{duplicateWarning}</span>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateWarning(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#FF6B6B',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    lineHeight: 1
+                  }}
+                  title="Fechar aviso"
+                >
+                  ×
+                </button>
+              </div>
+            )}
 
             {/* Banner de Rascunho Recuperado Automaticamente */}
             {draftRecovered && (
