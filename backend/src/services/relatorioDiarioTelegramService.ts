@@ -14,7 +14,7 @@ export interface ConfigTelegram {
 const DEFAULT_TELEGRAM_CONFIG: ConfigTelegram = {
   ativo: true,
   botToken: process.env.TELEGRAM_BOT_TOKEN || '9178731502:AAHZcYDQQvYhPqLylQ5y2tWcHl4ceeJMmI8',
-  chatId: process.env.TELEGRAM_CHAT_ID || '-5448882645',
+  chatId: process.env.TELEGRAM_CHAT_ID || '-1003941412818',
   chatNome: 'TecnoDrill Relatórios'
 };
 
@@ -238,6 +238,26 @@ export class RelatorioDiarioTelegramService {
 
       const resJson: any = await res.json();
       if (!resJson.ok) {
+        if (resJson.parameters?.migrate_to_chat_id) {
+          const newChatId = String(resJson.parameters.migrate_to_chat_id);
+          console.warn(`[TelegramService] Grupo migrado para supergrupo (${newChatId}). Atualizando e retentando...`);
+          this.salvarConfigTelegram({ chatId: newChatId });
+          payload.chat_id = newChatId;
+          const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const retryJson: any = await retryRes.json();
+          if (retryJson.ok) {
+            this.salvarConfigTelegram({ ultimoEnvio: new Date().toISOString() });
+            return {
+              sucesso: true,
+              mensagem: 'Relatório diário enviado com sucesso para o Telegram (após migração automática)!',
+              dados
+            };
+          }
+        }
         throw new Error(resJson.description || 'Erro desconhecido da API Telegram');
       }
 

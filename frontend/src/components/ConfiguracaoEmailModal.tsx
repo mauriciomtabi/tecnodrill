@@ -279,7 +279,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
   // Disparo direto da API do Telegram (100% fail-proof, funciona direto do navegador em qualquer ambiente)
   const dispararTelegramDireto = async () => {
     const BOT_TOKEN = '9178731502:AAHZcYDQQvYhPqLylQ5y2tWcHl4ceeJMmI8';
-    const CHAT_ID = '-5448882645';
+    const CHAT_ID = '-1003941412818';
 
     const now = new Date();
     const brDateStr = now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });

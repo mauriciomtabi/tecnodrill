@@ -1,7 +1,7 @@
 import { getDadosCompletosSupabase, formatMeters, formatCurrency } from './send-email';
 
 const DEFAULT_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '9178731502:AAHZcYDQQvYhPqLylQ5y2tWcHl4ceeJMmI8';
-const DEFAULT_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '-5448882645';
+const DEFAULT_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '-1003941412818';
 
 export function buildTelegramMessage(dados: any): string {
   const temProdHoje = dados.totalMetrosHoje > 0;
@@ -114,6 +114,25 @@ export async function enviarRelatorioTelegramExec(options?: {
     const tgData: any = await tgRes.json();
 
     if (!tgData.ok) {
+      if (tgData.parameters?.migrate_to_chat_id) {
+        const newChatId = String(tgData.parameters.migrate_to_chat_id);
+        console.warn(`[send-telegram] Grupo migrado para supergrupo (${newChatId}). Retentando envio...`);
+        payload.chat_id = newChatId;
+        const retryRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const retryData: any = await retryRes.json();
+        if (retryData.ok) {
+          return {
+            sucesso: true,
+            id: retryData.result?.message_id,
+            dados,
+            mensagem: 'Relatório diário com histórico dos últimos 5 dias enviado com sucesso para o grupo do Telegram (migrado automaticamente)!'
+          };
+        }
+      }
       console.error('[send-telegram] Erro API Telegram:', tgData);
       return {
         sucesso: false,
