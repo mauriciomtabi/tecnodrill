@@ -8,8 +8,8 @@ export async function requireManager(req: Request, res: Response, next: NextFunc
   if (!token) { res.status(401).json({ error: 'Autenticação necessária.' }); return; }
   try {
     const client = createClient(
-      process.env.SUPABASE_URL || 'https://dkscchjzztwyjzjpllob.supabase.co',
-      'sb_publishable_vAiCBdEioA9vqF6dzHjADQ_TkVsFWuj',
+      process.env.SUPABASE_URL || 'https://dmwefcngefeonxuukwdl.supabase.co',
+      'sb_publishable_j3AShmEr6aEWjqBv2rruhw_5EE4NnOt',
       { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } }
     );
     const { data: { user }, error } = await client.auth.getUser(token);
