@@ -1627,6 +1627,49 @@ export class ApiService {
       .single();
 
     if (updateErr) throw new Error(updateErr.message || 'Erro ao atualizar registro.');
+
+    // Se a metragem foi alterada, recalcula os metros acumulados de todo o furo
+    if (updates.metros !== undefined && current.furo_id) {
+      try {
+        const { data: furoBarras } = await supabase
+          .from('tecnodrill_barras')
+          .select('id, metros, tipo_registro, tem_caixa, diametro, observacao, numero_barra')
+          .eq('furo_id', current.furo_id)
+          .order('numero_barra', { ascending: true });
+
+        if (furoBarras && furoBarras.length > 0) {
+          let runningTotal = 0;
+          let updatedAccum = 0;
+          for (const b of furoBarras) {
+            const { meta: bMeta } = parseBarraObservacao(b.observacao);
+            const isCaixa = b.tipo_registro === 'CAIXA' || bMeta.tipo_registro === 'CAIXA' || Boolean(b.tem_caixa && !b.diametro && !bMeta.diametro);
+            const m = b.id === barraId 
+              ? Number(updates.metros) 
+              : (isCaixa ? 0 : (b.metros !== undefined && b.metros !== null && !isNaN(Number(b.metros)) ? Number(b.metros) : 3));
+            runningTotal += m;
+
+            if (b.id === barraId) {
+              updatedAccum = runningTotal;
+            }
+
+            await supabase
+              .from('tecnodrill_barras')
+              .update({ metros: m, metros_acumulados: runningTotal })
+              .eq('id', b.id);
+          }
+
+          await supabase
+            .from('tecnodrill_furos')
+            .update({ comprimento_furo: runningTotal })
+            .eq('id', current.furo_id);
+
+          updated.metros_acumulados = updatedAccum;
+        }
+      } catch (errRecalc) {
+        console.warn('[updateBarra] Falha ao recalcular acumulados:', errRecalc);
+      }
+    }
+
     return (await withPrivatePhotos([{
       ...updated,
       diametro: updated.diametro || newMeta.diametro,

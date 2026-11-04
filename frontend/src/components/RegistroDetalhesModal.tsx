@@ -33,7 +33,8 @@ import {
   AlertCircle,
   RefreshCw,
   Edit3,
-  CheckCircle2
+  CheckCircle2,
+  Ruler
 } from 'lucide-react';
 import { isHeicDataUrl, convertHeicBase64ToJpeg } from '../utils/imageConverter';
 import { useAuth } from '../context/AuthContext';
@@ -77,6 +78,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editDiametro, setEditDiametro] = useState<string>('');
   const [editCustomDiametro, setEditCustomDiametro] = useState<string>('');
+  const [editMetros, setEditMetros] = useState<string>('');
   const [editNumeroOs, setEditNumeroOs] = useState<string>('');
   const [editObservacao, setEditObservacao] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
@@ -154,6 +156,10 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       setEditDiametro('');
       setEditCustomDiametro('');
     }
+    const initialMetros = barra?.metros !== undefined && barra.metros !== null
+      ? String(barra.metros)
+      : (effectiveTipoRegistro === 'CAIXA' ? '0' : '3');
+    setEditMetros(initialMetros);
     setEditNumeroOs(barra?.numero_os || barraMeta.numero_os || '');
     setEditObservacao(cleanObservacao || '');
   }, [barra?.id, isOpen]);
@@ -290,6 +296,10 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       setEditDiametro('');
       setEditCustomDiametro('');
     }
+    const currentMetros = barra?.metros !== undefined && barra.metros !== null
+      ? String(barra.metros)
+      : (isBox ? '0' : '3');
+    setEditMetros(currentMetros);
     setEditNumeroOs(barra?.numero_os || barraMeta.numero_os || '');
     setEditObservacao(cleanObservacao || '');
     setEditError(null);
@@ -310,10 +320,21 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       return;
     }
 
+    const numMetros = parseFloat(String(editMetros).replace(',', '.'));
+    if (isNaN(numMetros) || numMetros < 0) {
+      setEditError('Por favor, informe uma metragem válida (número maior ou igual a zero).');
+      return;
+    }
+    if (!isBox && numMetros <= 0) {
+      setEditError('Para registros de canalização, a metragem deve ser maior que zero.');
+      return;
+    }
+
     setSavingEdit(true);
     setEditError(null);
     try {
       const updated = await ApiService.updateBarra(barra.id, {
+        metros: numMetros,
         diametro: finalDiam || undefined,
         numero_os: editNumeroOs.trim() || undefined,
         observacao: editObservacao.trim(),
@@ -326,7 +347,7 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
       setTimeout(() => setEditSavedSuccess(false), 2000);
       setIsEditing(false);
       if (onBarraUpdated) {
-        onBarraUpdated(updated);
+        onBarraUpdated({ ...updated, metros: numMetros });
       }
       if (showToast) {
         showToast('Registro atualizado com sucesso!', 'success');
@@ -938,6 +959,44 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
                   </div>
                 )}
 
+                {/* Metragem do Registro */}
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#F39C12', textTransform: 'uppercase', marginBottom: '6px' }}>
+                    <Ruler size={13} />
+                    <span>Metragem do Registro (Metros){!isBox ? ' *' : ''}</span>
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min={isBox ? '0' : '0.1'}
+                      value={editMetros}
+                      onChange={(e) => setEditMetros(e.target.value)}
+                      placeholder="ex: 3, 15, 437"
+                      style={{
+                        width: '100%',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        backgroundColor: 'var(--bg-app)',
+                        border: `1px solid ${!isBox && (!editMetros || Number(editMetros) <= 0) ? '#E74C3C' : 'var(--border-color)'}`,
+                        borderRadius: '6px',
+                        padding: '8px 50px 8px 10px',
+                        color: '#FFFFFF',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <span style={{ position: 'absolute', right: '12px', fontSize: '12px', fontWeight: 800, color: 'var(--text-muted)', pointerEvents: 'none' }}>
+                      metros
+                    </span>
+                  </div>
+                  {!isBox && (!editMetros || Number(editMetros) <= 0) && (
+                    <span style={{ display: 'block', fontSize: '10.5px', color: '#E74C3C', marginTop: '3px' }}>
+                      A metragem deve ser maior que zero para canalização.
+                    </span>
+                  )}
+                </div>
+
                 {/* Número da OS */}
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 800, color: '#00bcd4', textTransform: 'uppercase', marginBottom: '6px' }}>
@@ -1060,6 +1119,19 @@ export const RegistroDetalhesModal: React.FC<RegistroDetalhesModalProps> = ({
             {/* List Details Stack */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12.5px' }}>
               
+              {/* Metragem do Registro */}
+              {!isBox && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
+                  <Ruler size={16} style={{ color: '#F39C12', flexShrink: 0 }} />
+                  <div>
+                    <span style={{ display: 'block', fontSize: '9.5px', fontWeight: 700, textTransform: 'uppercase' }}>METRAGEM DO REGISTRO</span>
+                    <span style={{ color: '#FFFFFF', fontWeight: 700 }}>
+                      {barra.metros !== undefined && barra.metros !== null ? `${barra.metros}m` : '3m'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Diâmetro do Tubo */}
               {!isBox && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>

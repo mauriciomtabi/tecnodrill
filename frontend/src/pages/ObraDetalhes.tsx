@@ -1586,9 +1586,19 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         servico={servico}
         isGestor={isGestor}
         onDelete={handleDeleteBarraById}
-        onBarraUpdated={(updated) => {
-          setBarras(prev => prev.map(b => b.id === updated.id ? { ...b, ...updated } : b));
+        onBarraUpdated={async (updated) => {
+          setBarras(prev => {
+            let running = 0;
+            return prev.map(b => {
+              const item = b.id === updated.id ? { ...b, ...updated } : b;
+              const isCaixa = item.tipo_registro === 'CAIXA' || (Boolean(item.tem_caixa) && !item.diametro);
+              const m = isCaixa ? 0 : (item.metros !== undefined && item.metros !== null ? Number(item.metros) : 3);
+              running += m;
+              return { ...item, metros_acumulados: running };
+            });
+          });
           setSelectedBarraDetails(updated);
+          await fetchDados();
         }}
       />
 
