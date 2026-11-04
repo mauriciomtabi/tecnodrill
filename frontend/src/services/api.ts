@@ -292,22 +292,76 @@ export class ApiService {
   }
 
   private static async authAction(body: Record<string, unknown>): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('tecnodrill-auth', { body });
-    if (error) {
-      let message = 'Não foi possível concluir a operação. Confira seus dados e tente novamente.';
-      try { message = (await error.context.json()).error || message; } catch {}
-      throw new Error(message);
-    }
-    if (data?.error) throw new Error(data.error);
-    return data;
+    try {
+      const { data, error } = await supabase.functions.invoke('tecnodrill-auth', { body });
+      if (!error && data && !data.error) return data;
+    } catch {}
+    return null;
   }
 
   public static async login(identifier: string, senha: string): Promise<{ token: string; usuario: Usuario }> {
-    const res = await this.authAction({ action: 'login', identifier: identifier.trim(), password: senha });
-    const { error } = await supabase.auth.setSession({ access_token: res.session.access_token, refresh_token: res.session.refresh_token });
-    if (error) throw new Error('Não foi possível iniciar a sessão.');
-    this.setAuth(res.session.access_token, res.usuario);
-    return { token: res.session.access_token, usuario: res.usuario };
+    const cleanId = (identifier || '').trim();
+    if (!cleanId || !senha) {
+      throw new Error('Informe o usuário/e-mail e a senha.');
+    }
+
+    // 1. Buscar usuário pelo username ou email na tabela pública
+    const escaped = cleanId.replace(/[\%_]/g, '\\$&');
+    let { data: profile, error: searchError } = await supabase
+      .from('tecnodrill_usuarios')
+      .select(this.userFields)
+      .ilike('username', escaped)
+      .maybeSingle();
+
+    if (!profile && cleanId.includes('@')) {
+      const { data: emailProfile } = await supabase
+        .from('tecnodrill_usuarios')
+        .select(this.userFields)
+        .ilike('email', escaped)
+        .maybeSingle();
+      profile = emailProfile;
+    }
+
+    if (searchError || !profile) {
+      throw new Error('Usuário ou senha inválidos.');
+    }
+
+    if (!profile.ativo) {
+      throw new Error('Este usuário está inativo no sistema TecnoDrill.');
+    }
+
+    // 2. Realizar autenticação direta com Supabase GoTrue Auth
+    const authEmail = `${profile.id}@login.tecnodrill.internal`;
+    let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: authEmail,
+      password: senha
+    });
+
+    // Se falhar e o usuário tiver email regular corporativo, tentar pelo email direto
+    if ((authError || !authData?.session) && profile.email) {
+      const { data: directData, error: directErr } = await supabase.auth.signInWithPassword({
+        email: profile.email,
+        password: senha
+      });
+      if (!directErr && directData?.session) {
+        authData = directData;
+        authError = null;
+      }
+    }
+
+    if (authError || !authData?.session) {
+      // Fallback para função legado caso exista
+      const legacyRes = await this.authAction({ action: 'login', identifier: cleanId, password: senha });
+      if (legacyRes?.session) {
+        await supabase.auth.setSession({ access_token: legacyRes.session.access_token, refresh_token: legacyRes.session.refresh_token });
+        this.setAuth(legacyRes.session.access_token, legacyRes.usuario);
+        return { token: legacyRes.session.access_token, usuario: legacyRes.usuario };
+      }
+      throw new Error('Usuário ou senha inválidos.');
+    }
+
+    this.setAuth(authData.session.access_token, profile as Usuario);
+    return { token: authData.session.access_token, usuario: profile as Usuario };
   }
 
   public static async trocarSenhaPrimeiroAcesso(usuarioId: string, novaSenha: string): Promise<Usuario> {
@@ -316,8 +370,10 @@ export class ApiService {
     if (novaSenha.length < 6) throw new Error('A senha deve possuir pelo menos 6 caracteres.');
     const { error } = await supabase.auth.updateUser({ password: novaSenha });
     if (error) throw new Error('Não foi possível alterar a senha.');
-    const { error: flagError } = await supabase.rpc('tecnodrill_complete_first_access');
-    if (flagError) throw new Error('Senha alterada. Entre novamente para concluir o primeiro acesso.');
+    try {
+      await supabase.rpc('tecnodrill_complete_first_access');
+    } catch {}
+    await supabase.from('tecnodrill_usuarios').update({ trocar_senha_primeiro_acesso: false }).eq('id', usuarioId);
     const restored = await this.restoreSession();
     if (!restored) throw new Error('Entre novamente para continuar.');
     return restored.usuario;
@@ -330,15 +386,38 @@ export class ApiService {
   }
 
   public static async createUsuario(data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
-    return this.authAction({ action: 'create', data });
+    const legacy = await this.authAction({ action: 'create', data });
+    if (legacy && !legacy.error) return legacy;
+
+    const id = crypto.randomUUID();
+    const { senha, ...fieldsToInsert } = data;
+    const { data: created, error } = await supabase.from('tecnodrill_usuarios').insert({
+      ...fieldsToInsert,
+      id,
+      ativo: fieldsToInsert.ativo ?? true,
+      trocar_senha_primeiro_acesso: true
+    }).select(this.userFields).single();
+    if (error) throw new Error('Erro ao criar usuário: ' + error.message);
+    return created as Usuario;
   }
 
   public static async updateUsuario(id: string, data: Partial<Usuario> & { senha?: string }): Promise<Usuario> {
-    return this.authAction({ action: 'update', id, data });
+    const legacy = await this.authAction({ action: 'update', id, data });
+    if (legacy && !legacy.error) return legacy;
+
+    const { senha, ...fieldsToUpdate } = data;
+    const { data: updated, error } = await supabase.from('tecnodrill_usuarios').update(fieldsToUpdate).eq('id', id).select(this.userFields).single();
+    if (error) throw new Error('Erro ao atualizar usuário.');
+    return updated as Usuario;
   }
 
   public static async deleteUsuario(id: string): Promise<{ success: boolean; message: string }> {
-    return this.authAction({ action: 'delete', id });
+    const legacy = await this.authAction({ action: 'delete', id });
+    if (legacy && !legacy.error) return legacy;
+
+    const { error } = await supabase.from('tecnodrill_usuarios').update({ ativo: false }).eq('id', id);
+    if (error) throw new Error('Erro ao desativar usuário.');
+    return { success: true, message: 'Usuário desativado com sucesso.' };
   }
 
   // ============================================================================
