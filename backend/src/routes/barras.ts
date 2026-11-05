@@ -59,6 +59,16 @@ router.post('/furos/:furoId/barras', async (req: Request, res: Response): Promis
       }
     }
 
+    const minFotosExigidas = (servico?.min_fotos_registro !== undefined && servico?.min_fotos_registro !== null && Number(servico.min_fotos_registro) > 0)
+      ? Number(servico.min_fotos_registro)
+      : 2;
+
+    if (cleanFotos.length < minFotosExigidas) {
+      return res.status(400).json({
+        error: `Este serviço exige no mínimo ${minFotosExigidas} foto(s) para registrar. Você enviou ${cleanFotos.length}.`
+      });
+    }
+
     // Adiciona o novo registro de campo
     const novaBarra = await DBManager.addBarra({
       furo_id: furoId,

@@ -206,10 +206,12 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
       try {
         const draft = await getRodDraft(servico?.id);
         if (draft && isMounted && (draft.fotosList.length > 0 || draft.numeroOs || draft.observacao || draft.step > 0)) {
+          let restoredFotosCount = 0;
           if (draft.fotosList && draft.fotosList.length > 0) {
             const cleanList = await deduplicatePhotoList(draft.fotosList);
             setFotosList(cleanList);
             rawPhotosListRef.current = cleanList;
+            restoredFotosCount = cleanList.length;
             if (cleanList.length < draft.fotosList.length) {
               showDuplicateAlert('Fotos duplicadas foram removidas automaticamente do rascunho recuperado.');
             }
@@ -227,7 +229,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
           if (draft.precisao) setPrecisao(draft.precisao);
           if (draft.addressDetails) setAddressDetails(draft.addressDetails);
           if (draft.nextBarraNumber) setCurrentBarraNumber(draft.nextBarraNumber);
-          if (draft.step !== undefined && draft.step < 4) setStep(draft.step);
+          if (draft.step !== undefined && draft.step < 4) {
+            if (draft.step > 1 && restoredFotosCount < minFotos) {
+              setStep(1);
+            } else {
+              setStep(draft.step);
+            }
+          }
 
           setDraftRecovered(true);
           return;
@@ -713,8 +721,15 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const handleSaveCaixaDireto = async () => {
     if (submitting || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
-    if (fotosList.length < minFotos) return;
-    if (isOsRequired && !numeroOs.trim()) return;
+    if (fotosList.length < minFotos) {
+      setSubmitError(`São necessárias no mínimo ${minFotos} foto(s) para salvar a caixa. Faltam ${minFotos - fotosList.length} foto(s).`);
+      isSubmittingRef.current = false;
+      return;
+    }
+    if (isOsRequired && !numeroOs.trim()) {
+      isSubmittingRef.current = false;
+      return;
+    }
 
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     setSubmitting(true);
@@ -766,7 +781,16 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
   const handleFinalSubmit = async () => {
     if (submitting || isSubmittingRef.current) return;
     isSubmittingRef.current = true;
-    if (isOsRequired && !numeroOs.trim()) return;
+    if (fotosList.length < minFotos) {
+      setSubmitError(`São necessárias no mínimo ${minFotos} foto(s) para confirmar o registro. Faltam ${minFotos - fotosList.length} foto(s).`);
+      setStep(1);
+      isSubmittingRef.current = false;
+      return;
+    }
+    if (isOsRequired && !numeroOs.trim()) {
+      isSubmittingRef.current = false;
+      return;
+    }
     const formattedAddress = addressDetails ? formatFullAddress(addressDetails) : undefined;
     const finalDiametro = getEffectiveDiametro();
     setSubmitting(true);
@@ -1739,21 +1763,32 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Avançar para Confirmação */}
             <button
               type="button"
-              disabled={isOsRequired && !numeroOs.trim()}
-              onClick={() => setStep(3)}
+              disabled={(isOsRequired && !numeroOs.trim()) || fotosList.length < minFotos}
+              onClick={() => {
+                if (fotosList.length < minFotos) {
+                  setSubmitError(`Fotos insuficientes: tire no mínimo ${minFotos} foto(s) para continuar.`);
+                  setStep(1);
+                  return;
+                }
+                setStep(3);
+              }}
               style={{
-                backgroundColor: (isOsRequired && !numeroOs.trim()) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
+                backgroundColor: ((isOsRequired && !numeroOs.trim()) || fotosList.length < minFotos) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
                 color: '#FFFFFF',
                 fontWeight: 700,
                 fontSize: '13.5px',
                 padding: '13px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: (isOsRequired && !numeroOs.trim()) ? 'not-allowed' : 'pointer',
-                boxShadow: (isOsRequired && !numeroOs.trim()) ? 'none' : '0 4px 16px rgba(240, 90, 34, 0.45)'
+                cursor: ((isOsRequired && !numeroOs.trim()) || fotosList.length < minFotos) ? 'not-allowed' : 'pointer',
+                boxShadow: ((isOsRequired && !numeroOs.trim()) || fotosList.length < minFotos) ? 'none' : '0 4px 16px rgba(240, 90, 34, 0.45)'
               }}
             >
-              {(isOsRequired && !numeroOs.trim()) ? 'Preencha o Nº da OS para Avançar' : 'Avançar para Confirmação'}
+              {fotosList.length < minFotos
+                ? `Faltam ${minFotos - fotosList.length} foto(s) para avançar`
+                : (isOsRequired && !numeroOs.trim())
+                  ? 'Preencha o Nº da OS para Avançar'
+                  : 'Avançar para Confirmação'}
             </button>
           </div>
         )}
@@ -1842,6 +1877,13 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
               </div>
             </div>
 
+            {fotosList.length < minFotos && (
+              <div style={{ backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '10px 14px', color: '#FF7675', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>Fotos insuficientes: você possui {fotosList.length} de {minFotos} foto(s) obrigatória(s). Volte ao Passo 1 para tirar as fotos restantes.</span>
+              </div>
+            )}
+
             {submitError && (
               <div style={{ backgroundColor: 'rgba(231, 76, 60, 0.15)', border: '1px solid var(--danger)', borderRadius: '8px', padding: '10px 14px', color: '#FF7675', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <AlertCircle size={16} style={{ flexShrink: 0 }} />
@@ -1852,28 +1894,33 @@ export const RodEntryModal: React.FC<RodEntryModalProps> = ({
             {/* Confirm and Submit Button */}
             <button
               type="button"
-              disabled={submitting}
+              disabled={submitting || fotosList.length < minFotos}
               onClick={handleFinalSubmit}
               style={{
-                backgroundColor: 'var(--primary)',
+                backgroundColor: (submitting || fotosList.length < minFotos) ? 'rgba(255, 255, 255, 0.1)' : 'var(--primary)',
                 color: '#FFFFFF',
                 fontWeight: 800,
                 fontSize: '14px',
                 padding: '14px',
                 borderRadius: '8px',
                 border: 'none',
-                cursor: submitting ? 'wait' : 'pointer',
+                cursor: (submitting || fotosList.length < minFotos) ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 16px rgba(240, 90, 34, 0.45)'
+                boxShadow: (submitting || fotosList.length < minFotos) ? 'none' : '0 4px 16px rgba(240, 90, 34, 0.45)'
               }}
             >
               {submitting ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
                   <span>Transmitindo Registro...</span>
+                </>
+              ) : fotosList.length < minFotos ? (
+                <>
+                  <AlertCircle size={18} />
+                  <span>Faltam {minFotos - fotosList.length} foto(s) para transmitir</span>
                 </>
               ) : (
                 <>

@@ -616,7 +616,9 @@ export class ApiService {
       };
 
       const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
-      const minFotosFinal = Number(meta.min_fotos_registro) || Number(s.min_fotos_registro) || 2;
+      const minFotosFinal = (s.min_fotos_registro !== undefined && s.min_fotos_registro !== null && !isNaN(Number(s.min_fotos_registro)) && Number(s.min_fotos_registro) > 0)
+        ? Number(s.min_fotos_registro)
+        : (Number(meta.min_fotos_registro) || 2);
       const logoClienteFinal = s.logo_cliente || meta.logo_cliente || undefined;
       const logoEscalaFinal = Number(s.logo_escala) || Number(meta.logo_escala) || 1.0;
 
@@ -700,7 +702,9 @@ export class ApiService {
 
     const { descricao: cleanDesc, meta } = parseServicoDescricao(s.descricao);
     const tipoServicoFinal = s.tipo_servico || meta.tipo_servico || (s.nome?.toUpperCase().includes('SANEAMENTO') ? 'SANEAMENTO' : 'TELECOM');
-    const minFotosFinal = Number(meta.min_fotos_registro) || Number(s.min_fotos_registro) || 2;
+    const minFotosFinal = (s.min_fotos_registro !== undefined && s.min_fotos_registro !== null && !isNaN(Number(s.min_fotos_registro)) && Number(s.min_fotos_registro) > 0)
+      ? Number(s.min_fotos_registro)
+      : (Number(meta.min_fotos_registro) || 2);
     const navId = furosData.length > 0 ? furosData[0].navegador_id : s.navegador_id;
     const navNome = furosData.length > 0 ? furosData[0].navegador_nome : s.navegador_nome;
     const opId = furosData.length > 0 ? furosData[0].operador_id : s.operador_id;
@@ -1394,6 +1398,29 @@ export class ApiService {
       ? data.fotos
       : (data.foto_url ? [data.foto_url] : []);
 
+    // Validação estrita do mínimo de fotos configurado na obra
+    try {
+      const { data: furoData } = await supabase.from('tecnodrill_furos').select('servico_id').eq('id', furoId).single();
+      if (furoData?.servico_id) {
+        const { data: servicoData } = await supabase.from('tecnodrill_servicos').select('min_fotos_registro, descricao').eq('id', furoData.servico_id).single();
+        if (servicoData) {
+          const { meta } = parseServicoDescricao(servicoData.descricao);
+          const minExigido = (servicoData.min_fotos_registro !== undefined && servicoData.min_fotos_registro !== null && Number(servicoData.min_fotos_registro) > 0)
+            ? Number(servicoData.min_fotos_registro)
+            : (Number(meta.min_fotos_registro) || 2);
+          const totalFotosValidas = rawFotos.filter(f => f && typeof f === 'string' && f.trim().length > 0).length;
+          if (totalFotosValidas < minExigido) {
+            throw new Error(`Este serviço exige no mínimo ${minExigido} foto(s) para registrar. Você enviou ${totalFotosValidas}.`);
+          }
+        }
+      }
+    } catch (valErr: any) {
+      if (valErr?.message?.includes('foto(s) para registrar')) {
+        throw valErr;
+      }
+      console.warn('[Add Barra Validation Warning]:', valErr);
+    }
+
     const uploadedFotos: string[] = [];
     for (let i = 0; i < rawFotos.length; i++) {
       const f = rawFotos[i];
@@ -1443,6 +1470,7 @@ export class ApiService {
       profundidade_cm: Number(data.profundidade_cm) || 0,
       distancia_pista_cm: Number(data.distancia_pista_cm) || 0,
       foto_url: mainFotoUrl || null,
+      fotos: uploadedFotos,
       latitude: data.latitude || null,
       longitude: data.longitude || null,
       observacao: encodedObs

@@ -632,9 +632,13 @@ export class DBManager {
     };
 
     try {
-      const { tipo_registro, diametro, numero_os, fotos, ...cleanBarra } = newBarra;
-      await supabase.from('tecnodrill_barras').insert([cleanBarra]);
-    } catch (_) {}
+      await supabase.from('tecnodrill_barras').insert([newBarra]);
+    } catch (_) {
+      try {
+        const { tipo_registro, diametro, numero_os, fotos, ...cleanBarra } = newBarra;
+        await supabase.from('tecnodrill_barras').insert([cleanBarra]);
+      } catch (e) {}
+    }
 
     // Update length in furo to match exact accumulated meters
     await this.updateFuro(newBarra.furo_id, { comprimento_furo: metrosAcumulados });
