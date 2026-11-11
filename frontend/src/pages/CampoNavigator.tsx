@@ -380,7 +380,7 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
                       }}
                       title="Clique para ver a foto"
                     >
-                      <img src={b.foto_url} alt="Foto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={b.foto_url} alt="Foto" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                   ) : (
                     <div 

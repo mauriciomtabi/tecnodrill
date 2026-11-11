@@ -6,3 +6,4 @@
     "build": "cd .. && npm run build && node -e \"const fs=require('fs'); try{fs.cpSync('../dist', 'dist', {recursive:true});}catch(e){}\""
   }
 }
+

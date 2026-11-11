@@ -1364,6 +1364,8 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
                           <img 
                             src={b.foto_url} 
                             alt={`Registro ${b.numero_barra}`} 
+                            loading="lazy"
+                            decoding="async"
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
                         ) : (
