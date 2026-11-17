@@ -66,12 +66,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (cancelled) return;
       setToken(session?.token || null);
       setUser(session?.usuario || null);
-      if (!session) {
+      if (!session && navigator.onLine) {
         localStorage.removeItem('tecnodrill_token');
         localStorage.removeItem('tecnodrill_usuario');
       }
     }).catch(() => {
-      if (!cancelled) { setToken(null); setUser(null); }
+      if (!cancelled) {
+        if (!navigator.onLine && ApiService.getUsuarioAtual()) {
+          setUser(ApiService.getUsuarioAtual());
+          setToken(ApiService.getToken());
+        } else {
+          setToken(null); 
+          setUser(null); 
+        }
+      }
     }).finally(() => { if (!cancelled) setIsLoading(false); });
 
     setTheme(savedTheme);

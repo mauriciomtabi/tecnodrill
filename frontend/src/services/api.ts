@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { withPrivatePhotos } from './privatePhotos';
+import { OfflineDatabase } from './offlineDatabase';
 import { Usuario, Servico, Furo, Barra, DashboardGestorMetrics, ResumoFinanceiroServico, PerfilUsuario, TipoServico, TipoRegistroBarra, TerceiroLancamento, TabelaDiametroItem } from '../types';
 
 export interface ServicoMetaTag {
@@ -281,14 +282,61 @@ export class ApiService {
   private static readonly userFields = 'id,nome,perfil,email,username,ativo,trocar_senha_primeiro_acesso';
 
   public static async restoreSession(): Promise<{ token: string; usuario: Usuario } | null> {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) return null;
-    const { data: usuario, error: profileError } = await supabase.from('tecnodrill_usuarios').select(this.userFields).eq('id', user.id).single();
-    if (profileError || !usuario?.ativo) { await supabase.auth.signOut(); return null; }
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-    this.setAuth(session.access_token, usuario as Usuario);
-    return { token: session.access_token, usuario: usuario as Usuario };
+    const savedUser = this.getUsuarioAtual();
+    const savedToken = this.getToken();
+
+    // 1. Se o navegador estiver explicitamente offline, restaura do armazenamento local seguro
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (savedUser && savedToken) {
+        this.setAuth(savedToken, savedUser);
+        return { token: savedToken, usuario: savedUser };
+      }
+      return null;
+    }
+
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        // Se for erro de rede (Failed to fetch, sem sinal 3G/4G), preserva a sessão local do operador
+        const isNetworkErr = !navigator.onLine || 
+          error?.message?.toLowerCase().includes('failed to fetch') || 
+          error?.message?.toLowerCase().includes('network') ||
+          error?.message?.toLowerCase().includes('load failed');
+        if (isNetworkErr && savedUser && savedToken) {
+          this.setAuth(savedToken, savedUser);
+          return { token: savedToken, usuario: savedUser };
+        }
+        return null;
+      }
+      const { data: usuario, error: profileError } = await supabase.from('tecnodrill_usuarios').select(this.userFields).eq('id', user.id).single();
+      if (profileError || !usuario?.ativo) { 
+        if (profileError && (!navigator.onLine || profileError.message?.toLowerCase().includes('failed to fetch'))) {
+          if (savedUser && savedToken) {
+            this.setAuth(savedToken, savedUser);
+            return { token: savedToken, usuario: savedUser };
+          }
+        }
+        await supabase.auth.signOut(); 
+        return null; 
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        if (savedUser && savedToken) {
+          this.setAuth(savedToken, savedUser);
+          return { token: savedToken, usuario: savedUser };
+        }
+        return null;
+      }
+      this.setAuth(session.access_token, usuario as Usuario);
+      return { token: session.access_token, usuario: usuario as Usuario };
+    } catch (_) {
+      // Falha de rede catastrófica (sem conexão ou timeout)
+      if (savedUser && savedToken) {
+        this.setAuth(savedToken, savedUser);
+        return { token: savedToken, usuario: savedUser };
+      }
+      return null;
+    }
   }
 
   private static async authAction(body: Record<string, unknown>): Promise<any> {
@@ -424,6 +472,12 @@ export class ApiService {
   // SERVIÇOS / OBRAS
   // ============================================================================
   public static async getServicos(): Promise<Servico[]> {
+    // 1. Se estiver offline no navegador, tenta carregar imediatamente do cache IndexedDB
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const cached = await OfflineDatabase.getCachedServicos();
+      if (cached && cached.length > 0) return cached;
+    }
+
     let servicosData: any[] = [];
     let lastError: any = null;
 
@@ -464,6 +518,8 @@ export class ApiService {
     }
 
     if (!servicosData || servicosData.length === 0) {
+      const cached = await OfflineDatabase.getCachedServicos();
+      if (cached && cached.length > 0) return cached;
       if (lastError) {
         throw new Error(lastError.message || 'Erro ao carregar serviços do banco de dados.');
       }
@@ -665,6 +721,8 @@ export class ApiService {
       });
     }
 
+    // Armazena no cache local IndexedDB para navegação offline autônoma
+    OfflineDatabase.cacheServicos(result).catch(() => {});
     return result;
   }
 
@@ -680,6 +738,13 @@ export class ApiService {
     } catch (_) {}
 
     if (!s) {
+      // Tenta recuperar do cache local se estiver offline
+      const cachedList = await OfflineDatabase.getCachedServicos();
+      const match = cachedList.find(item => item.id === id);
+      if (match) {
+        const cachedFuros = await OfflineDatabase.getCachedFuros(id);
+        return { ...match, furos: cachedFuros };
+      }
       try {
         const res = await fetch(`/api/servicos/${id}`);
         if (res.ok) s = await res.json();
@@ -1139,6 +1204,11 @@ export class ApiService {
   // FUROS & BARRAS
   // ============================================================================
   public static async getFuros(servicoId?: string): Promise<Furo[]> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const cached = await OfflineDatabase.getCachedFuros(servicoId);
+      if (cached && cached.length > 0) return cached;
+    }
+
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         let query = supabase.from('tecnodrill_furos').select('*').order('criado_em', { ascending: true });
@@ -1151,9 +1221,11 @@ export class ApiService {
             await new Promise(r => setTimeout(r, 600 * attempt));
             continue;
           }
+          const cached = await OfflineDatabase.getCachedFuros(servicoId);
+          if (cached && cached.length > 0) return cached;
           return [];
         }
-        return (data || []).map((f: any) => ({
+        const mapped = (data || []).map((f: any) => ({
           id: f.id,
           servico_id: f.servico_id,
           data_furo: f.data_furo,
@@ -1169,6 +1241,8 @@ export class ApiService {
           status: f.status || 'EM_EXECUCAO',
           barras: []
         }));
+        OfflineDatabase.cacheFuros(mapped).catch(() => {});
+        return mapped;
       } catch (err) {
         console.warn(`[getFuros attempt ${attempt} catch]:`, err);
         if (attempt < 3) {
@@ -1176,6 +1250,8 @@ export class ApiService {
         }
       }
     }
+    const cachedFallback = await OfflineDatabase.getCachedFuros(servicoId);
+    if (cachedFallback && cachedFallback.length > 0) return cachedFallback;
     return [];
   }
 
@@ -1232,13 +1308,22 @@ export class ApiService {
   }
 
   public static async getBarras(furoId: string): Promise<Barra[]> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const cached = await OfflineDatabase.getCachedBarras(furoId);
+      if (cached && cached.length > 0) return cached;
+    }
+
     const { data, error } = await supabase
       .from('tecnodrill_barras')
       .select('*')
       .eq('furo_id', furoId)
       .order('numero_barra', { ascending: true });
 
-    if (error) return [];
+    if (error) {
+      const cached = await OfflineDatabase.getCachedBarras(furoId);
+      if (cached && cached.length > 0) return cached;
+      return [];
+    }
 
     const rawBarras = data || [];
     let needsRecalculation = false;
@@ -1256,7 +1341,7 @@ export class ApiService {
       return await this.resequenceBarras(furoId);
     }
 
-    return withPrivatePhotos(rawBarras.map((b: any) => {
+    const parsedBarras = withPrivatePhotos(rawBarras.map((b: any) => {
       const { observacao: cleanObs, meta } = parseBarraObservacao(b.observacao);
       const allFotos = (b.fotos && b.fotos.length > 0)
         ? b.fotos
@@ -1294,6 +1379,8 @@ export class ApiService {
         atualizado_por_id: meta.atualizado_por_id
       };
     }));
+    OfflineDatabase.cacheBarras(furoId, parsedBarras).catch(() => {});
+    return parsedBarras;
   }
 
   public static async resequenceBarras(furoId: string): Promise<Barra[]> {

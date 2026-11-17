@@ -16,7 +16,9 @@ import {
   Camera, 
   X,
   Calendar,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw,
+  Clock
 } from 'lucide-react';
 
 interface CampoNavigatorProps {
@@ -37,6 +39,44 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
   // Modal de Adição
   const [showAddBarraModal, setShowAddBarraModal] = useState(false);
   const [savingBarra, setSavingBarra] = useState(false);
+
+  // Controle de Fila Offline e Sincronização
+  const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ synced: number; total: number } | null>(null);
+
+  const refreshPendingCount = async () => {
+    try {
+      const count = await OfflineSyncService.getPendingCount();
+      setPendingOfflineCount(count);
+    } catch (_) {}
+  };
+
+  const handleManualSync = async () => {
+    if (!navigator.onLine || isSyncing) return;
+    setIsSyncing(true);
+    showToast('Iniciando sincronização dos apontamentos salvos no celular...', 'info');
+    try {
+      const res = await OfflineSyncService.syncQueue((synced, total) => {
+        setSyncProgress({ synced, total });
+      });
+      if (res.syncedCount > 0) {
+        showToast(`${res.syncedCount} apontamento(s) sincronizado(s) com sucesso na nuvem!`, 'success');
+        if (selectedFuro) {
+          const updated = await ApiService.getBarras(selectedFuro.id);
+          setBarras(updated);
+        }
+      } else if (res.errors > 0) {
+        showToast(`Houve erro em ${res.errors} registro(s). Nova tentativa automática ao restabelecer sinal.`, 'error');
+      }
+    } catch (err: any) {
+      showToast('Erro ao sincronizar registros com o servidor.', 'error');
+    } finally {
+      setIsSyncing(false);
+      setSyncProgress(null);
+      await refreshPendingCount();
+    }
+  };
 
   // Modal de Celebração de Meta
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -92,6 +132,29 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
     loadInitialData();
   }, [servicoIdProp]);
 
+  useEffect(() => {
+    refreshPendingCount();
+
+    const handleQueueChange = (e: any) => {
+      const count = e?.detail?.count ?? 0;
+      setPendingOfflineCount(count);
+    };
+
+    const handleOnline = () => {
+      if (OfflineSyncService.isOnline()) {
+        handleManualSync();
+      }
+    };
+
+    window.addEventListener('tecnodrill_offline_queue_changed', handleQueueChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('tecnodrill_offline_queue_changed', handleQueueChange);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [selectedFuro?.id]);
+
   const handleSelectServicoChange = async (sId: string) => {
     setSelectedServicoId(sId);
     setLoading(true);
@@ -116,40 +179,76 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
     setSavingBarra(true);
 
     try {
+      // 1. Se o navegador estiver offline, salva direto no IndexedDB sem tentar a nuvem
       if (!navigator.onLine) {
-        OfflineSyncService.enqueueBarra(selectedFuro.id, barraData);
-        const metrosDeste = barraData.metros || 3;
+        await OfflineSyncService.enqueueBarra(selectedFuro.id, barraData);
+        const metrosDeste = (barraData.tipo_registro === 'CAIXA' || (barraData.tem_caixa && !barraData.diametro)) 
+          ? 0 
+          : (barraData.metros !== undefined && barraData.metros !== null ? Number(barraData.metros) : 3);
         const totalLocal = totalMetrosExecutados + metrosDeste;
         const novaBarraLocal: Barra = {
           id: `local_${Date.now()}`,
           furo_id: selectedFuro.id,
           numero_barra: barraData.numero_barra || (barras.length + 1),
+          tipo_registro: barraData.tipo_registro || 'CANALIZACAO',
+          diametro: barraData.diametro || '',
           metros: metrosDeste,
           metros_acumulados: totalLocal,
           tem_caixa: barraData.tem_caixa,
           tipo_caixa: barraData.tipo_caixa,
           observacao: barraData.observacao,
-          foto_url: barraData.foto_url,
+          foto_url: barraData.foto_url || (barraData.fotos && barraData.fotos[0]),
+          fotos: barraData.fotos,
           horario_registro: new Date().toISOString()
         };
         setBarras(prev => [...prev, novaBarraLocal]);
-        showToast('Apontamento salvo em cache offline.', 'info');
+        showToast('Apontamento salvo no celular (Modo Offline).', 'info');
+        await refreshPendingCount();
         return;
       }
 
-      const res = await ApiService.addBarra(selectedFuro.id, barraData);
-      setBarras(prev => [...prev, res.barra]);
+      // 2. Online: tenta enviar diretamente para a nuvem
+      try {
+        const res = await ApiService.addBarra(selectedFuro.id, barraData);
+        setBarras(prev => [...prev, res.barra]);
 
-      const totalApos = res.barra.metros_acumulados;
-      if (res.celebrarMeta) {
-        setCelebrationData({
-          metaMetros,
-          metrosAtingidos: totalApos,
-          tipoMeta
-        });
-        setCelebrationOpen(true);
+        const totalApos = res.barra.metros_acumulados;
+        if (res.celebrarMeta) {
+          setCelebrationData({
+            metaMetros,
+            metrosAtingidos: totalApos,
+            tipoMeta
+          });
+          setCelebrationOpen(true);
+        }
+        return res;
+      } catch (cloudErr: any) {
+        // Se a internet falhar/oscilar durante o envio, fallback automático seguro para o celular!
+        console.warn('[CampoNavigator] Sinal oscilou no campo. Salvando apontamento no celular:', cloudErr);
+        await OfflineSyncService.enqueueBarra(selectedFuro.id, barraData);
+        const metrosDeste = (barraData.tipo_registro === 'CAIXA' || (barraData.tem_caixa && !barraData.diametro)) 
+          ? 0 
+          : (barraData.metros !== undefined && barraData.metros !== null ? Number(barraData.metros) : 3);
+        const totalLocal = totalMetrosExecutados + metrosDeste;
+        const novaBarraLocal: Barra = {
+          id: `local_${Date.now()}`,
+          furo_id: selectedFuro.id,
+          numero_barra: barraData.numero_barra || (barras.length + 1),
+          tipo_registro: barraData.tipo_registro || 'CANALIZACAO',
+          diametro: barraData.diametro || '',
+          metros: metrosDeste,
+          metros_acumulados: totalLocal,
+          tem_caixa: barraData.tem_caixa,
+          tipo_caixa: barraData.tipo_caixa,
+          observacao: barraData.observacao,
+          foto_url: barraData.foto_url || (barraData.fotos && barraData.fotos[0]),
+          fotos: barraData.fotos,
+          horario_registro: new Date().toISOString()
+        };
+        setBarras(prev => [...prev, novaBarraLocal]);
+        showToast('Sinal oscilou. Apontamento salvo com segurança no celular!', 'info');
+        await refreshPendingCount();
       }
-      return res;
     } catch (err: any) {
       showToast(err.message || 'Erro ao registrar apontamento.', 'error');
       throw err;
@@ -249,6 +348,58 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
           </div>
         )}
       </div>
+
+      {/* Banner de Sincronização e Status Offline */}
+      {pendingOfflineCount > 0 && (
+        <div
+          style={{
+            backgroundColor: 'rgba(240, 90, 34, 0.12)',
+            border: '1px solid #F05A22',
+            borderRadius: 'var(--radius-md)',
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+            boxShadow: 'var(--shadow-sm)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <RefreshCw size={20} className={isSyncing ? "spin" : ""} style={{ color: '#F05A22' }} />
+            <div>
+              <strong style={{ fontSize: '13px', color: '#FFFFFF', display: 'block' }}>
+                {isSyncing 
+                  ? `Sincronizando ${syncProgress ? `${syncProgress.synced} de ${syncProgress.total}` : ''} apontamentos com a nuvem...` 
+                  : `${pendingOfflineCount} apontamento(s) salvo(s) neste celular (Modo Offline)`}
+              </strong>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                {isSyncing 
+                  ? 'Enviando fotos e metragens para o servidor com segurança...' 
+                  : 'Os registros e fotos estão guardados no aparelho e subirão automaticamente ao restabelecer o sinal.'}
+              </span>
+            </div>
+          </div>
+
+          {navigator.onLine && !isSyncing && (
+            <button
+              onClick={handleManualSync}
+              className="btn-primary"
+              style={{
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <RefreshCw size={13} />
+              <span>Sincronizar Agora</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Target Progress Card */}
       <div
@@ -405,6 +556,11 @@ export const CampoNavigator: React.FC<CampoNavigatorProps> = ({ onVerFichaOficia
                       <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>
                         Registro #{b.numero_barra}
                       </strong>
+                      {(b.id?.startsWith('local_') || b.id?.startsWith('offline_')) && (
+                        <span style={{ fontSize: '10px', fontWeight: 800, color: '#FACC15', backgroundColor: 'rgba(234, 179, 8, 0.2)', border: '1px solid rgba(234, 179, 8, 0.4)', padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock size={11} /> Salvo Localmente (Offline)
+                        </span>
+                      )}
                       {(b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) ? (
                         <span style={{ fontSize: '10.5px', fontWeight: 800, color: 'var(--success)', backgroundColor: 'rgba(39, 174, 96, 0.15)', padding: '2px 6px', borderRadius: '4px' }}>
                           📦 CAIXA
