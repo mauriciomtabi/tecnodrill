@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
 import { BottomNav } from './components/BottomNav';
@@ -71,10 +71,10 @@ export const App: React.FC = () => {
     localStorage.setItem('tecnodrill_sidebar_collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  const setHeaderInfo = (title: string, subtitle: string) => {
+  const setHeaderInfo = useCallback((title: string, subtitle: string) => {
     setPageTitle(title);
     setPageSubtitle(subtitle);
-  };
+  }, []);
 
   // Sincronizar rotas persistentes baseadas no perfil do usuário e URL hash
   useEffect(() => {
@@ -174,39 +174,44 @@ export const App: React.FC = () => {
   const handleNavigate = (path: string, pushHistory = true) => {
     let targetPath = path;
     let targetObraId: string | null = null;
+    let targetHash = `#${path}`;
 
     if (path.startsWith('/app/obras/') || path.startsWith('/tecnico/obras/')) {
       const parts = path.split('/');
       targetObraId = parts[parts.length - 1];
       targetPath = '/app/obras/detalhe';
+      targetHash = `#/obra/${targetObraId}`;
       setSelectedObraId(targetObraId);
       setCurrentPath('/app/obras/detalhe');
-      window.location.hash = `#/obra/${targetObraId}`;
     } else {
       targetPath = path;
       setCurrentPath(path);
       if (path !== '/app/obras/detalhe') {
         setSelectedObraId(null);
       }
-      window.location.hash = `#${path}`;
+    }
+
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash;
     }
 
     if (pushHistory) {
-      window.history.pushState(
+      window.history.replaceState(
         { screen: targetPath, selectedObraId: targetObraId },
         '',
-        window.location.pathname
+        targetHash
       );
     }
   };
 
   // Intercepta o botão nativo de voltar no celular para não fechar o app
   useEffect(() => {
+    const currentHash = window.location.hash || `#${currentPath}`;
     if (!window.history.state?.screen && currentPath) {
       window.history.replaceState(
         { screen: currentPath, selectedObraId },
         '',
-        window.location.pathname
+        currentHash
       );
     }
 
@@ -222,18 +227,20 @@ export const App: React.FC = () => {
         setCurrentPath(e.state.screen);
         setSelectedObraId(e.state.selectedObraId || null);
       } else {
-        // Se voltou até o início do histórico mas está em detalhe de obra ou tela interna
-        if (currentPath === '/app/obras/detalhe' || currentPath === '/app/usuarios' || currentPath === '/app/performance' || currentPath === '/app/produtividade') {
+        const route = parseHashRoute();
+        if (route) {
+          setCurrentPath(route.path);
+          setSelectedObraId(route.obraId);
+        } else {
           setCurrentPath(defaultHome);
           setSelectedObraId(null);
-          window.history.replaceState({ screen: defaultHome, selectedObraId: null }, '');
         }
       }
     };
 
     const handleHashChange = () => {
       const route = parseHashRoute();
-      if (route && route.path !== currentPath) {
+      if (route && (route.path !== currentPath || route.obraId !== selectedObraId)) {
         setCurrentPath(route.path);
         setSelectedObraId(route.obraId);
       }

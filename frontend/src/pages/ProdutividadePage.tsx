@@ -22,7 +22,7 @@ import {
   Mail,
   Camera
 } from 'lucide-react';
-import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado } from '../utils/relatorioMedicaoExcel';
+import { exportarRelatorioMedicaoServico, exportarRelatorioMedicaoConsolidado, extrairDataBarra } from '../utils/relatorioMedicaoExcel';
 import { exportarRelatorioFotograficoExcel } from '../utils/relatorioFotograficoExcel';
 import { ConfiguracaoEmailModal } from '../components/ConfiguracaoEmailModal';
 
@@ -188,46 +188,18 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     return Array.from(anos).sort((a, b) => Number(b) - Number(a));
   }, [barrasPorServico, currentYear]);
 
-  // Helper date extractor
+  // Helper date extractor com preservação estrita de fuso horário
   const getBarraDateInfo = (b: Barra): { year: string; month: number; day: number } | null => {
-    let dataRef = b.data_referencia;
-    let mesRef = b.mes_referencia;
-
-    if (!dataRef && !mesRef && b.observacao) {
-      const { meta } = parseBarraObservacao(b.observacao);
-      if (meta.data_referencia) dataRef = meta.data_referencia;
-      if (meta.mes_referencia) mesRef = meta.mes_referencia;
+    let meta: any = null;
+    if (b.observacao) {
+      const parsed = parseBarraObservacao(b.observacao);
+      meta = parsed.meta;
     }
-
-    if (dataRef) {
-      const parts = dataRef.split('-');
-      if (parts.length === 3) {
-        return {
-          year: parts[0],
-          month: Number(parts[1]),
-          day: Number(parts[2])
-        };
-      }
-    }
-    if (mesRef) {
-      const parts = mesRef.split('-');
-      if (parts.length === 2) {
-        return {
-          year: parts[0],
-          month: Number(parts[1]),
-          day: 15
-        };
-      }
-    }
-
-    const raw = b.horario_registro || b.data_registro || b.created_at;
-    if (!raw) return null;
-    const d = new Date(raw);
-    if (isNaN(d.getTime())) return null;
+    const info = extrairDataBarra(b, meta);
     return {
-      year: d.getFullYear().toString(),
-      month: d.getMonth() + 1,
-      day: d.getDate()
+      year: info.anoStr,
+      month: parseInt(info.mesStr, 10),
+      day: parseInt(info.diaStr, 10)
     };
   };
 
@@ -1942,7 +1914,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                                 : (dataInicio || dataFim || 'GERAL');
                               exportarRelatorioMedicaoServico(s, barrasDaObra, nomePeriodo);
                             }}
-                            title={`Exportar Planilha de Medição Excel (${s.nome})`}
+                            title={`Exportar Planilha de Medição Excel (${s.nome}) - Furo a Furo e Resumo`}
                             style={{
                               padding: '6px 10px',
                               borderRadius: '6px',

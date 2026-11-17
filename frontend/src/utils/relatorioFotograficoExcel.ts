@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { Servico, Barra } from '../types';
 import { TECNODRILL_LOGO_BASE64 } from './tecnodrillLogoBase64';
 import { sanitizeLocalidade, parseBarraObservacao } from '../services/api';
+import { extrairDataBarra } from './relatorioMedicaoExcel';
 
 // Paleta Oficial TecnoDrill
 const COLOR_TECNODRILL_ORANGE = 'FFF05A22';
@@ -192,17 +193,11 @@ export function extrairItensFotograficos(servico: Servico, barras: Barra[]): {
       });
     }
 
-    // Informações de data / hora formatadas
-    let dataHoraStr = '';
-    const rawData = b.data_registro || meta?.data_referencia || b.horario_registro || b.created_at;
-    if (rawData) {
-      try {
-        const d = new Date(rawData);
-        if (!isNaN(d.getTime())) {
-          dataHoraStr = `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-        }
-      } catch (_) {}
-    }
+    // Informações de data / hora formatadas com preservação estrita de fuso
+    const dateInfo = extrairDataBarra(b, meta);
+    const dataHoraStr = dateInfo.horarioStr
+      ? `${dateInfo.dataFormatada} ${dateInfo.horarioStr}`
+      : dateInfo.dataFormatada;
 
     // Coordenadas
     let coordsStr = '';
@@ -685,16 +680,10 @@ export async function exportarRelatorioFotograficoExcel(
       (meta?.fotos && meta.fotos.length > 0)
     );
 
-    let dataHoraStr = '';
-    const rawData = b.data_registro || meta?.data_referencia || b.horario_registro || b.created_at;
-    if (rawData) {
-      try {
-        const d = new Date(rawData);
-        if (!isNaN(d.getTime())) {
-          dataHoraStr = `${d.toLocaleDateString('pt-BR')} ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
-        }
-      } catch (_) {}
-    }
+    const dateInfo = extrairDataBarra(b, meta);
+    const dataHoraStr = dateInfo.horarioStr
+      ? `${dateInfo.dataFormatada} ${dateInfo.horarioStr}`
+      : dateInfo.dataFormatada;
 
     const rowValues = [
       b.numero_barra,
