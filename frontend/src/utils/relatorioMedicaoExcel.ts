@@ -395,50 +395,47 @@ export function criarWorksheetDetalhada(
   ws.getRow(2).height = 28;
   ws.getRow(3).height = 28;
 
-  // 1. Identificação Corporativa (B2:D3)
-  ws.mergeCells('B2:D3');
-  const cellCorp = ws.getCell('B2');
-  cellCorp.value = 'TECNODRILL INFRA';
-  cellCorp.font = { name: 'Calibri', size: 12, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
-  cellCorp.alignment = { vertical: 'middle', horizontal: 'left' };
-
-  // 2. Título Central (E2:I3)
-  ws.mergeCells('E2:I3');
-  const cellTitulo = ws.getCell('E2');
+  // 1. Título Esquerdo (B2:H3) - Padrão Executivo TecnoDrill alinhado à esquerda
+  ws.mergeCells('B2:H3');
+  const cellTitulo = ws.getCell('B2');
   const periodoTxt = subTitulo ? ` (${subTitulo.replace(/_/g, ' ')})` : '';
   cellTitulo.value = `LANÇAMENTO DE MEDIÇÕES DETALHADO (FURO A FURO)${periodoTxt.toUpperCase()}`;
-  cellTitulo.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
-  cellTitulo.alignment = { vertical: 'middle', horizontal: 'center' };
+  cellTitulo.font = { name: 'Calibri', size: 12.5, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+  cellTitulo.alignment = { vertical: 'middle', horizontal: 'left' };
 
-  // 3. Logo Oficial da TecnoDrill (J2:K3)
+  // 2. Logo Oficial da TecnoDrill (I2:K3)
   try {
     const logoId = wb.addImage({
       base64: TECNODRILL_LOGO_BASE64,
       extension: 'png'
     });
     ws.addImage(logoId, {
-      tl: { col: 9.05, row: 1.15 },
-      ext: { width: 175, height: 52 }
+      tl: { col: 8.5, row: 1.15 },
+      ext: { width: 175, height: 50 }
     });
   } catch (_) {
-    ws.mergeCells('J2:K3');
-    const cellLogoFallback = ws.getCell('J2');
+    ws.mergeCells('I2:K3');
+    const cellLogoFallback = ws.getCell('I2');
     cellLogoFallback.value = 'TecnoDrill INFRA';
     cellLogoFallback.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
     cellLogoFallback.alignment = { vertical: 'middle', horizontal: 'center' };
   }
 
-  // 4. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
+  // 3. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
   ws.getRow(4).height = 20;
   ws.getRow(5).height = 20;
 
+  // Apenas as colunas que têm texto único vertical são mescladas
   ws.mergeCells('B4:B5'); // ID DO SERVIÇO
   ws.mergeCells('C4:C5'); // NOME DO SERVIÇO
   ws.mergeCells('D4:D5'); // REGISTRO
   ws.mergeCells('E4:E5'); // DATA
-  ws.mergeCells('F4:F5'); // 'OS' nº
+  // Coluna F: F4 tem 'OS', F5 tem 'nº' (NÃO MESCLAR)
+  // Coluna G: G4 tem 'MEDIDA 1', G5 tem 'mts' (NÃO MESCLAR)
+  // Coluna H: H4 tem 'DUTO', H5 tem 'diametro' (NÃO MESCLAR)
   ws.mergeCells('I4:I5'); // Valor Metro
   ws.mergeCells('J4:J5'); // VALOR TOTAL FURO
+  // Coluna K: K4 tem 'DESCRIÇÃO', K5 tem 'observação' (NÃO MESCLAR)
 
   // Linha 4
   ws.getCell('B4').value = 'ID DO SERVIÇO';
@@ -674,48 +671,46 @@ export function criarWorksheetConsolidada(
   ws.getRow(2).height = 28;
   ws.getRow(3).height = 28;
 
-  // 1. Identificação Corporativa (B2:D3)
-  ws.mergeCells('B2:D3');
-  const cellCorp = ws.getCell('B2');
-  cellCorp.value = 'TECNODRILL INFRA';
-  cellCorp.font = { name: 'Calibri', size: 12, bold: true, color: { argb: COLOR_TECNODRILL_DARK } };
-  cellCorp.alignment = { vertical: 'middle', horizontal: 'left' };
-
-  // 2. Título Central (E2:H3)
-  ws.mergeCells('E2:H3');
-  const cellTitulo = ws.getCell('E2');
+  // 1. Título Esquerdo (B2:G3) - Padrão Executivo TecnoDrill alinhado à esquerda
+  ws.mergeCells('B2:G3');
+  const cellTitulo = ws.getCell('B2');
   const periodoTxt = nomeFiltroPeriodo ? ` (${nomeFiltroPeriodo.replace(/_/g, ' ')})` : '';
   cellTitulo.value = `LANÇAMENTO DE MEDIÇÕES - RESUMO CONSOLIDADO${periodoTxt.toUpperCase()}`;
-  cellTitulo.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
-  cellTitulo.alignment = { vertical: 'middle', horizontal: 'center' };
+  cellTitulo.font = { name: 'Calibri', size: 12.5, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
+  cellTitulo.alignment = { vertical: 'middle', horizontal: 'left' };
 
-  // 3. Logo Oficial da TecnoDrill (I2:J3)
+  // 2. Logo Oficial da TecnoDrill (H2:J3)
   try {
     const logoId = wb.addImage({
       base64: TECNODRILL_LOGO_BASE64,
       extension: 'png'
     });
     ws.addImage(logoId, {
-      tl: { col: 8.05, row: 1.15 },
-      ext: { width: 175, height: 52 }
+      tl: { col: 7.5, row: 1.15 },
+      ext: { width: 175, height: 50 }
     });
   } catch (_) {
-    ws.mergeCells('I2:J3');
-    const cellLogoFallback = ws.getCell('I2');
+    ws.mergeCells('H2:J3');
+    const cellLogoFallback = ws.getCell('H2');
     cellLogoFallback.value = 'TecnoDrill INFRA';
     cellLogoFallback.font = { name: 'Calibri', size: 13, bold: true, color: { argb: COLOR_TECNODRILL_ORANGE } };
     cellLogoFallback.alignment = { vertical: 'middle', horizontal: 'center' };
   }
 
-  // 4. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
+  // 3. Cabeçalho das Colunas (Linhas 4 e 5) - Fundo Chumbo Escuro (#161B22)
   ws.getRow(4).height = 20;
   ws.getRow(5).height = 20;
 
+  // Apenas as colunas que têm texto único vertical são mescladas
   ws.mergeCells('B4:B5'); // ID DO SERVIÇO
   ws.mergeCells('C4:C5'); // NOME DO SERVIÇO
   ws.mergeCells('D4:D5'); // DATA
+  // Coluna E: E4 tem 'OS', E5 tem 'nº' (NÃO MESCLAR)
+  // Coluna F: F4 tem 'MEDIDA 1', F5 tem 'mts' (NÃO MESCLAR)
+  // Coluna G: G4 tem 'DUTO', G5 tem 'diametro' (NÃO MESCLAR)
   ws.mergeCells('H4:H5'); // Valor Metro
   ws.mergeCells('I4:I5'); // VALOR TOTAL FURO
+  // Coluna J: J4 tem 'DESCRIÇÃO', J5 tem 'observação' (NÃO MESCLAR)
 
   // Linha 4
   ws.getCell('B4').value = 'ID DO SERVIÇO';
