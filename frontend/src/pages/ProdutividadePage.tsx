@@ -3,6 +3,7 @@ import { summarizeAuthorRevenue } from './produtividadeAuthors';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { ApiService, parseBarraObservacao, calcularValorMetroBarra } from '../services/api';
+import { canReadRegistro } from '../services/registroAccess';
 import { Servico, Barra, TipoServico } from '../types';
 import * as XLSX from 'xlsx';
 import { 
@@ -81,8 +82,9 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [searchTerm, setSearchTerm] = useState('');
   const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
 
-  // Controles de Gráficos (Estilo BI JLE)
-  const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>('FINANCEIRO');
+  // Controles de Gráficos e Perfil de Acesso
+  const isGestor = user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN';
+  const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaEvolucao>(() => (user?.perfil === 'GESTOR' || user?.perfil === 'ADMIN') ? 'FINANCEIRO' : 'METROS');
   const [granularidade, setGranularidade] = useState<GranularidadeEvolucao>('MENSAL');
   const evolutionPlotRef = useRef<HTMLDivElement>(null);
   const [evolutionPlotWidth, setEvolutionPlotWidth] = useState(0);
@@ -96,8 +98,12 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   const [hoveredMonthIdx, setHoveredMonthIdx] = useState<number | null>(null);
 
   useEffect(() => {
-    setHeaderInfo('Painel de Produtividade & Custos', 'Dashboard Analítico de Produção e Performance Financeira');
-  }, [setHeaderInfo]);
+    if (isGestor) {
+      setHeaderInfo('Painel de Produtividade & Custos', 'Dashboard Analítico de Produção e Performance Financeira');
+    } else {
+      setHeaderInfo('Minha Produção', 'Acompanhamento da sua produção por período e por obra');
+    }
+  }, [setHeaderInfo, isGestor]);
 
   // Carregar dados de forma rápida e paralelizada
   const loadData = async () => {
@@ -139,6 +145,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   }, []);
 
   const terceirosDisponiveis = useMemo(() => {
+    if (!isGestor) return [];
     const autores = new Map<string, string>();
     Object.values(barrasPorServico).flat().forEach(b => {
       const id = b.registrado_por || 'SEM_AUTOR';
@@ -146,10 +153,22 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       if (!autores.has(id) || b.registrado_por_nome) autores.set(id, nome);
     });
     return [...autores].map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [barrasPorServico]);
+  }, [barrasPorServico, isGestor]);
+
+  // Isolamento estrito de dados para Técnicos (canReadRegistro e data >= 2026-09)
   const barrasSelecionadas = useMemo(() => Object.fromEntries(Object.entries(barrasPorServico).map(([id, barras]) => [id,
-    barras.filter(b => filtroTerceiro === 'TODOS' || (b.registrado_por || 'SEM_AUTOR') === filtroTerceiro)
-  ])), [barrasPorServico, filtroTerceiro]);
+    barras.filter(b => {
+      if (!isGestor) {
+        const isMine = canReadRegistro(user, b);
+        if (!isMine) return false;
+        const { meta } = parseBarraObservacao(b.observacao);
+        const mesRef = b.mes_referencia || meta.mes_referencia || b.data_referencia?.slice(0, 7) || meta.data_referencia?.slice(0, 7) || b.horario_registro?.slice(0, 7);
+        if (mesRef && mesRef < '2026-09') return false;
+        return true;
+      }
+      return filtroTerceiro === 'TODOS' || (b.registrado_por || 'SEM_AUTOR') === filtroTerceiro;
+    })
+  ])), [barrasPorServico, filtroTerceiro, isGestor, user]);
 
   // Anos disponíveis nos dados
   const anosDisponiveis = useMemo(() => {
@@ -244,9 +263,20 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
     setHoveredMonthIdx(null);
   };
 
+  // Obras visíveis: Gestor vê todas; Técnico vê apenas as obras com seus registros ou onde está na equipe
+  const servicosVisiveis = useMemo(() => {
+    if (isGestor) return servicos;
+    return servicos.filter(s => {
+      const allBarras = barrasSelecionadas[s.id] || [];
+      if (allBarras.length > 0) return true;
+      if (s.tecnicos && user?.id && s.tecnicos.includes(user.id)) return true;
+      return false;
+    });
+  }, [servicos, isGestor, barrasSelecionadas, user]);
+
   // Cálculos consolidados por serviço
   const servicosCalculados = useMemo(() => {
-    return servicos.map(s => {
+    return servicosVisiveis.map(s => {
       const allBarras = barrasSelecionadas[s.id] || [];
       const barrasPeriodo = allBarras.filter(b => isBarraInFilter(b));
 
@@ -265,43 +295,45 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       const totalPrevisto = Number(s.metragem_prevista_total) || 1000;
       const percentualConcluido = totalPrevisto > 0 ? Math.min(100, Math.round((metrosTotais / totalPrevisto) * 100)) : 0;
 
-      // Cálculo de Receita para o período
+      // Cálculo de Receita e Custo para o período (relevante apenas para Gestor/Admin)
       let receitaPeriodo = 0;
-      if (s.cenario_financeiro === 'VALOR_METRO') {
-        if (s.tabela_diametros && s.tabela_diametros.length > 0) {
-          let somaRec = 0;
-          for (const b of barrasPeriodo) {
-            if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
-            const m = Number(b.metros) || 3;
-            somaRec += m * calcularValorMetroBarra(s, b.diametro);
+      if (isGestor) {
+        if (s.cenario_financeiro === 'VALOR_METRO') {
+          if (s.tabela_diametros && s.tabela_diametros.length > 0) {
+            let somaRec = 0;
+            for (const b of barrasPeriodo) {
+              if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
+              const m = Number(b.metros) || 3;
+              somaRec += m * calcularValorMetroBarra(s, b.diametro);
+            }
+            receitaPeriodo = somaRec;
+          } else {
+            receitaPeriodo = metrosPeriodo * (Number(s.valor_metro) || 0);
           }
-          receitaPeriodo = somaRec;
-        } else {
-          receitaPeriodo = metrosPeriodo * (Number(s.valor_metro) || 0);
+        } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+          const diamDefault = Number(s.diametro_furo_mm) || 150;
+          const fator = Number(s.fator_financeiro) || 0.8;
+          let somaRetorno = 0;
+          let count = 0;
+          for (const b of barrasPeriodo) {
+            if (b.tipo_registro === 'CAIXA' || b.tem_caixa) continue;
+            const m = Number(b.metros) || 3;
+            const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
+            somaRetorno += m * fator * numDiam;
+            count++;
+          }
+          receitaPeriodo = count > 0 ? somaRetorno : (metrosPeriodo * fator * diamDefault);
+        } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
+          const valFechado = Number(s.valor_total_fechado) || 0;
+          receitaPeriodo = totalPrevisto > 0 ? (metrosPeriodo / totalPrevisto) * valFechado : 0;
         }
-      } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-        const diamDefault = Number(s.diametro_furo_mm) || 150;
-        const fator = Number(s.fator_financeiro) || 0.8;
-        let somaRetorno = 0;
-        let count = 0;
-        for (const b of barrasPeriodo) {
-          if (b.tipo_registro === 'CAIXA' || b.tem_caixa) continue;
-          const m = Number(b.metros) || 3;
-          const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || diamDefault;
-          somaRetorno += m * fator * numDiam;
-          count++;
-        }
-        receitaPeriodo = count > 0 ? somaRetorno : (metrosPeriodo * fator * diamDefault);
-      } else if (s.cenario_financeiro === 'VALOR_FECHADO') {
-        const valFechado = Number(s.valor_total_fechado) || 0;
-        receitaPeriodo = totalPrevisto > 0 ? (metrosPeriodo / totalPrevisto) * valFechado : 0;
       }
 
       // Regra Oficial de Custo: Multiplicado sempre por 2 (rateio 50% Navegador e 50% Operador)
       const custoMetro = Number(s.custo_metro) || 0;
-      const custoPeriodo = metrosPeriodo * custoMetro * 2; // Ex: 0.5 * 100m * 2 = R$ 100 (50 Navegador + 50 Operador)
-      const custoNavegador = metrosPeriodo * custoMetro;
-      const custoOperador = metrosPeriodo * custoMetro;
+      const custoPeriodo = isGestor ? metrosPeriodo * custoMetro * 2 : 0;
+      const custoNavegador = isGestor ? metrosPeriodo * custoMetro : 0;
+      const custoOperador = isGestor ? metrosPeriodo * custoMetro : 0;
       const margemPeriodo = receitaPeriodo - custoPeriodo;
       const margemPercentual = receitaPeriodo > 0 ? (margemPeriodo / receitaPeriodo) * 100 : 0;
 
@@ -325,7 +357,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         qtdCaixasPeriodo: barrasPeriodo.filter(b => b.tem_caixa || b.tipo_registro === 'CAIXA').length
       };
     });
-  }, [servicos, barrasSelecionadas, dataInicio, dataFim]);
+  }, [servicosVisiveis, barrasSelecionadas, dataInicio, dataFim, isGestor]);
 
   // Filtragem por busca e por segmento
   const servicosFiltrados = useMemo(() => {
@@ -341,13 +373,14 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
   }, [servicosCalculados, filtroSegmento, searchTerm, filtroServico]);
 
   const receitaPorTerceiro = useMemo(() => {
+    if (!isGestor) return [];
     return summarizeAuthorRevenue(servicosFiltrados, barrasSelecionadas, isBarraInFilter, terceirosDisponiveis);
-  }, [servicosFiltrados, barrasSelecionadas, terceirosDisponiveis, dataInicio, dataFim]);
+  }, [servicosFiltrados, barrasSelecionadas, terceirosDisponiveis, isGestor, dataInicio, dataFim]);
 
   // Totais consolidados dos KPIs
   const totais = useMemo(() => {
-    const totalReceita = servicosFiltrados.reduce((acc, s) => acc + s.receitaPeriodo, 0);
-    const totalCusto = servicosFiltrados.reduce((acc, s) => acc + s.custoPeriodo, 0);
+    const totalReceita = isGestor ? servicosFiltrados.reduce((acc, s) => acc + s.receitaPeriodo, 0) : 0;
+    const totalCusto = isGestor ? servicosFiltrados.reduce((acc, s) => acc + s.custoPeriodo, 0) : 0;
     const totalMargem = totalReceita - totalCusto;
     const margemPercentualGeral = totalReceita > 0 ? (totalMargem / totalReceita) * 100 : 0;
     const totalMetros = servicosFiltrados.reduce((acc, s) => acc + s.metrosPeriodo, 0);
@@ -365,7 +398,26 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       totalCaixas,
       custoMedioPorMetro
     };
+  }, [servicosFiltrados, isGestor]);
+
+  const totalMetrosAcumulados = useMemo(() => {
+    return servicosFiltrados.reduce((acc, s) => acc + s.metrosTotais, 0);
   }, [servicosFiltrados]);
+
+  const diasTrabalhadosTecnico = useMemo(() => {
+    if (isGestor) return 0;
+    const datas = new Set<string>();
+    Object.values(barrasSelecionadas).flat().forEach(b => {
+      if (!isBarraInFilter(b)) return;
+      const info = getBarraDateInfo(b);
+      if (info) {
+        datas.add(`${info.year}-${String(info.month).padStart(2, '0')}-${String(info.day).padStart(2, '0')}`);
+      }
+    });
+    return datas.size;
+  }, [barrasSelecionadas, dataInicio, dataFim, isGestor]);
+
+  const mediaDiariaTecnico = diasTrabalhadosTecnico > 0 ? totais.totalMetros / diasTrabalhadosTecnico : 0;
 
   // Dados para o Gráfico de Evolução (12 meses do ano ou granularidade selecionada)
   const dadosEvolucao = useMemo(() => {
@@ -538,13 +590,13 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
   // Escala máxima do gráfico de evolução para desenhar as barras com precisão e espaço para rótulos de dados
   const maxEvolucaoVal = useMemo(() => {
-    if (metricaEvolucao === 'FINANCEIRO') {
+    if (isGestor && metricaEvolucao === 'FINANCEIRO') {
       const maxVal = Math.max(...dadosEvolucao.map(d => Math.max(d.receita, d.custo)), 1000);
       return maxVal * 1.28;
     }
     const maxMetros = Math.max(...dadosEvolucao.map(d => d.metros), 50);
     return maxMetros * 1.28;
-  }, [dadosEvolucao, metricaEvolucao]);
+  }, [dadosEvolucao, metricaEvolucao, isGestor]);
 
   // Dados para o Gráfico de Distribuição por Segmento (Donut)
   const dadosSegmentos = useMemo(() => {
@@ -558,8 +610,10 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       const t = s.tipo_servico as TipoServico;
       if (tipos[t]) {
         tipos[t].metros += s.metrosPeriodo;
-        tipos[t].receita += s.receitaPeriodo;
-        tipos[t].custo += s.custoPeriodo;
+        if (isGestor) {
+          tipos[t].receita += s.receitaPeriodo;
+          tipos[t].custo += s.custoPeriodo;
+        }
         tipos[t].count += 1;
       }
     });
@@ -581,10 +635,45 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
         pctMetros: totalValMetros > 0 ? val.metros / totalValMetros * 100 : 0
       };
     });
-  }, [servicosFiltrados]);
+  }, [servicosFiltrados, isGestor]);
 
-  // Exportação para Excel (.xlsx) no padrão executivo BI JLE
+  // Exportação para Excel (.xlsx) no padrão executivo BI JLE (segregada por perfil)
   const handleExportExcel = () => {
+    const dataHojeFormatada = new Date().toISOString().split('T')[0];
+    const periodoLabel = dataInicio && dataFim ? `${dataInicio}_a_${dataFim}` : (dataInicio || dataFim || 'Geral');
+
+    if (!isGestor) {
+      // Exportação da Minha Produção (Técnico: sem valores financeiros)
+      const dataToExport = servicosFiltrados.map(s => ({
+        'Código Obra': s.id,
+        'Serviço / Obra': s.nome,
+        'Cliente': s.cliente,
+        'Segmento': s.tipo_servico,
+        'UF': s.uf || 'SP',
+        'Cidade': s.cidade || '',
+        'Status': s.status,
+        'Meus Metros no Período (m)': Number(s.metrosPeriodo.toFixed(1)),
+        'Meus Metros Totais na Obra (m)': Number(s.metrosTotais.toFixed(1)),
+        'Apontamentos / Lances': s.qtdRegistrosPeriodo,
+        'Caixas Instaladas': s.qtdCaixasPeriodo
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      worksheet['!cols'] = [
+        { wch: 12 }, { wch: 32 }, { wch: 22 }, { wch: 15 },
+        { wch: 6 },  { wch: 20 }, { wch: 14 }, { wch: 26 },
+        { wch: 28 }, { wch: 22 }, { wch: 18 }
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Minha Produção');
+      const nomeTecnico = (user?.nome || 'Tecnico').replace(/\s+/g, '_');
+      const fileName = `Minha_Producao_${nomeTecnico}_${periodoLabel}_${dataHojeFormatada}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      return;
+    }
+
+    // Exportação Gerencial Completa com Indicadores Financeiros
     const dataToExport = servicosFiltrados.map(s => ({
       'Código': s.id,
       'Serviço': s.nome,
@@ -620,8 +709,6 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       'Terceiro / Autor': t.nome, 'ID Autor': t.id, 'Receita Estimada (R$)': Number(t.receita.toFixed(2)), 'Metros': t.metros, 'Registros': t.registros, 'Serviços': t.servicos.size, 'Dias Trabalhados': t.diasTrabalhados, 'Média Diária (m/dia)': t.mediaDiaria === null ? '' : Number(t.mediaDiaria.toFixed(1)), 'Registros sem data': t.registrosSemData
     }))), 'Receita por Terceiro');
 
-    const dataHojeFormatada = new Date().toISOString().split('T')[0];
-    const periodoLabel = dataInicio && dataFim ? `${dataInicio}_a_${dataFim}` : (dataInicio || dataFim || 'Geral');
     const fileName = `Produtividade_TecnoDrill_${periodoLabel}_${dataHojeFormatada}.xlsx`;
     XLSX.writeFile(workbook, fileName);
   };
@@ -687,47 +774,49 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             </div>
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0, color: 'var(--text-main)' }}>
-                Filtros Analíticos & Período
+                {isGestor ? 'Filtros Analíticos & Período' : 'Filtros de Produção & Período'}
               </h3>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                Controle temporal consolidado para medição de produtividade e financeiro
+                {isGestor ? 'Controle temporal consolidado para medição de produtividade e financeiro' : 'Filtre sua metragem por período e por obra'}
               </span>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {/* Botão Configurar E-mail Diário (Padrão BI JLE) */}
-            <button
-              type="button"
-              onClick={() => setShowEmailModal(true)}
-              title="Configurações de envio automático de relatório diário por e-mail"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                backgroundColor: 'var(--bg-app)',
-                color: 'var(--text-main)',
-                border: '1px solid var(--border-color)',
-                borderRadius: '8px',
-                padding: '9px 15px',
-                fontSize: '12.5px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: 'var(--shadow-sm)',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.borderColor = '#F05A22';
-                e.currentTarget.style.color = '#F05A22';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-color)';
-                e.currentTarget.style.color = 'var(--text-main)';
-              }}
-            >
-              <Mail size={15} color="#F05A22" />
-              <span>E-mails Automáticos</span>
-            </button>
+            {/* Botão Configurar E-mail Diário (Apenas Gestores) */}
+            {isGestor && (
+              <button
+                type="button"
+                onClick={() => setShowEmailModal(true)}
+                title="Configurações de envio automático de relatório diário por e-mail"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: 'var(--bg-app)',
+                  color: 'var(--text-main)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  padding: '9px 15px',
+                  fontSize: '12.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.borderColor = '#F05A22';
+                  e.currentTarget.style.color = '#F05A22';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.color = 'var(--text-main)';
+                }}
+              >
+                <Mail size={15} color="#F05A22" />
+                <span>E-mails Automáticos</span>
+              </button>
+            )}
 
             {/* Botão Exportar Relatório Excel (.xlsx) */}
             <button
@@ -752,7 +841,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1E7E34'}
             >
               <Download size={15} />
-              <span>Exportar Relatório Excel (.xlsx)</span>
+              <span>{isGestor ? 'Exportar Relatório Excel (.xlsx)' : 'Exportar Minha Produção (.xlsx)'}</span>
             </button>
           </div>
         </div>
@@ -851,18 +940,20 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           <div>
             <label htmlFor="produtividade-servico" style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>Serviço / Obra</label>
             <select id="produtividade-servico" value={filtroServico} onChange={e => setFiltroServico(e.target.value)} style={{ width: '100%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-              <option value="TODOS">Todos os Serviços</option>
-              {servicos.map(s => <option key={s.id} value={s.id}>{s.id} — {s.nome}</option>)}
+              <option value="TODOS">{isGestor ? 'Todos os Serviços' : 'Todas as Minhas Obras'}</option>
+              {servicosVisiveis.map(s => <option key={s.id} value={s.id}>{s.id} — {s.nome}</option>)}
             </select>
           </div>
 
-          <div>
-            <label htmlFor="produtividade-terceiro" style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>Terceiro / Autor da produção</label>
-            <select id="produtividade-terceiro" value={filtroTerceiro} onChange={e => setFiltroTerceiro(e.target.value)} style={{ width: '100%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
-              <option value="TODOS">Todos os Terceiros</option>
-              {terceirosDisponiveis.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
+          {isGestor && (
+            <div>
+              <label htmlFor="produtividade-terceiro" style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '5px', textTransform: 'uppercase' }}>Terceiro / Autor da produção</label>
+              <select id="produtividade-terceiro" value={filtroTerceiro} onChange={e => setFiltroTerceiro(e.target.value)} style={{ width: '100%', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '9px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--text-main)' }}>
+                <option value="TODOS">Todos os Terceiros</option>
+                {terceirosDisponiveis.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </div>
+          )}
 
           <div style={{ alignSelf: 'end' }}>
             <button type="button" onClick={limparFiltros} title="Limpar todos os filtros" aria-label="Limpar todos os filtros" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 38, padding: '9px 14px', border: '1px solid var(--border-color)', borderRadius: 8, backgroundColor: 'var(--bg-app)', color: 'var(--text-main)', fontWeight: 700, cursor: 'pointer' }}>
@@ -973,129 +1064,259 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
       </div>
 
       {/* ────────────────────────────────────────────────────────────────
-          2. CARDS DE KPI (PADRÃO BI JLE)
+          2. CARDS DE KPI (PADRÃO BI JLE - SEGREGADO POR PERFIL)
       ────────────────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        
-        {/* Card 1: Receita no Período */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-sm)'
-          }}
-        >
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#2ECC71' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Receita no Período
-              </span>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#2ECC71', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
-                R$ {totais.totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h2>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                Faturamento baseado na produção
-              </span>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+        {isGestor ? (
+          <>
+            {/* Card 1: Receita no Período */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#2ECC71' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Receita no Período
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#2ECC71', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    R$ {totais.totalReceita.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Faturamento baseado na produção
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(46, 204, 113, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2ECC71' }}>
+                  <TrendingUp size={20} />
+                </div>
+              </div>
             </div>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(46, 204, 113, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2ECC71' }}>
-              <TrendingUp size={20} />
-            </div>
-          </div>
-        </div>
 
-        {/* Card 2: Custo Operacional */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-sm)'
-          }}
-        >
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#E74C3C' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Custo Operacional
-              </span>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#E74C3C', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
-                R$ {totais.totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </h2>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                Custo médio: R$ {totais.custoMedioPorMetro.toFixed(2)}/m
-              </span>
+            {/* Card 2: Custo Operacional */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#E74C3C' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Custo Operacional
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#E74C3C', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    R$ {totais.totalCusto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Custo médio: R$ {totais.custoMedioPorMetro.toFixed(2)}/m
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(231, 76, 60, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E74C3C' }}>
+                  <Coins size={20} />
+                </div>
+              </div>
             </div>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(231, 76, 60, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E74C3C' }}>
-              <Coins size={20} />
-            </div>
-          </div>
-        </div>
 
-        {/* Card 3: Metros Perfurados */}
-        <div 
-          style={{ 
-            backgroundColor: 'var(--bg-card)', 
-            border: '1px solid var(--border-color)', 
-            borderRadius: '12px', 
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-sm)'
-          }}
-        >
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: 'var(--primary)' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Metros Perfurados
-              </span>
-              <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
-                {totais.totalMetros.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
-              </h2>
-              <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-                {totais.totalRegistros} apontamentos • {totais.totalCaixas} caixas
-              </span>
+            {/* Card 3: Metros Perfurados */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: 'var(--primary)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Metros Perfurados
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    {totais.totalMetros.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {totais.totalRegistros} apontamentos • {totais.totalCaixas} caixas
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(240, 90, 34, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                  <HardHat size={20} />
+                </div>
+              </div>
             </div>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(240, 90, 34, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-              <HardHat size={20} />
+          </>
+        ) : (
+          <>
+            {/* Card 1 Técnico: Meus Metros no Período */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: 'var(--primary)' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Meus Metros no Período
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: 'var(--primary)', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    {totais.totalMetros.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Metragem perfurada no período selecionado
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(240, 90, 34, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                  <TrendingUp size={20} />
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
+            {/* Card 2 Técnico: Metros Totais Acumulados */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#00B4D8' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Total Acumulado na(s) Obra(s)
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#00B4D8', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    {totalMetrosAcumulados.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    Histórico acumulado registrado por você
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(0, 180, 216, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00B4D8' }}>
+                  <HardHat size={20} />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3 Técnico: Apontamentos e Caixas */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#2ECC71' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Apontamentos & Caixas
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#2ECC71', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    {totais.totalRegistros} lances
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {totais.totalCaixas} caixa(s) instalada(s)
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(46, 204, 113, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2ECC71' }}>
+                  <Layers size={20} />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4 Técnico: Média Diária no Período */}
+            <div 
+              style={{ 
+                backgroundColor: 'var(--bg-card)', 
+                border: '1px solid var(--border-color)', 
+                borderRadius: '12px', 
+                padding: '20px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#9B59B6' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Média Diária no Período
+                  </span>
+                  <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#9B59B6', margin: '8px 0 4px 0', fontFamily: 'var(--font-mono)' }}>
+                    {mediaDiariaTecnico.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m/dia
+                  </h2>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                    {diasTrabalhadosTecnico} dia(s) com apontamentos realizados
+                  </span>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: 'rgba(155, 89, 182, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B59B6' }}>
+                  <Calendar size={20} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      <section aria-labelledby="receita-autores" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 24 }}>
-        <h3 id="receita-autores" style={{ margin: '0 0 6px', color: 'var(--text-main)' }}>Receita por Terceiro — Autor da produção</h3>
-        <p style={{ color: 'var(--text-muted)', margin: '0 0 18px', fontSize: 13 }}>Receita estimada da produção registrada por cada autor, conforme o preço da obra e os filtros acima. Cada registro é contado uma vez. Dias trabalhados: datas distintas com registros, incluindo caixas. Média diária: metros ÷ dias trabalhados.</p>
-        {receitaPorTerceiro.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhuma produção encontrada para os filtros selecionados.</p> : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 14 }}>
-              <thead><tr>{['Terceiro / Autor', 'Receita estimada', 'Participação', 'Metros', 'Dias trabalhados', 'Média diária', 'Registros', 'Serviços'].map(label => <th key={label} scope="col" style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
-              <tbody>{receitaPorTerceiro.map(t => {
-                const pct = totais.totalReceita > 0 ? t.receita / totais.totalReceita * 100 : 0;
-                return <tr key={t.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: 12 }}><button onClick={() => setFiltroTerceiro(t.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 700, textAlign: 'left', padding: 0 }} title="Filtrar por este autor">{t.nome}</button></td>
-                  <td style={{ padding: 12, color: '#2ECC71', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                  <td style={{ padding: 12, minWidth: 100 }}>{pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%<div style={{ height: 5, background: 'var(--bg-app)', borderRadius: 5, marginTop: 6 }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: '#2ECC71', borderRadius: 5 }} /></div></td>
-                  <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{t.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
-                  <td style={{ padding: 12 }} title={t.registrosSemData ? `${t.registrosSemData} registro(s) sem data completa; contagem parcial.` : 'Datas distintas com registros, incluindo caixas.'}>{t.diasTrabalhados}{t.registrosSemData > 0 ? '*' : ''}</td>
-                  <td style={{ padding: 12, whiteSpace: 'nowrap' }} title="Metros divididos pelos dias distintos com registros">{t.mediaDiaria === null ? '—' : `${t.mediaDiaria.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m/dia`}</td>
-                  <td style={{ padding: 12 }}>{t.registros}</td><td style={{ padding: 12 }}>{t.servicos.size}</td>
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>
-        )}
-        {receitaPorTerceiro.some(t => t.registrosSemData > 0) && <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 0 }}>* Contagem parcial: existem registros sem data completa. A média fica indisponível até completar essas datas.</p>}
-      </section>
+      {isGestor && (
+        <section aria-labelledby="receita-autores" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: 14, padding: 24 }}>
+          <h3 id="receita-autores" style={{ margin: '0 0 6px', color: 'var(--text-main)' }}>Receita por Terceiro — Autor da produção</h3>
+          <p style={{ color: 'var(--text-muted)', margin: '0 0 18px', fontSize: 13 }}>Receita estimada da produção registrada por cada autor, conforme o preço da obra e os filtros acima. Cada registro é contado uma vez. Dias trabalhados: datas distintas com registros, incluindo caixas. Média diária: metros ÷ dias trabalhados.</p>
+          {receitaPorTerceiro.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhuma produção encontrada para os filtros selecionados.</p> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 14 }}>
+                <thead><tr>{['Terceiro / Autor', 'Receita estimada', 'Participação', 'Metros', 'Dias trabalhados', 'Média diária', 'Registros', 'Serviços'].map(label => <th key={label} scope="col" style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{label}</th>)}</tr></thead>
+                <tbody>{receitaPorTerceiro.map(t => {
+                  const pct = totais.totalReceita > 0 ? t.receita / totais.totalReceita * 100 : 0;
+                  return <tr key={t.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                    <td style={{ padding: 12 }}><button onClick={() => setFiltroTerceiro(t.id)} style={{ border: 0, background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', fontWeight: 700, textAlign: 'left', padding: 0 }} title="Filtrar por este autor">{t.nome}</button></td>
+                    <td style={{ padding: 12, color: '#2ECC71', fontWeight: 700, whiteSpace: 'nowrap' }}>{t.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td style={{ padding: 12, minWidth: 100 }}>{pct.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%<div style={{ height: 5, background: 'var(--bg-app)', borderRadius: 5, marginTop: 6 }}><div style={{ height: '100%', width: `${Math.min(100, Math.max(0, pct))}%`, background: '#2ECC71', borderRadius: 5 }} /></div></td>
+                    <td style={{ padding: 12, whiteSpace: 'nowrap' }}>{t.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                    <td style={{ padding: 12 }} title={t.registrosSemData ? `${t.registrosSemData} registro(s) sem data completa; contagem parcial.` : 'Datas distintas com registros, incluindo caixas.'}>{t.diasTrabalhados}{t.registrosSemData > 0 ? '*' : ''}</td>
+                    <td style={{ padding: 12, whiteSpace: 'nowrap' }} title="Metros divididos pelos dias distintos com registros">{t.mediaDiaria === null ? '—' : `${t.mediaDiaria.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m/dia`}</td>
+                    <td style={{ padding: 12 }}>{t.registros}</td><td style={{ padding: 12 }}>{t.servicos.size}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          )}
+          {receitaPorTerceiro.some(t => t.registrosSemData > 0) && <p style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 0 }}>* Contagem parcial: existem registros sem data completa. A média fica indisponível até completar essas datas.</p>}
+        </section>
+      )}
 
       {/* ────────────────────────────────────────────────────────────────
           3. GRÁFICO 1: EVOLUÇÃO (LARGURA TOTAL / 100% EXTENSÃO LATERAL)
@@ -1122,48 +1343,50 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               Evolução {granularidade === 'MENSAL' ? `Mensal (${dataInicio ? dataInicio.split('-')[0] : currentYear})` : granularidade === 'SEMANAL' ? 'Semanal' : 'Diária'}
             </h3>
             <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
-              {metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita e Custo Operacional por competência' : 'Volume de Perfuração Direcional em Metros'}
+              {isGestor && metricaEvolucao === 'FINANCEIRO' ? 'Comparativo de Receita e Custo Operacional por competência' : 'Volume de Perfuração Direcional em Metros'}
             </span>
           </div>
 
           {/* Controles do Gráfico (Padrão BI JLE) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             
-            {/* Toggle Métrica */}
-            <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
-              <button
-                type="button"
-                onClick={() => setMetricaEvolucao('FINANCEIRO')}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: metricaEvolucao === 'FINANCEIRO' ? 'var(--primary)' : 'transparent',
-                  color: metricaEvolucao === 'FINANCEIRO' ? '#FFFFFF' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Receita × Custo (R$)
-              </button>
-              <button
-                type="button"
-                onClick={() => setMetricaEvolucao('METROS')}
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  borderRadius: '4px',
-                  border: 'none',
-                  backgroundColor: metricaEvolucao === 'METROS' ? 'var(--primary)' : 'transparent',
-                  color: metricaEvolucao === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
-                  cursor: 'pointer'
-                }}
-              >
-                Metros (m)
-              </button>
-            </div>
+            {/* Toggle Métrica (Apenas Gestor tem acesso à métrica financeira) */}
+            {isGestor && (
+              <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
+                <button
+                  type="button"
+                  onClick={() => setMetricaEvolucao('FINANCEIRO')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: metricaEvolucao === 'FINANCEIRO' ? 'var(--primary)' : 'transparent',
+                    color: metricaEvolucao === 'FINANCEIRO' ? '#FFFFFF' : 'var(--text-muted)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Receita × Custo (R$)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMetricaEvolucao('METROS')}
+                  style={{
+                    padding: '5px 12px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: metricaEvolucao === 'METROS' ? 'var(--primary)' : 'transparent',
+                    color: metricaEvolucao === 'METROS' ? '#FFFFFF' : 'var(--text-muted)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Metros (m)
+                </button>
+              </div>
+            )}
 
             {/* Toggle Granularidade */}
             <div style={{ display: 'flex', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '2px' }}>
@@ -1222,7 +1445,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
         {/* Legenda do Gráfico de Evolução */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '18px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-          {metricaEvolucao === 'FINANCEIRO' ? (
+          {isGestor && metricaEvolucao === 'FINANCEIRO' ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2ECC71' }} />
@@ -1249,7 +1472,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
             {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
               <div key={idx} style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
                 <span style={{ position: 'absolute', left: '-55px', fontSize: '10.5px', color: '#8BA6B5', width: '50px', textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
-                  {metricaEvolucao === 'FINANCEIRO' 
+                  {isGestor && metricaEvolucao === 'FINANCEIRO' 
                     ? `R$ ${formatShortValue(maxEvolucaoVal * ratio)}` 
                     : `${(maxEvolucaoVal * ratio).toFixed(0)}m`}
                 </span>
@@ -1265,7 +1488,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               const cellWidth = evolutionPlotWidth / Math.max(1, dadosEvolucao.length);
               const tickStep = Math.max(1, Math.ceil(32 / Math.max(1, cellWidth)));
               const showTick = i === dadosEvolucao.length - 1 || (i % tickStep === 0 && (i === 0 || i <= dadosEvolucao.length - 1 - tickStep));
-              const verticalLabels = cellWidth < (metricaEvolucao === 'FINANCEIRO' ? 85 : 45);
+              const verticalLabels = cellWidth < ((isGestor && metricaEvolucao === 'FINANCEIRO') ? 85 : 45);
               const isHovered = hoveredMonthIdx === i;
               const anoAlvo = dataInicio ? dataInicio.split('-')[0] : currentYear;
               const mesInicioStr = `${anoAlvo}-${String(d.mesNum).padStart(2, '0')}-01`;
@@ -1332,7 +1555,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                       <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#FFFFFF', borderBottom: '1px solid #1B3645', paddingBottom: '4px', marginBottom: '2px' }}>
                         {d.nomeMes}
                       </span>
-                      {metricaEvolucao === 'FINANCEIRO' ? (
+                      {isGestor && metricaEvolucao === 'FINANCEIRO' ? (
                         <>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                             <span style={{ color: '#8BA6B5' }}>Receita:</span>
@@ -1354,7 +1577,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
 
                   {/* Barras do Mês com Rótulos de Dados (Data Labels) */}
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: granularidade === 'DIARIO' ? '1px' : '4px', minWidth: 0 }}>
-                    {metricaEvolucao === 'FINANCEIRO' ? (
+                    {isGestor && metricaEvolucao === 'FINANCEIRO' ? (
                       <>
                         {/* Coluna Receita com Rótulo de Dados */}
                         <div
@@ -1568,7 +1791,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           }}
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', flex: '1 1 390px', minWidth: 0 }}>
-            {(['RECEITA', 'METROS'] as const).map(metricaSegmento => (
+            {((isGestor ? ['RECEITA', 'METROS'] : ['METROS']) as const).map(metricaSegmento => (
               <React.Fragment key={metricaSegmento}>
                 {/* Lado Esquerdo: Donut Ring Centralizado */}
                 <div style={{ flex: '0 0 auto', width: '190px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', minHeight: '210px', margin: '0 auto' }}>
@@ -1673,7 +1896,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                     </div>
                   </div>
 
-                  {(['RECEITA', 'METROS'] as const).map(metrica => {
+                  {((isGestor ? ['RECEITA', 'METROS'] : ['METROS']) as const).map(metrica => {
                     const receita = metrica === 'RECEITA';
                     const percentual = receita ? item.pctReceita : item.pctMetros;
                     return (
@@ -1722,55 +1945,88 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 800, margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Layers size={18} color="var(--primary)" />
-              Detalhamento Operacional & Financeiro por Serviço
+              {isGestor ? 'Detalhamento Operacional & Financeiro por Serviço' : 'Minhas Obras & Metragens Realizadas'}
             </h3>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              {servicosFiltrados.length} serviço(s) exibido(s) no período
+              {servicosFiltrados.length} {isGestor ? 'serviço(s)' : 'obra(s)'} exibida(s) no período
             </span>
           </div>
 
           {/* Ações da Tabela e Campo de Busca */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Botão Exportar Medições (.xlsx) consolidado */}
-            <button
-              type="button"
-              onClick={() => {
-                const nomePeriodo = dataInicio && dataFim
-                  ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
-                  : (dataInicio || dataFim || 'GERAL');
-                const barrasFiltradasMap: Record<string, Barra[]> = {};
-                servicosFiltrados.forEach(s => {
-                  barrasFiltradasMap[s.id] = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
-                });
-                exportarRelatorioMedicaoConsolidado(servicosFiltrados, barrasFiltradasMap, nomePeriodo);
-              }}
-              title="Exportar planilha consolidada de medições em Excel com abas mensais"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                backgroundColor: 'rgba(46, 204, 113, 0.15)',
-                border: '1px solid #2ECC71',
-                color: '#2ECC71',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#2ECC71';
-                e.currentTarget.style.color = '#FFFFFF';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.15)';
-                e.currentTarget.style.color = '#2ECC71';
-              }}
-            >
-              <FileSpreadsheet size={15} />
-              <span>Exportar Medições (.xlsx)</span>
-            </button>
+            {/* Botão Exportar Medições (.xlsx) consolidado para Gestor */}
+            {isGestor ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const nomePeriodo = dataInicio && dataFim
+                    ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
+                    : (dataInicio || dataFim || 'GERAL');
+                  const barrasFiltradasMap: Record<string, Barra[]> = {};
+                  servicosFiltrados.forEach(s => {
+                    barrasFiltradasMap[s.id] = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
+                  });
+                  exportarRelatorioMedicaoConsolidado(servicosFiltrados, barrasFiltradasMap, nomePeriodo);
+                }}
+                title="Exportar planilha consolidada de medições em Excel com abas mensais"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(46, 204, 113, 0.15)',
+                  border: '1px solid #2ECC71',
+                  color: '#2ECC71',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#2ECC71';
+                  e.currentTarget.style.color = '#FFFFFF';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.15)';
+                  e.currentTarget.style.color = '#2ECC71';
+                }}
+              >
+                <FileSpreadsheet size={15} />
+                <span>Exportar Medições (.xlsx)</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                title="Exportar planilha da sua produção em Excel"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(240, 90, 34, 0.15)',
+                  border: '1px solid var(--primary)',
+                  color: 'var(--primary)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--primary)';
+                  e.currentTarget.style.color = '#FFFFFF';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(240, 90, 34, 0.15)';
+                  e.currentTarget.style.color = 'var(--primary)';
+                }}
+              >
+                <FileSpreadsheet size={15} />
+                <span>Exportar Minha Produção (.xlsx)</span>
+              </button>
+            )}
 
             {/* Campo de Busca */}
             <div style={{ position: 'relative', width: '260px' }}>
@@ -1799,12 +2055,23 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                <th style={{ padding: '12px' }}>Serviço / Cliente</th>
+                <th style={{ padding: '12px' }}>{isGestor ? 'Serviço / Cliente' : 'Serviço / Obra'}</th>
                 <th style={{ padding: '12px' }}>Segmento</th>
-                <th style={{ padding: '12px' }}>Progresso da Obra</th>
-                <th style={{ padding: '12px' }}>Metros (Período)</th>
-                <th style={{ padding: '12px' }}>Receita (R$)</th>
-                <th style={{ padding: '12px' }}>Custo (R$)</th>
+                {isGestor ? (
+                  <>
+                    <th style={{ padding: '12px' }}>Progresso da Obra</th>
+                    <th style={{ padding: '12px' }}>Metros (Período)</th>
+                    <th style={{ padding: '12px' }}>Receita (R$)</th>
+                    <th style={{ padding: '12px' }}>Custo (R$)</th>
+                  </>
+                ) : (
+                  <>
+                    <th style={{ padding: '12px' }}>Meus Metros (Período)</th>
+                    <th style={{ padding: '12px' }}>Metros Totais na Obra</th>
+                    <th style={{ padding: '12px' }}>Apontamentos</th>
+                    <th style={{ padding: '12px' }}>Caixas</th>
+                  </>
+                )}
                 <th style={{ padding: '12px', textAlign: 'center' }}>Ação</th>
               </tr>
             </thead>
@@ -1812,7 +2079,7 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
               {servicosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-                    Nenhum serviço encontrado com os filtros selecionados.
+                    {isGestor ? 'Nenhum serviço encontrado com os filtros selecionados.' : 'Nenhum registro de produção encontrado para você com os filtros selecionados.'}
                   </td>
                 </tr>
               ) : (
@@ -1859,88 +2126,116 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                         </span>
                       </td>
 
-                      {/* Progresso Total */}
-                      <td style={{ padding: '12px', minWidth: '130px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>{s.metrosTotais.toFixed(0)}m</span>
-                            <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{s.percentualConcluido}%</span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div 
-                              style={{ 
-                                height: '100%', 
-                                width: `${s.percentualConcluido}%`, 
-                                backgroundColor: s.percentualConcluido >= 100 ? 'var(--success)' : 'var(--primary)',
-                                borderRadius: '3px' 
-                              }} 
-                            />
-                          </div>
-                        </div>
-                      </td>
+                      {isGestor ? (
+                        <>
+                          {/* Progresso Total */}
+                          <td style={{ padding: '12px', minWidth: '130px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>{s.metrosTotais.toFixed(0)}m</span>
+                                <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{s.percentualConcluido}%</span>
+                              </div>
+                              <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--bg-app)', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div 
+                                  style={{ 
+                                    height: '100%', 
+                                    width: `${s.percentualConcluido}%`, 
+                                    backgroundColor: s.percentualConcluido >= 100 ? 'var(--success)' : 'var(--primary)',
+                                    borderRadius: '3px' 
+                                  }} 
+                                />
+                              </div>
+                            </div>
+                          </td>
 
-                      {/* Metros no Período */}
-                      <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--primary)' }}>
-                        {s.metrosPeriodo.toFixed(1)} m
-                      </td>
+                          {/* Metros no Período */}
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--primary)' }}>
+                            {s.metrosPeriodo.toFixed(1)} m
+                          </td>
 
-                      {/* Receita no Período */}
-                      <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2ECC71' }}>
-                        R$ {s.receitaPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+                          {/* Receita no Período */}
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#2ECC71' }}>
+                            R$ {s.receitaPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
 
-                      {/* Custo no Período */}
-                      <td style={{ padding: '12px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E74C3C' }}>
-                            R$ {s.custoPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                            2x R$ {s.custoMetro.toFixed(2)}/m (Nav/Op)
-                          </span>
-                        </div>
-                      </td>
+                          {/* Custo no Período */}
+                          <td style={{ padding: '12px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#E74C3C' }}>
+                                R$ {s.custoPeriodo.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                2x R$ {s.custoMetro.toFixed(2)}/m (Nav/Op)
+                              </span>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          {/* Meus Metros no Período */}
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--primary)' }}>
+                            {s.metrosPeriodo.toFixed(1)} m
+                          </td>
+
+                          {/* Metros Totais na Obra */}
+                          <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-main)' }}>
+                            {s.metrosTotais.toFixed(1)} m
+                          </td>
+
+                          {/* Apontamentos no Período */}
+                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600 }}>
+                            {s.qtdRegistrosPeriodo} lance(s)
+                          </td>
+
+                          {/* Caixas no Período */}
+                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px', fontWeight: 600 }}>
+                            {s.qtdCaixasPeriodo} caixa(s)
+                          </td>
+                        </>
+                      )}
 
                       {/* Ação */}
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const barrasDaObra = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
-                              const nomePeriodo = dataInicio && dataFim
-                                ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
-                                : (dataInicio || dataFim || 'GERAL');
-                              exportarRelatorioMedicaoServico(s, barrasDaObra, nomePeriodo);
-                            }}
-                            title={`Exportar Planilha de Medição Excel (${s.nome}) - Furo a Furo e Resumo`}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: '6px',
-                              backgroundColor: 'rgba(46, 204, 113, 0.12)',
-                              border: '1px solid rgba(46, 204, 113, 0.4)',
-                              color: '#2ECC71',
-                              fontSize: '11.5px',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseOver={(e) => {
-                              e.currentTarget.style.backgroundColor = '#2ECC71';
-                              e.currentTarget.style.color = '#FFFFFF';
-                            }}
-                            onMouseOut={(e) => {
-                              e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.12)';
-                              e.currentTarget.style.color = '#2ECC71';
-                            }}
-                          >
-                            <FileSpreadsheet size={13} />
-                            <span>Excel</span>
-                          </button>
+                          {isGestor && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const barrasDaObra = (barrasSelecionadas[s.id] || []).filter(isBarraInFilter);
+                                const nomePeriodo = dataInicio && dataFim
+                                  ? `${dataInicio.split('-').reverse().join('-')}_a_${dataFim.split('-').reverse().join('-')}`
+                                  : (dataInicio || dataFim || 'GERAL');
+                                exportarRelatorioMedicaoServico(s, barrasDaObra, nomePeriodo);
+                              }}
+                              title={`Exportar Planilha de Medição Excel (${s.nome}) - Furo a Furo e Resumo`}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(46, 204, 113, 0.12)',
+                                border: '1px solid rgba(46, 204, 113, 0.4)',
+                                color: '#2ECC71',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.backgroundColor = '#2ECC71';
+                                e.currentTarget.style.color = '#FFFFFF';
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgba(46, 204, 113, 0.12)';
+                                e.currentTarget.style.color = '#2ECC71';
+                              }}
+                            >
+                              <FileSpreadsheet size={13} />
+                              <span>Excel</span>
+                            </button>
+                          )}
 
                           <button
                             type="button"
@@ -2009,23 +2304,97 @@ export const ProdutividadePage: React.FC<ProdutividadePageProps> = ({ setHeaderI
                             <span>{expandido ? 'Fechar' : 'Diâmetros'}</span>
                             <ChevronRight size={13} />
                           </button>
+
+                          {!isGestor && onSelectServico && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSelectServico(s.id);
+                              }}
+                              title={`Abrir detalhes da obra ${s.nome}`}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: '6px',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--border-color)',
+                                color: 'var(--text-main)',
+                                fontSize: '11.5px',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'var(--transition)'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--primary)';
+                                e.currentTarget.style.borderColor = 'var(--primary)';
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.borderColor = 'var(--border-color)';
+                              }}
+                            >
+                              <span>Abrir</span>
+                              <ChevronRight size={13} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
                     {expandido && <tr id={`diametros-${s.id}`}><td colSpan={7} style={{ padding: '16px 24px 24px', background: 'var(--bg-app)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                        <div><strong style={{ color: 'var(--text-main)' }}>Produção por diâmetro — {s.nome}</strong><p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>Valores do período e autor selecionados. Receita estimada conforme as regras financeiras da obra.</p></div>
+                        <div>
+                          <strong style={{ color: 'var(--text-main)' }}>Produção por diâmetro — {s.nome}</strong>
+                          <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                            {isGestor ? 'Valores do período e autor selecionados. Receita estimada conforme as regras financeiras da obra.' : 'Detalhamento da sua metragem realizada no período por diâmetro.'}
+                          </p>
+                        </div>
                         {onSelectServico && <button type="button" className="btn btn-secondary" onClick={() => onSelectServico(s.id)}>Abrir obra <ChevronRight size={14} /></button>}
                       </div>
                       {diametros.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Nenhum registro neste serviço para os filtros selecionados.</p> : <table style={{ width: '100%', borderCollapse: 'collapse', color: 'var(--text-main)', fontSize: 13 }}>
-                        <thead><tr>{['Diâmetro', 'Registros', 'Metros', 'Receita estimada', 'Custo operacional'].map(label => <th scope="col" key={label} style={{ padding: 10, color: 'var(--text-muted)' }}>{label}</th>)}</tr></thead>
-                        <tbody>{diametros.map(d => <tr key={d.id} style={{ borderTop: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: 10, fontWeight: 700 }}>{d.nome}</td><td style={{ padding: 10 }}>{d.registros}</td>
-                          <td style={{ padding: 10 }}>{d.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
-                          <td style={{ padding: 10, color: '#2ECC71' }}>{d.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                          <td style={{ padding: 10, color: '#E74C3C' }}>{d.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
-                        </tr>)}</tbody>
-                        <tfoot><tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 700 }}><td style={{ padding: 10 }}>Total</td><td style={{ padding: 10 }}>{s.qtdRegistrosPeriodo}</td><td style={{ padding: 10 }}>{s.metrosPeriodo.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td><td style={{ padding: 10 }}>{s.receitaPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td style={{ padding: 10 }}>{s.custoPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td></tr></tfoot>
+                        <thead>
+                          <tr>
+                            {isGestor
+                              ? ['Diâmetro', 'Registros', 'Metros', 'Receita estimada', 'Custo operacional'].map(label => <th scope="col" key={label} style={{ padding: 10, color: 'var(--text-muted)' }}>{label}</th>)
+                              : ['Diâmetro', 'Apontamentos', 'Metros', 'Participação (%)'].map(label => <th scope="col" key={label} style={{ padding: 10, color: 'var(--text-muted)' }}>{label}</th>)
+                            }
+                          </tr>
+                        </thead>
+                        <tbody>{diametros.map(d => {
+                          const pct = s.metrosPeriodo > 0 ? (d.metros / s.metrosPeriodo) * 100 : 0;
+                          return (
+                            <tr key={d.id} style={{ borderTop: '1px solid var(--border-color)' }}>
+                              <td style={{ padding: 10, fontWeight: 700 }}>{d.nome}</td>
+                              <td style={{ padding: 10 }}>{d.registros}</td>
+                              <td style={{ padding: 10, fontFamily: 'var(--font-mono)' }}>{d.metros.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                              {isGestor ? (
+                                <>
+                                  <td style={{ padding: 10, color: '#2ECC71' }}>{d.receita.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                  <td style={{ padding: 10, color: '#E74C3C' }}>{d.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                </>
+                              ) : (
+                                <td style={{ padding: 10, color: 'var(--primary)', fontWeight: 700 }}>{pct.toFixed(1)}%</td>
+                              )}
+                            </tr>
+                          );
+                        })}</tbody>
+                        <tfoot>
+                          <tr style={{ borderTop: '2px solid var(--border-color)', fontWeight: 700 }}>
+                            <td style={{ padding: 10 }}>Total</td>
+                            <td style={{ padding: 10 }}>{s.qtdRegistrosPeriodo}</td>
+                            <td style={{ padding: 10, fontFamily: 'var(--font-mono)' }}>{s.metrosPeriodo.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m</td>
+                            {isGestor ? (
+                              <>
+                                <td style={{ padding: 10 }}>{s.receitaPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                <td style={{ padding: 10 }}>{s.custoPeriodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                              </>
+                            ) : (
+                              <td style={{ padding: 10, color: 'var(--primary)' }}>100%</td>
+                            )}
+                          </tr>
+                        </tfoot>
                       </table>}
                     </td></tr>}
                     </React.Fragment>

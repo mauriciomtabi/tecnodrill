@@ -40,6 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
       ]
     : [
         { path: '/tecnico/obras', label: 'Serviços', icon: HardHat },
+        { path: '/app/produtividade', label: 'Minha Produção', icon: TrendingUp },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
       ];
 
