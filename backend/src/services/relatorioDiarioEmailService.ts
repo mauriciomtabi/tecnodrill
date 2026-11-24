@@ -140,10 +140,19 @@ export class RelatorioDiarioEmailService {
    * Coleta dados do banco e calcula o fechamento diário focado exclusivamente em Produção e Faturamento
    */
   public static async getDadosFechamentoDiario(dataRef?: string): Promise<DadosFechamentoDiario> {
-    const hoje = dataRef ? new Date(dataRef + 'T12:00:00') : new Date();
-    const ano = hoje.getFullYear();
-    const mesNum = hoje.getMonth() + 1;
-    const diaNum = hoje.getDate();
+    const agora = new Date();
+    const brDateStr = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }); // DD/MM/AAAA
+    const [dAgora, mAgora, yAgora] = brDateStr.split('/');
+    let ano = Number(yAgora);
+    let mesNum = Number(mAgora);
+    let diaNum = Number(dAgora);
+
+    if (dataRef && /^\d{4}-\d{2}-\d{2}$/.test(dataRef)) {
+      const [y, m, d] = dataRef.split('-').map(Number);
+      ano = y;
+      mesNum = m;
+      diaNum = d;
+    }
     
     const hojeYMD = `${ano}-${String(mesNum).padStart(2, '0')}-${String(diaNum).padStart(2, '0')}`;
     const dataFormatada = `${String(diaNum).padStart(2, '0')}/${String(mesNum).padStart(2, '0')}/${ano}`;
@@ -152,7 +161,7 @@ export class RelatorioDiarioEmailService {
       'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ];
-    const dataExtenso = `${diaNum} de ${mesesExtenso[hoje.getMonth()]} de ${ano}`;
+    const dataExtenso = `${diaNum} de ${mesesExtenso[mesNum - 1]} de ${ano}`;
 
     // Buscar dados do banco
     const servicos = await DBManager.getServicos();

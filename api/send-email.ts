@@ -1,7 +1,10 @@
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://dmwefcngefeonxuukwdl.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_j3AShmEr6aEWjqBv2rruhw_5EE4NnOt';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ['re_bBQyi9qa', 'C5py6HbtiYrNfPoJhZLUATRw'].join('_');
 const FROM_EMAIL = process.env.FROM_EMAIL || 'bi@jletelecom.com.br';
+
+// Colunas estritas para tecnodrill_barras (ignora coluna fotos/base64 de múltiplos MBs para evitar timeout 57014)
+const BARRAS_COLS_SELECT = 'id,furo_id,numero_barra,metros,metros_acumulados,tipo_registro,tem_caixa,diametro,observacao,registrado_por,horario_registro';
 
 export function formatCurrency(val: number): string {
   return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -11,6 +14,136 @@ export function formatMeters(val: number): string {
   return (val || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
+/**
+ * Extrai data e horário de registro com preservação estrita de timezone (America/Sao_Paulo)
+ * Suporta metadados JSON (data_referencia), DD/MM/AAAA, YYYY-MM-DD e ISO timestamps
+ */
+export function extrairDataBarra(b: any, meta?: any): {
+  diaStr: string;
+  mesStr: string;
+  anoStr: string;
+  dataFormatada: string;
+  dataYMD: string;
+  mesAnoKey: string;
+} | null {
+  const dateCandidates = [
+    b.data_referencia,
+    meta?.data_referencia,
+    b.data_registro,
+    b.horario_registro,
+    b.created_at
+  ];
+
+  let y = 0;
+  let m = 0;
+  let d = 0;
+
+  for (const candidate of dateCandidates) {
+    if (!candidate) continue;
+    const str = String(candidate).trim();
+
+    // 1. Formato ISO / YMD estrito (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
+    const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (ymdMatch) {
+      y = parseInt(ymdMatch[1], 10);
+      m = parseInt(ymdMatch[2], 10);
+      d = parseInt(ymdMatch[3], 10);
+      break;
+    }
+
+    // 2. Formato brasileiro DD/MM/AAAA
+    const dmyMatch = str.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (dmyMatch) {
+      d = parseInt(dmyMatch[1], 10);
+      m = parseInt(dmyMatch[2], 10);
+      y = parseInt(dmyMatch[3], 10);
+      break;
+    }
+
+    // 3. Outros formatos válidos com fuso de Brasília (UTC-3)
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const spDateStr = parsed.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+      const parts = spDateStr.split('/');
+      d = parseInt(parts[0], 10);
+      m = parseInt(parts[1], 10);
+      y = parseInt(parts[2], 10);
+      break;
+    }
+  }
+
+  if (!y || !m || !d) return null;
+
+  const diaStr = String(d).padStart(2, '0');
+  const mesStr = String(m).padStart(2, '0');
+  const anoStr = String(y);
+  return {
+    diaStr,
+    mesStr,
+    anoStr,
+    dataFormatada: `${diaStr}/${mesStr}/${anoStr}`,
+    dataYMD: `${anoStr}-${mesStr}-${diaStr}`,
+    mesAnoKey: `${anoStr}-${mesStr}`
+  };
+}
+
+/**
+ * Calcula o valor por metro da barra respeitando os 3 cenários comerciais da TecnoDrill
+ */
+export function calcularValorMetroBarra(s: any, b: any): number {
+  if (!s) return 100;
+
+  // 1. Cenário: VALOR_METRO (tabela de diâmetros ou valor_metro padrão)
+  if (s.cenario_financeiro === 'VALOR_METRO' || !s.cenario_financeiro) {
+    let tabela = s.tabela_diametros;
+    if (!tabela && s.descricao && s.descricao.includes('TD_META:')) {
+      try {
+        const match = s.descricao.match(/<!--TD_META:(.*?)-->/);
+        if (match) {
+          const meta = JSON.parse(match[1]);
+          tabela = meta.tabela_diametros;
+        }
+      } catch (_) { }
+    }
+    if (tabela && Array.isArray(tabela) && tabela.length > 0) {
+      if (b.diametro) {
+        const rawNum = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, ''));
+        const normStr = String(b.diametro || '').toLowerCase().trim();
+        const matchItem = tabela.find((it: any) => {
+          if (it.diametro_mm && rawNum && it.diametro_mm === rawNum) return true;
+          const itNum = parseFloat(String(it.diametro).replace(/[^\d.]/g, ''));
+          if (itNum && rawNum && itNum === rawNum) return true;
+          return String(it.diametro || '').toLowerCase().trim() === normStr;
+        });
+        if (matchItem && Number(matchItem.valor_metro) > 0) {
+          return Number(matchItem.valor_metro);
+        }
+      }
+      if (tabela[0]?.valor_metro) {
+        return Number(tabela[0].valor_metro);
+      }
+    }
+    return Number(s.valor_metro) || 100;
+  }
+
+  // 2. Cenário: FATOR_DIAMETRO_METRO
+  if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
+    const fator = Number(s.fator_financeiro) || 0.8;
+    const defaultDiam = Number(s.diametro_furo_mm) || 150;
+    const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || defaultDiam;
+    return fator * numDiam;
+  }
+
+  // 3. Cenário: VALOR_FECHADO
+  if (s.cenario_financeiro === 'VALOR_FECHADO') {
+    const prev = Number(s.metragem_prevista_total) || 1000;
+    const totFechado = Number(s.valor_total_fechado) || 0;
+    return prev > 0 ? totFechado / prev : 0;
+  }
+
+  return Number(s.valor_metro) || 100;
+}
+
 export async function getDadosCompletosSupabase(dataRef?: string) {
   const headers = {
     'apikey': SUPABASE_SERVICE_ROLE_KEY,
@@ -18,14 +151,39 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
   };
 
   const [servicos, furos, barras] = await Promise.all([
-    fetch(SUPABASE_URL + '/rest/v1/tecnodrill_servicos?select=*', { headers }).then(r => r.json()),
-    fetch(SUPABASE_URL + '/rest/v1/tecnodrill_furos?select=*', { headers }).then(r => r.json()),
-    fetch(SUPABASE_URL + '/rest/v1/tecnodrill_barras?select=*', { headers }).then(r => r.json())
+    fetch(SUPABASE_URL + '/rest/v1/tecnodrill_servicos?select=*', { headers })
+      .then(async r => {
+        if (!r.ok) {
+          console.error('[send-email] Erro ao buscar servicos:', r.status, await r.text());
+          return [];
+        }
+        return r.json();
+      }),
+    fetch(SUPABASE_URL + '/rest/v1/tecnodrill_furos?select=*', { headers })
+      .then(async r => {
+        if (!r.ok) {
+          console.error('[send-email] Erro ao buscar furos:', r.status, await r.text());
+          return [];
+        }
+        return r.json();
+      }),
+    fetch(SUPABASE_URL + `/rest/v1/tecnodrill_barras?select=${BARRAS_COLS_SELECT}&order=horario_registro.desc&limit=10000`, { headers })
+      .then(async r => {
+        if (!r.ok) {
+          console.error('[send-email] Erro ao buscar barras:', r.status, await r.text());
+          return [];
+        }
+        return r.json();
+      })
   ]);
 
   const sList: any[] = Array.isArray(servicos) ? servicos : [];
   const fList: any[] = Array.isArray(furos) ? furos : [];
   const bList: any[] = Array.isArray(barras) ? barras : [];
+
+  if (!Array.isArray(barras)) {
+    console.error('[send-email] Falha ao carregar lista de barras do Supabase. Resposta:', barras);
+  }
 
   const sMap = new Map<string, any>();
   sList.forEach(s => sMap.set(s.id, s));
@@ -37,14 +195,27 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
   const brDateStr = now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }); // DD/MM/AAAA
   const brTimeStr = now.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }); // HH:MM
 
-  const [dia, mes, ano] = brDateStr.split('/');
-  const hojeYMD = dataRef || `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+  const [diaNow, mesNow, anoNow] = brDateStr.split('/');
+  let ano = anoNow;
+  let mes = mesNow;
+  let dia = diaNow;
+  let hojeYMD = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+
+  if (dataRef && /^\d{4}-\d{2}-\d{2}$/.test(dataRef)) {
+    const [y, m, d] = dataRef.split('-');
+    ano = y;
+    mes = m;
+    dia = d;
+    hojeYMD = dataRef;
+  }
 
   const mesesExtenso = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
+  const mesExtensoMaiusculo = mesesExtenso[Number(mes) - 1].toUpperCase();
   const dataExtenso = `${Number(dia)} de ${mesesExtenso[Number(mes) - 1]} de ${ano}`;
+  const dataStrFinal = `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${ano}`;
   const horarioEnvio = `${brTimeStr}h`;
 
   const porData = new Map<string, any>();
@@ -56,62 +227,30 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
     metaMensalTotal += Number(s.metragem_prevista_total) || 500;
   }
 
+  const mesPrefixo = `${ano}-${mes.padStart(2, '0')}`;
+
   for (const b of bList) {
     if (b.tipo_registro === 'CAIXA' || (b.tem_caixa && !b.diametro)) continue;
 
-    let d = '';
+    let meta: any = null;
     if (b.observacao && b.observacao.includes('BARRA_META:')) {
       const match = b.observacao.match(/<!--BARRA_META:(.*?)-->/);
       if (match) {
-        try { d = JSON.parse(match[1]).data_referencia || ''; } catch (_) { }
+        try { meta = JSON.parse(match[1]); } catch (_) { }
       }
     }
-    if (!d && b.horario_registro) d = b.horario_registro.slice(0, 10);
-    if (!d) continue;
+
+    const dtInfo = extrairDataBarra(b, meta);
+    if (!dtInfo) continue;
+    const d = dtInfo.dataYMD;
 
     const f = fMap.get(b.furo_id);
     const s = f ? sMap.get(f.servico_id) : null;
     const m = Number(b.metros) || 0;
-
-    let vMetro = Number(s?.valor_metro) || 100;
-    if (s) {
-      if (s.cenario_financeiro === 'VALOR_METRO' || !s.cenario_financeiro) {
-        let tabela = s.tabela_diametros;
-        if (!tabela && s.descricao && s.descricao.includes('TD_META:')) {
-          try {
-            const match = s.descricao.match(/<!--TD_META:(.*?)-->/);
-            if (match) {
-              const meta = JSON.parse(match[1]);
-              tabela = meta.tabela_diametros;
-            }
-          } catch (_) { }
-        }
-        if (tabela && Array.isArray(tabela) && tabela.length > 0) {
-          const rawNum = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, ''));
-          const normStr = String(b.diametro || '').toLowerCase().trim();
-          const matchItem = tabela.find((it: any) => {
-            if (it.diametro_mm && rawNum && it.diametro_mm === rawNum) return true;
-            const itNum = parseFloat(String(it.diametro).replace(/[^\d.]/g, ''));
-            if (itNum && rawNum && itNum === rawNum) return true;
-            return String(it.diametro || '').toLowerCase().trim() === normStr;
-          });
-          if (matchItem && Number(matchItem.valor_metro) > 0) {
-            vMetro = Number(matchItem.valor_metro);
-          } else if (tabela[0]?.valor_metro) {
-            vMetro = Number(tabela[0].valor_metro);
-          }
-        }
-      } else if (s.cenario_financeiro === 'FATOR_DIAMETRO_METRO') {
-        const fator = Number(s.fator_financeiro) || 0.8;
-        const defaultDiam = Number(s.diametro_furo_mm) || 150;
-        const numDiam = parseFloat(String(b.diametro || '').replace(/[^\d.]/g, '')) || defaultDiam;
-        vMetro = fator * numDiam;
-      }
-    }
-
+    const vMetro = calcularValorMetroBarra(s, b);
     const rec = m * vMetro;
 
-    if (d.startsWith(`${ano}-${mes.padStart(2, '0')}`)) {
+    if (d.startsWith(mesPrefixo)) {
       acumuladoMesMetros += m;
       acumuladoMesReceita += rec;
     }
@@ -151,7 +290,13 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
   const obrasHoje = Array.from(dadosHoje.obras.values()).sort((a: any, b: any) => b.metros - a.metros);
 
   const diasSemanas = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-  const datasComProd = Array.from(porData.keys()).sort().reverse();
+  
+  // Datas com produção real registradas, ordenadas da mais recente para a mais antiga
+  const datasComProd = Array.from(porData.keys())
+    .filter(dt => (porData.get(dt)?.metros || 0) > 0)
+    .sort()
+    .reverse();
+
   const ultimos5Dias = datasComProd.slice(0, 5).map(dt => {
     const item = porData.get(dt);
     const [y, mNum, dNum] = dt.split('-').map(Number);
@@ -175,12 +320,16 @@ export async function getDadosCompletosSupabase(dataRef?: string) {
     };
   });
 
-  const ultimoDiaFechado = ultimos5Dias[0] || null;
+  // O último dia fechado é o dia mais recente anterior a hoje com produção (ou o primeiro dia da lista se hoje teve 0)
+  const ultimoDiaFechado = (totalMetrosHoje > 0
+    ? ultimos5Dias.find(d => d.dataYMD !== hojeYMD)
+    : ultimos5Dias[0]) || null;
 
   return {
     hojeYMD,
-    dataStr: brDateStr,
+    dataStr: dataStrFinal,
     dataExtenso,
+    mesExtensoMaiusculo,
     horarioEnvio,
     totalMetrosHoje: Math.round(totalMetrosHoje * 10) / 10,
     totalReceitaHoje: Math.round(totalReceitaHoje * 100) / 100,
@@ -370,7 +519,7 @@ function buildHtmlRelatorioCompleto(dados: any): string {
                   <!-- CARD 3: ACUMULADO NO MÊS -->
                   <td width="50%" bgcolor="#F8FAFC" valign="top" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 16px; text-align: left;">
                     <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
-                      ACUMULADO NO MÊS (OUTUBRO)
+                      ACUMULADO NO MÊS (${dados.mesExtensoMaiusculo || 'NO MÊS'})
                     </div>
                     <div style="font-size: 26px; font-weight: 800; color: #0F1215; margin: 2px 0 4px 0; line-height: 1.2;">
                       <nobr style="white-space: nowrap;">${formatMeters(dados.acumuladoMesMetros)}m</nobr>
