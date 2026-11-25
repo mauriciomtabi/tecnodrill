@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Veiculo,
   Servico,
@@ -842,7 +843,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
         )}
 
         {/* Modal Baixa Preventiva */}
-        {baixaTarget && (
+        {baixaTarget && createPortal(
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '16px' }}>
             <div style={{ width: '100%', maxWidth: '460px', backgroundColor: 'var(--bg-card)', borderRadius: '16px', padding: '20px', border: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -922,11 +923,12 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Modal Novo Item Preventivo */}
-        {showNovaPrevModal && (
+        {showNovaPrevModal && createPortal(
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '16px' }}>
             <div style={{ width: '100%', maxWidth: '440px', backgroundColor: 'var(--bg-card)', borderRadius: '16px', padding: '20px', border: '1px solid var(--border-color)' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '12px' }}>Novo Item Preventivo</h3>
@@ -942,11 +944,12 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Modal Leitura Manual */}
-        {showLeituraModal && (
+        {showLeituraModal && createPortal(
           <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '16px' }}>
             <div style={{ width: '100%', maxWidth: '400px', backgroundColor: 'var(--bg-card)', borderRadius: '16px', padding: '20px', border: '1px solid var(--border-color)' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '12px' }}>Atualizar {unit === 'h' ? 'Horímetro' : 'Odômetro'}</h3>
@@ -959,7 +962,8 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         <VeiculoFormModal
@@ -1239,7 +1243,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
       />
 
       {/* Modal Planos Padrão */}
-      {showPlanosModal && (
+      {showPlanosModal && createPortal(
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1080, padding: '16px' }}>
           <div style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)', borderRadius: '16px', padding: '20px', border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -1331,7 +1335,8 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

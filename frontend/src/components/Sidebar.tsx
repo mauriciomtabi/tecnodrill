@@ -35,9 +35,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
         { path: '/app/produtividade', label: 'Produtividade', icon: TrendingUp },
-        { path: '/app/manutencao', label: 'Manutenção', icon: Wrench },
         { path: '/app/terceiros', label: 'Terceiros', icon: Briefcase },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
+        { path: '/app/manutencao', label: 'Manutenção', icon: Wrench },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
       ]
     : [

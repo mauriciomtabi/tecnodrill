@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Veiculo,
   TipoVeiculo,
@@ -246,7 +247,7 @@ export const VeiculoFormModal: React.FC<VeiculoFormModalProps> = ({
     marginBottom: '5px',
   };
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -727,6 +728,7 @@ export const VeiculoFormModal: React.FC<VeiculoFormModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

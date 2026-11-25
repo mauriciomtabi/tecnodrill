@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Veiculo } from '../types';
 import { ManutencaoService, calcularStatusPreventiva } from '../services/manutencaoService';
 import { Gauge, Truck, Drill, AlertTriangle, CheckCircle2, X } from 'lucide-react';
@@ -69,7 +70,7 @@ export const LeituraDiariaModal: React.FC<LeituraDiariaModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed',
@@ -309,6 +310,7 @@ export const LeituraDiariaModal: React.FC<LeituraDiariaModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
