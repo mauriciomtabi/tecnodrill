@@ -7,7 +7,8 @@ import {
   Trophy,
   TrendingUp,
   Briefcase,
-  Plus
+  Plus,
+  Wrench
 } from 'lucide-react';
 
 
@@ -125,7 +126,25 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <Camera size={26} strokeWidth={2.2} />
       </button>
 
-      {/* 3. LADO DIREITO: PERFORMANCE & METAS */}
+      {/* 3. LADO DIREITO: MANUTENÇÃO & FROTA */}
+      <button
+        onClick={() => onNavigate('/app/manutencao')}
+        title="Frota & Manutenção"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: currentPath === '/app/manutencao' ? 'var(--primary)' : 'var(--text-muted)',
+          padding: '10px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer'
+        }}
+      >
+        <Wrench size={24} />
+      </button>
+
+      {/* 4. LADO DIREITO: PERFORMANCE & METAS */}
       <button
         onClick={() => onNavigate('/app/performance')}
         title="Performance & Metas"

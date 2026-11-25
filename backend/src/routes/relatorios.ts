@@ -193,5 +193,36 @@ router.get('/telegram/detectar-chat', async (req: Request, res: Response): Promi
   }
 });
 
+// POST /api/relatorios/frota-alerta
+router.post('/frota-alerta', async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { texto } = req.body || {};
+    if (!texto || typeof texto !== 'string') {
+      return res.status(400).json({ error: 'Texto do alerta é obrigatório.' });
+    }
+    const cfg = RelatorioDiarioTelegramService.getConfigTelegram();
+    if (!cfg.ativo || !cfg.botToken || !cfg.chatId) {
+      return res.status(400).json({ error: 'Integração com Telegram não está ativa.' });
+    }
+    const resp = await fetch(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: cfg.chatId,
+        text: texto,
+        parse_mode: 'Markdown'
+      })
+    });
+    const data: any = await resp.json();
+    if (!resp.ok || !data?.ok) {
+      return res.status(502).json({ error: data?.description || 'Falha ao enviar alerta para o Telegram.' });
+    }
+    return res.json({ ok: true, message: 'Alerta de manutenção enviado ao Telegram!' });
+  } catch (err: any) {
+    console.error('[Frota Alerta Telegram] Erro:', err);
+    return res.status(500).json({ error: 'Erro ao enviar alerta de frota no Telegram.' });
+  }
+});
+
 export default router;
 

@@ -9,13 +9,16 @@ import { UsuariosPage } from './pages/UsuariosPage';
 import { PerformancePage } from './pages/PerformancePage';
 import { ProdutividadePage } from './pages/ProdutividadePage';
 import { TerceirosPage } from './pages/TerceirosPage';
+import { ManutencaoPage } from './pages/ManutencaoPage';
 import { NovoServicoModal } from './components/NovoServicoModal';
 import { RodEntryModal } from './components/RodEntryModal';
+import { LeituraDiariaModal } from './components/LeituraDiariaModal';
 import { MetaCelebration } from './components/MetaCelebration';
 import { PwaInstall } from './components/PwaInstall';
 import { PrimeiroAcessoModal } from './components/PrimeiroAcessoModal';
 import { ApiService } from './services/api';
-import { Servico, Furo, Barra } from './types';
+import { ManutencaoService } from './services/manutencaoService';
+import { Servico, Furo, Barra, Veiculo } from './types';
 import { getRodDraft } from './utils/draftStorage';
 import { LogOut } from 'lucide-react';
 
@@ -57,6 +60,8 @@ export const App: React.FC = () => {
   const [activeServico, setActiveServico] = useState<Servico | null>(null);
   const [activeBarraCount, setActiveBarraCount] = useState<number>(1);
   const [savingDirectRod, setSavingDirectRod] = useState(false);
+  const [showLeituraDiariaModal, setShowLeituraDiariaModal] = useState(false);
+  const [veiculosPendentesHoje, setVeiculosPendentesHoje] = useState<Veiculo[]>([]);
 
   // Celebração de Meta
   const [celebrationOpen, setCelebrationOpen] = useState(false);
@@ -284,7 +289,14 @@ export const App: React.FC = () => {
       const barras = await ApiService.getBarras(furoToUse.id);
       setActiveFuro(furoToUse);
       setActiveBarraCount(barras.length + 1);
-      setShowDirectRodModal(true);
+
+      const pendentes = await ManutencaoService.getVeiculosPendentesLeituraHoje(targetServicoId).catch(() => []);
+      if (pendentes.length > 0) {
+        setVeiculosPendentesHoje(pendentes);
+        setShowLeituraDiariaModal(true);
+      } else {
+        setShowDirectRodModal(true);
+      }
     } catch (err: any) {
       showToast('Erro ao preparar formulário de registro.', 'error');
     }
@@ -407,6 +419,13 @@ export const App: React.FC = () => {
           />
         );
 
+      case '/app/manutencao':
+        return (
+          <ManutencaoPage
+            setHeaderInfo={setHeaderInfo}
+          />
+        );
+
       default:
         return (
           <ObrasList
@@ -478,6 +497,18 @@ export const App: React.FC = () => {
       />
 
       {/* 5. MODAL NOVO REGISTRO DIRETO (3 PASSOS JLE) */}
+      <LeituraDiariaModal
+        isOpen={showLeituraDiariaModal}
+        veiculos={veiculosPendentesHoje}
+        servicoNome={activeServico?.nome}
+        onClose={() => setShowLeituraDiariaModal(false)}
+        onSuccess={() => {
+          setShowLeituraDiariaModal(false);
+          setVeiculosPendentesHoje([]);
+          setShowDirectRodModal(true);
+        }}
+      />
+
       <RodEntryModal
         isOpen={showDirectRodModal}
         onClose={() => setShowDirectRodModal(false)}

@@ -1,10 +1,12 @@
 import { canReadRegistro } from '../services/registroAccess';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Servico, Furo, Barra } from '../types';
+import { Servico, Furo, Barra, Veiculo } from '../types';
 import { ApiService, sanitizeLocalidade, parseBarraObservacao, calcularValorMetroBarra } from '../services/api';
+import { ManutencaoService, AlertaVeiculo } from '../services/manutencaoService';
 import { useAuth } from '../context/AuthContext';
 import { RodEntryModal } from '../components/RodEntryModal';
+import { LeituraDiariaModal } from '../components/LeituraDiariaModal';
 import { getRodDraft } from '../utils/draftStorage';
 import { MetaCelebration } from '../components/MetaCelebration';
 import { MapView } from '../components/MapView';
@@ -122,6 +124,35 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
   // Modal Editar Serviço
   const [showEditModal, setShowEditModal] = useState(false);
   const [savingEditServico, setSavingEditServico] = useState(false);
+
+  // Controle de leitura diária e alertas de frota da obra
+  const [showLeituraDiariaModal, setShowLeituraDiariaModal] = useState(false);
+  const [veiculosPendentesHoje, setVeiculosPendentesHoje] = useState<Veiculo[]>([]);
+  const [alertasFrotaObra, setAlertasFrotaObra] = useState<AlertaVeiculo[]>([]);
+
+  useEffect(() => {
+    if (!servicoId) return;
+    ManutencaoService.getVeiculosDaObra(servicoId)
+      .then((vs) => {
+        const avaliados = ManutencaoService.avaliarAlertasVeiculos(vs).filter(
+          (a) => a.vencidas.length > 0 || a.proximas.length > 0
+        );
+        setAlertasFrotaObra(avaliados);
+      })
+      .catch(() => {});
+  }, [servicoId]);
+
+  const handleOpenNovoRegistroComLeitura = async () => {
+    try {
+      const pendentes = await ManutencaoService.getVeiculosPendentesLeituraHoje(servicoId);
+      if (pendentes.length > 0) {
+        setVeiculosPendentesHoje(pendentes);
+        setShowLeituraDiariaModal(true);
+        return;
+      }
+    } catch (_) {}
+    setShowAddModal(true);
+  };
 
   // Modal Adicionar Membro à Equipe
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
@@ -803,7 +834,7 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
 
           {/* Botão Novo Registro */}
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenNovoRegistroComLeitura}
             className="header-action-btn"
           >
             <Camera size={16} />
@@ -811,6 +842,54 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ALERTA DE MANUTENÇÃO PREVENTIVA DA FROTA NA OBRA */}
+      {alertasFrotaObra.length > 0 && (
+        <div
+          style={{
+            backgroundColor: alertasFrotaObra.some((a) => a.statusGeral === 'VENCIDO')
+              ? 'rgba(231, 76, 60, 0.12)'
+              : 'rgba(243, 156, 18, 0.12)',
+            border: `1px solid ${
+              alertasFrotaObra.some((a) => a.statusGeral === 'VENCIDO') ? '#E74C3C' : '#F39C12'
+            }`,
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            fontSize: '13px',
+          }}
+        >
+          <AlertTriangle
+            size={18}
+            style={{
+              color: alertasFrotaObra.some((a) => a.statusGeral === 'VENCIDO') ? '#F87171' : '#FBBF24',
+              flexShrink: 0,
+              marginTop: '2px',
+            }}
+          />
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: 'var(--text-main)' }}>
+              Atenção à Manutenção Preventiva da Frota nesta Obra:
+            </strong>
+            <div style={{ color: 'var(--text-muted)', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {alertasFrotaObra.map((a) => {
+                const unit = a.veiculo.unidade_medida === 'HORAS' ? 'h' : 'km';
+                const itens = [...a.vencidas, ...a.proximas]
+                  .map((p) => `${p.nome} (${p.restante <= 0 ? `vencida ${Math.abs(p.restante)}${unit}` : `faltam ${p.restante}${unit}`})`)
+                  .join(', ');
+                return (
+                  <span key={a.veiculo.id}>
+                    • <strong style={{ color: 'var(--text-main)' }}>{a.veiculo.nome}</strong>: {itens}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. ALERT BANNER (REVISÃO PENDENTE / CONCLUÍDO - APENAS GESTOR) */}
       {isGestor && percentualConcluido >= 100 && servico.status !== 'CONCLUIDO' && (
@@ -1568,6 +1647,19 @@ export const ObraDetalhes: React.FC<ObraDetalhesProps> = ({
         )}
 
       </div>
+
+      {/* MODAL DE LEITURA DIÁRIA OBRIGATÓRIA */}
+      <LeituraDiariaModal
+        isOpen={showLeituraDiariaModal}
+        veiculos={veiculosPendentesHoje}
+        servicoNome={servico?.nome}
+        onClose={() => setShowLeituraDiariaModal(false)}
+        onSuccess={() => {
+          setShowLeituraDiariaModal(false);
+          setVeiculosPendentesHoje([]);
+          setShowAddModal(true);
+        }}
+      />
 
       {/* MODAL DE NOVO REGISTRO (PORTAL CENTRALIZADO) */}
       <RodEntryModal

@@ -10,7 +10,8 @@ import {
   Moon, 
   LogOut, 
   ChevronLeft, 
-  ChevronRight
+  ChevronRight,
+  Wrench
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -34,6 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
     ? [
         { path: '/app/obras', label: 'Serviços', icon: HardHat },
         { path: '/app/produtividade', label: 'Produtividade', icon: TrendingUp },
+        { path: '/app/manutencao', label: 'Manutenção', icon: Wrench },
         { path: '/app/terceiros', label: 'Terceiros', icon: Briefcase },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
         { path: '/app/usuarios', label: 'Usuários', icon: Users },
@@ -41,6 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPath, onNavigate, colla
     : [
         { path: '/tecnico/obras', label: 'Serviços', icon: HardHat },
         { path: '/app/produtividade', label: 'Minha Produção', icon: TrendingUp },
+        { path: '/app/manutencao', label: 'Frota & Manut.', icon: Wrench },
         { path: '/app/performance', label: 'Performance', icon: Trophy },
       ];
 

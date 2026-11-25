@@ -176,3 +176,117 @@ export interface TerceiroLancamento {
   criado_em?: string;
 }
 
+
+export type TipoVeiculo = 'PERFURATRIZ' | 'CAMINHAO';
+export type UnidadeMedidaVeiculo = 'HORAS' | 'KM';
+export type StatusPreventiva = 'EM_DIA' | 'PROXIMO' | 'VENCIDO';
+
+export interface DocumentoVeiculo {
+  id: string;
+  nome: string;
+  tipo: string;
+  url: string;
+  validade?: string;
+  criado_em: string;
+}
+
+export interface EspecificacoesVeiculo {
+  oleo_motor?: string;
+  oleo_hidraulico?: string;
+  filtro_oleo?: string;
+  filtro_ar?: string;
+  filtro_combustivel?: string;
+  filtro_hidraulico?: string;
+  combustivel?: string;
+  capacidade?: string;
+  observacoes_tecnicas?: string;
+}
+
+export interface Veiculo {
+  id: string;
+  nome: string;
+  codigo_interno?: string;
+  tipo: TipoVeiculo;
+  marca?: string;
+  modelo?: string;
+  ano?: number | null;
+  placa?: string;
+  numero_serie?: string;
+  unidade_medida: UnidadeMedidaVeiculo;
+  leitura_atual: number;
+  servico_id?: string | null;
+  servico_nome?: string | null;
+  foto_principal_url?: string;
+  fotos: string[];
+  documentos: DocumentoVeiculo[];
+  especificacoes: EspecificacoesVeiculo;
+  observacoes?: string;
+  ativo: boolean;
+  criado_em?: string;
+  atualizado_em?: string;
+  preventivas?: VeiculoPreventiva[];
+}
+
+export interface ItemPlanoPreventiva {
+  nome: string;
+  categoria?: string;
+  intervalo: number;
+  alerta_antecedencia: number;
+  descricao?: string;
+}
+
+export interface PlanoPreventiva {
+  id: string;
+  nome: string;
+  tipo_veiculo: TipoVeiculo;
+  descricao?: string;
+  itens: ItemPlanoPreventiva[];
+  ativo: boolean;
+  criado_em?: string;
+}
+
+export interface VeiculoPreventiva {
+  id: string;
+  veiculo_id: string;
+  nome: string;
+  categoria?: string;
+  descricao?: string;
+  intervalo: number;
+  alerta_antecedencia: number;
+  ultima_leitura_realizada: number;
+  data_ultima_realizacao?: string | null;
+  proxima_leitura: number;
+  ativo: boolean;
+  criado_em?: string;
+}
+
+export interface ManutencaoHistorico {
+  id: string;
+  veiculo_id: string;
+  preventiva_id?: string | null;
+  servico_id?: string | null;
+  titulo: string;
+  leitura_realizada: number;
+  data_realizacao: string;
+  executado_por_nome?: string;
+  registrado_por?: string;
+  registrado_por_nome?: string;
+  observacoes?: string;
+  fotos: string[];
+  criado_em?: string;
+}
+
+export interface VeiculoLeitura {
+  id: string;
+  veiculo_id: string;
+  servico_id?: string | null;
+  usuario_id?: string | null;
+  usuario_nome?: string;
+  data_referencia: string;
+  leitura_anterior: number;
+  leitura_informada: number;
+  unidade_medida: UnidadeMedidaVeiculo;
+  origem: 'PRIMEIRO_REGISTRO_DIA' | 'MANUAL' | 'PREVENTIVA';
+  observacao?: string;
+  criado_em?: string;
+}
