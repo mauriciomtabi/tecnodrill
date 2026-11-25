@@ -345,26 +345,27 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
     const planosCompativeis = planos.filter((p) => p.tipo_veiculo === selectedVeiculo.tipo);
 
     return (
-      <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto', paddingBottom: '90px' }}>
-        <button
-          type="button"
-          onClick={() => setSelectedVeiculoId(null)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            backgroundColor: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-main)',
-            padding: '8px 14px',
-            borderRadius: '10px',
-            fontWeight: 600,
-            fontSize: '13px',
-            marginBottom: '16px',
-          }}
-        >
-          <ChevronLeft size={16} /> Voltar para Frota
-        </button>
+      <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div>
+          <button
+            type="button"
+            onClick={() => setSelectedVeiculoId(null)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-main)',
+              padding: '8px 14px',
+              borderRadius: 'var(--radius-sm)',
+              fontWeight: 600,
+              fontSize: '13px',
+            }}
+          >
+            <ChevronLeft size={16} /> Voltar para Frota
+          </button>
+        </div>
 
         {/* Header Card do Veículo */}
         <div
@@ -984,32 +985,28 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
   // LISTAGEM PRINCIPAL DA FROTA & SEMÁFORO
   // ============================================================================
   return (
-    <div style={{ padding: '20px', maxWidth: '1280px', margin: '0 auto', paddingBottom: '90px' }}>
-      {/* Header & Ações */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '18px' }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+      {/* UPPER HEADER BAR (Padrão Serviços) */}
+      <div className="upper-header">
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main)' }}>
-            Frota & Manutenção Preventiva
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Controle de horímetro (perfuratrizes) e quilometragem (caminhões)
-          </p>
+          <h1 className="header-title">Frota & Manutenção Preventiva</h1>
+          <p className="header-subtitle">Controle de horímetro (perfuratrizes) e quilometragem (caminhões)</p>
         </div>
 
         {isGestor && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               onClick={handleEnviarAlertaTelegram}
               disabled={enviandoAlerta}
               style={{
                 padding: '9px 14px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-sm)',
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-main)',
                 fontWeight: 600,
-                fontSize: '13px',
+                fontSize: '12.5px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -1022,12 +1019,12 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
               onClick={() => setShowPlanosModal(true)}
               style={{
                 padding: '9px 14px',
-                borderRadius: '10px',
+                borderRadius: 'var(--radius-sm)',
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-main)',
                 fontWeight: 600,
-                fontSize: '13px',
+                fontSize: '12.5px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
@@ -1041,24 +1038,17 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
                 setEditingVeiculo(null);
                 setShowFormModal(true);
               }}
-              className="btn-primary"
-              style={{
-                padding: '9px 16px',
-                borderRadius: '10px',
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
+              className="header-action-btn"
             >
-              <Plus size={16} /> Novo Veículo
+              <Plus size={16} />
+              <span>Novo Veículo</span>
             </button>
           </div>
         )}
       </div>
 
       {/* KPIs Semáforo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
         {[
           { label: 'Total na Frota', val: resumoKPIs.total, color: 'var(--primary)', icon: Wrench },
           { label: 'Preventivas Vencidas', val: resumoKPIs.vencidas, color: '#E74C3C', icon: AlertTriangle },
@@ -1072,7 +1062,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
               style={{
                 backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-color)',
-                borderRadius: '14px',
+                borderRadius: 'var(--radius-md)',
                 padding: '14px 16px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1091,57 +1081,57 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
         })}
       </div>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '18px' }}>
-        <div style={{ position: 'relative', flex: '1 1 240px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* FILTER & SEARCH BAR (Padrão Serviços) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '6px', backgroundColor: 'var(--bg-input)', padding: '4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+          {(['TODOS', 'PERFURATRIZ', 'CAMINHAO'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setFiltroTipo(t)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: filtroTipo === t ? 'var(--primary)' : 'transparent',
+                color: filtroTipo === t ? '#FFFFFF' : 'var(--text-muted)',
+              }}
+            >
+              {t === 'TODOS' ? 'Todos' : t === 'PERFURATRIZ' ? 'Perfuratrizes' : 'Caminhões'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="text"
             placeholder="Buscar por nome, código, placa ou obra..."
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             style={{
+              paddingLeft: '36px',
+              fontSize: '12px',
+              height: '36px',
               width: '100%',
-              padding: '9px 12px 9px 36px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-main)',
-              fontSize: '13.5px',
+              boxSizing: 'border-box',
             }}
           />
         </div>
-
-        {(['TODOS', 'PERFURATRIZ', 'CAMINHAO'] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setFiltroTipo(t)}
-            style={{
-              padding: '9px 14px',
-              borderRadius: '10px',
-              backgroundColor: filtroTipo === t ? 'var(--primary)' : 'var(--bg-card)',
-              color: filtroTipo === t ? '#fff' : 'var(--text-muted)',
-              border: `1px solid ${filtroTipo === t ? 'var(--primary)' : 'var(--border-color)'}`,
-              fontWeight: 600,
-              fontSize: '13px',
-            }}
-          >
-            {t === 'TODOS' ? 'Todos' : t === 'PERFURATRIZ' ? 'Perfuratrizes' : 'Caminhões'}
-          </button>
-        ))}
 
         <button
           type="button"
           onClick={() => setApenasAlertas((v) => !v)}
           style={{
-            padding: '9px 14px',
-            borderRadius: '10px',
+            height: '36px',
+            padding: '0 14px',
+            borderRadius: 'var(--radius-sm)',
             backgroundColor: apenasAlertas ? 'rgba(231, 76, 60, 0.16)' : 'var(--bg-card)',
             color: apenasAlertas ? '#F87171' : 'var(--text-muted)',
             border: `1px solid ${apenasAlertas ? '#E74C3C' : 'var(--border-color)'}`,
             fontWeight: 600,
-            fontSize: '13px',
+            fontSize: '12px',
           }}
         >
           Somente com Alerta
@@ -1152,11 +1142,11 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
       {loading ? (
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>Carregando frota...</div>
       ) : veiculosFiltrados.length === 0 ? (
-        <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: '14px', padding: '40px', textAlign: 'center', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+        <div style={{ backgroundColor: 'var(--bg-card)', borderRadius: 'var(--radius-md)', padding: '40px', textAlign: 'center', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
           Nenhum veículo encontrado. {isGestor ? 'Clique em "Novo Veículo" para cadastrar a primeira perfuratriz ou caminhão.' : ''}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
           {veiculosFiltrados.map(({ veiculo, statusGeral, vencidas, proximas }) => {
             const unit = veiculo.unidade_medida === 'HORAS' ? 'h' : 'km';
             return (
