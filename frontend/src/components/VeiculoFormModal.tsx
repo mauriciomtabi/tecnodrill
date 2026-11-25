@@ -298,8 +298,8 @@ export const VeiculoFormModal: React.FC<VeiculoFormModalProps> = ({
                 disabled={isEdit}
                 style={inputStyle}
               >
-                <option value="PERFURATRIZ">Perfuratriz (Horímetro)</option>
-                <option value="CAMINHAO">Caminhão (Km)</option>
+                <option value="PERFURATRIZ">Perfuratriz</option>
+                <option value="CAMINHAO">Caminhão</option>
               </select>
             </div>
             <div style={{ gridColumn: 'span 2' }}>

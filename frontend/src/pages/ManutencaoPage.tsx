@@ -1281,8 +1281,8 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({ setHeaderInfo })
                   onChange={(e) => setPlanoEditTipo(e.target.value as 'PERFURATRIZ' | 'CAMINHAO')}
                   style={{ padding: '8px 10px', borderRadius: '8px', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)' }}
                 >
-                  <option value="PERFURATRIZ">Perfuratriz (h)</option>
-                  <option value="CAMINHAO">Caminhão (km)</option>
+                  <option value="PERFURATRIZ">Perfuratriz</option>
+                  <option value="CAMINHAO">Caminhão</option>
                 </select>
               </div>
               {planoEditItens.map((it, i) => (
