@@ -47,8 +47,7 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
   nomeRelatorio: 'Relatório Diário de Produção & Faturamento',
   destinatarios: [
     'mauricio.maciel@jletelecom.com.br',
-    'eduardo.costa@tecnodrill.com.br',
-    'carlos@tecnodrill.com.br'
+    'eduardo.costa@infratecnodrill.com.br'
   ],
   horario: '19:00',
   diasSemana: [1, 2, 3, 4, 5, 6]
@@ -651,7 +650,7 @@ export const ConfiguracaoEmailModal: React.FC<ConfiguracaoEmailModalProps> = ({
               }}
             />
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-              Ex: mauricio.maciel@jletelecom.com.br, eduardo.costa@tecnodrill.com.br, carlos@tecnodrill.com.br
+              Ex: mauricio.maciel@jletelecom.com.br, eduardo.costa@infratecnodrill.com.br
             </span>
           </div>
 

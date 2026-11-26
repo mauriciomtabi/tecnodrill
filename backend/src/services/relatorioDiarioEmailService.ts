@@ -51,8 +51,7 @@ const DEFAULT_CONFIG: ConfigEmailDiario = {
   nomeRelatorio: 'Relatório Diário de Produção & Faturamento',
   destinatarios: [
     'mauricio.maciel@jletelecom.com.br',
-    'eduardo.costa@tecnodrill.com.br',
-    'carlos@tecnodrill.com.br'
+    'eduardo.costa@infratecnodrill.com.br'
   ],
   horario: '19:00',
   diasSemana: [1, 2, 3, 4, 5, 6], // Seg a Sáb
@@ -89,9 +88,19 @@ export class RelatorioDiarioEmailService {
         const raw = fs.readFileSync(configPath, 'utf-8');
         saved = JSON.parse(raw);
       }
+      const rawDestinatarios = Array.isArray(saved.destinatarios) && saved.destinatarios.length > 0
+        ? saved.destinatarios
+        : DEFAULT_CONFIG.destinatarios;
+      const destinatarios = Array.from(new Set(
+        rawDestinatarios
+          .map(e => e.trim())
+          .filter(e => e && e.toLowerCase() !== 'carlos@tecnodrill.com.br')
+          .map(e => e.toLowerCase() === 'eduardo.costa@tecnodrill.com.br' ? 'eduardo.costa@infratecnodrill.com.br' : e)
+      ));
       return {
         ...DEFAULT_CONFIG,
         ...saved,
+        destinatarios,
         smtpHost: saved.smtpHost || process.env.SMTP_HOST || '',
         smtpPort: Number(saved.smtpPort || process.env.SMTP_PORT) || 587,
         smtpUser: saved.smtpUser || process.env.SMTP_USER || '',
@@ -579,7 +588,7 @@ export class RelatorioDiarioEmailService {
       ? destinatarios
       : (configAtual.destinatarios && configAtual.destinatarios.length > 0
           ? configAtual.destinatarios
-          : (process.env.REPORT_RECIPIENTS || 'mauricio.maciel@jletelecom.com.br,eduardo.costa@tecnodrill.com.br,carlos@tecnodrill.com.br')
+          : (process.env.REPORT_RECIPIENTS || 'mauricio.maciel@jletelecom.com.br,eduardo.costa@infratecnodrill.com.br')
               .split(',')
               .map(e => e.trim())
               .filter(Boolean));
