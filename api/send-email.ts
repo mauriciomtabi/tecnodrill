@@ -690,13 +690,15 @@ export async function enviarRelatorioEmailExec(options?: {
 
     const rawList = to || destinatarios || [
       'mauricio.maciel@jletelecom.com.br',
-      'eduardo.costa@tecnodrill.com.br',
-      'carlos@tecnodrill.com.br'
+      'eduardo.costa@infratecnodrill.com.br'
     ];
 
-    const cleanRecipients = (Array.isArray(rawList) ? rawList : String(rawList).split(/[\n\r,;]+/))
-      .map((e: any) => String(e).trim())
-      .filter((e: string) => e && e.includes('@'));
+    const cleanRecipients = Array.from(new Set(
+      (Array.isArray(rawList) ? rawList : String(rawList).split(/[\n\r,;]+/))
+        .map((e: any) => String(e).trim())
+        .filter((e: string) => e && e.includes('@') && e.toLowerCase() !== 'carlos@tecnodrill.com.br')
+        .map((e: string) => e.toLowerCase() === 'eduardo.costa@tecnodrill.com.br' ? 'eduardo.costa@infratecnodrill.com.br' : e)
+    ));
 
     if (cleanRecipients.length === 0) {
       return { sucesso: false, error: 'Nenhum destinatário válido informado.' };
